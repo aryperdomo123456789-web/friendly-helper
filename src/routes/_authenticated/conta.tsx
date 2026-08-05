@@ -121,9 +121,10 @@ function ContaPage() {
   const currentPlan = account.data?.plan;
   const isOwner = account.data?.isOwner;
   const availablePlans = (account.data?.availablePlans || []).filter((plan: any) => {
-    // Esconde o plano "Teste" (ou com preço 0) da lista de upgrades, a menos que seja o dono
     const isTestPlan = plan.name.toLowerCase().includes("teste") || Number(plan.price) === 0;
-    if (isTestPlan && !isOwner) return false;
+    const isMyPlan = currentPlan?.id === plan.id;
+    // Esconde o plano "Teste" se não for o plano atual e não for o dono
+    if (isTestPlan && !isMyPlan && !isOwner) return false;
     return true;
   });
   const expiresDate = account.data?.expires_at ? new Date(account.data.expires_at) : null;
