@@ -167,7 +167,20 @@ function PainelDono() {
     }
   };
 
+  if (!isOwner) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-10 text-center">
+        <ShieldAlert className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+        <h1 className="text-xl font-bold">Acesso restrito</h1>
+        <p className="text-sm text-muted-foreground">
+          Somente o dono do sistema pode cadastrar, editar ou excluir servidores.
+        </p>
+      </div>
+    );
+  }
+
   return (
+
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Painel do Dono</h1>
