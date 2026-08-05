@@ -1,11 +1,5 @@
 /**
- * checa faça testes praticos e garanta este fluxo
- * verifica ai se ta inteligente o sistema de links de indicação 
- * preciso de extrema precisão na bonificação o sistema de fato deve indentificar quem criou um user novo com qual link foi criado se assinou ou não um plano 
- * qual plano assinou 
- * e deve bonificar o dono do link sempre de acordo 
- * e cada user novo receber sua area conat e seu link de indicação personalizado proprio para tambem indicar e ganhar 
- * checa faça testes praticos e garanta este fluxo
+ * agora logue com um user criado pelo link de indicação faça uma contratação de plano depois crie um novo user usando o link de indicaçção do user criado pelo link e ai sim tera testado completo
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
