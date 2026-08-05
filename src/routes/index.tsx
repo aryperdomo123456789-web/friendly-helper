@@ -101,7 +101,7 @@ function LoginPage() {
 
 
   // O loading agora e gerido pelo contexto do router/shell, mas podemos adicionar um local se quiser
-  if (profile) return null;
+  if (hasSession) return null;
 
 
   return (
