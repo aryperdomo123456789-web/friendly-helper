@@ -6,6 +6,8 @@ import {
   getStreams,
   getPlaybackUrl,
   getSeriesInfo,
+  getChannelEPG,
+  getEnrichedMetadata
 } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
 import { getDeviceId } from "@/lib/device";
@@ -47,6 +49,8 @@ export function Catalog({ kind }: { kind: Kind }) {
   const fetchStreams = useServerFn(getStreams);
   const fetchPlayback = useServerFn(getPlaybackUrl);
   const fetchSeries = useServerFn(getSeriesInfo);
+  const fetchEPG = useServerFn(getChannelEPG);
+  const fetchTMDB = useServerFn(getEnrichedMetadata);
 
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [catTerm, setCatTerm] = useState("");
@@ -404,6 +408,15 @@ export function Catalog({ kind }: { kind: Kind }) {
             <div className="space-y-2">
               <VideoPlayer url={playing.url} poster={playing.icon} title={playing.name} />
               <p className="truncate text-sm font-semibold">{playing.name}</p>
+              
+              {/* EPG / Metadata Area */}
+              <PlayerInfo 
+                streamId={loadingId || ""} 
+                kind={kind} 
+                name={playing.name} 
+                fetchEPG={fetchEPG} 
+                fetchTMDB={fetchTMDB}
+              />
             </div>
           ) : (
             <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card text-center">
@@ -420,4 +433,98 @@ export function Catalog({ kind }: { kind: Kind }) {
       </div>
     </div>
   );
+}
+
+function PlayerInfo({ 
+  streamId, 
+  kind, 
+  name, 
+  fetchEPG, 
+  fetchTMDB 
+}: { 
+  streamId: string; 
+  kind: Kind; 
+  name: string;
+  fetchEPG: any;
+  fetchTMDB: any;
+}) {
+  const { serverId } = usePlayerSession();
+  
+  const epg = useQuery({
+    queryKey: ["epg", serverId, streamId],
+    queryFn: () => fetchEPG({ data: { server_id: serverId!, stream_id: streamId } }),
+    enabled: kind === "live" && !!serverId && !!streamId,
+    staleTime: 60_000,
+  });
+
+  const tmdb = useQuery({
+    queryKey: ["tmdb", name, kind],
+    queryFn: () => fetchTMDB({ data: { kind: kind as "movie" | "series", name } }),
+    enabled: (kind === "movie" || kind === "series") && !!name,
+    staleTime: 24 * 60 * 60 * 1000,
+  });
+
+  if (kind === "live") {
+    return (
+      <div className="rounded-xl border border-border bg-card/50 p-3 space-y-2">
+        <h3 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+          <Info className="h-3 w-3" /> Programação EPG
+        </h3>
+        <div className="space-y-2 max-h-[200px] overflow-y-auto wp-scroll pr-1">
+          {epg.isLoading ? (
+            <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+          ) : (epg.data ?? []).length > 0 ? (
+            epg.data.slice(0, 5).map((prog: any, i: number) => (
+              <div key={i} className={cn("text-[11px] border-l-2 pl-2 py-0.5", i === 0 ? "border-primary bg-primary/5" : "border-muted")}>
+                <div className="flex justify-between font-bold">
+                  <span>{prog.title}</span>
+                  <span className="text-[10px] text-muted-foreground">{prog.start.split(' ')[1]}</span>
+                </div>
+                {prog.description && <p className="text-muted-foreground line-clamp-2 mt-0.5">{prog.description}</p>}
+              </div>
+            ))
+          ) : (
+            <p className="text-[10px] text-muted-foreground text-center py-2 italic">Sem guia de programação disponível para este canal.</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (tmdb.data) {
+    const data = tmdb.data;
+    const rating = data.vote_average ? Math.round(data.vote_average * 10) / 10 : null;
+    
+    return (
+      <div className="rounded-xl border border-border bg-card/50 p-3 space-y-3">
+        <div className="flex gap-3">
+          {data.poster_path && (
+            <img 
+              src={`https://image.tmdb.org/t/p/w200${data.poster_path}`} 
+              className="w-20 rounded-lg shadow-lg border border-border/50"
+              alt="Poster"
+            />
+          )}
+          <div className="flex-1 space-y-1">
+            <div className="flex justify-between items-start">
+              <h3 className="text-sm font-bold leading-tight">{data.title || data.name}</h3>
+              {rating && (
+                <span className="bg-yellow-500/20 text-yellow-500 text-[10px] px-1.5 py-0.5 rounded font-black">
+                  ⭐ {rating}
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {data.release_date?.split('-')[0] || data.first_air_date?.split('-')[0]} • {data.genres?.map((g: any) => g.name).join(', ')}
+            </p>
+            <p className="text-[11px] text-muted-foreground line-clamp-4 leading-relaxed mt-1">
+              {data.overview || "Sem sinopse disponível."}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
