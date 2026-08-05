@@ -18,37 +18,38 @@ export const Route = createFileRoute("/")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { profile, isOwner, isLoading: sessionLoading } = usePlayerSession();
+  const { profile, isOwner } = usePlayerSession();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [isOwnerLogin, setIsOwnerLogin] = useState(false);
   
-  const runBootstrap = useServerFn(bootstrapOwner);
+  const runBootstrap = useServerFn(createFirstOwner);
 
   useEffect(() => {
-    if (!sessionLoading && profile) {
+    if (profile) {
       navigate({ to: "/inicio", replace: true });
     }
-  }, [profile, sessionLoading, navigate]);
+  }, [profile, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !password) return toast.error("Preencha todos os campos");
+    if (!username || !password) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
 
     setLoading(true);
     try {
-      // Se for login de dono, tentamos o bootstrap primeiro caso o sistema esteja vazio
       if (isOwnerLogin && username.toLowerCase() === "dono") {
         try {
-          await runBootstrap({ data: { password } });
+          await runBootstrap({ data: { username: "dono", password } });
           toast.success("Sistema inicializado como Dono!");
         } catch (err) {
-          // Se falhar o bootstrap, ignoramos e tentamos o login normal (ja pode estar inicializado)
+          // Ignoramos erro de bootstrap se o dono ja existir
         }
       }
 
-      // No nosso sistema, o login e sempre via email sintetico para os usuarios
       const email = isOwnerLogin && !username.includes("@") 
         ? `${username.toLowerCase()}@iptv.local` 
         : username.includes("@") ? username : `${username.toLowerCase()}@iptv.local`;
@@ -69,6 +70,7 @@ function LoginPage() {
       setLoading(false);
     }
   };
+
 
   if (sessionLoading) {
     return (
