@@ -54,10 +54,12 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const send = async () => {
       try {
-        await ping({
+        const result = await ping({
           data: { device_id: getDeviceId(), user_agent: navigator.userAgent.slice(0, 280) },
         });
-        if (!cancelled) setBlocked(null);
+        if (!cancelled) {
+          setBlocked(result.expired ? "Plano Expirado" : null);
+        }
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : "Conexao recusada";
