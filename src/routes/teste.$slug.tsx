@@ -46,6 +46,22 @@ function TestePublico() {
   const [blocked, setBlocked] = useState(false);
 
   const mutationCreateTest = useServerFn(createTestUser);
+  const mutationCheckDevice = useServerFn(checkDeviceBlocked);
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      const fingerprint = getFingerprint();
+      if (fingerprint) {
+        try {
+          const res = await mutationCheckDevice({ data: { fingerprint } });
+          if (res.blocked) setBlocked(true);
+        } catch (e) {
+          console.error("Erro ao validar dispositivo:", e);
+        }
+      }
+    };
+    checkStatus();
+  }, []);
 
   const getFingerprint = () => {
     if (typeof window === 'undefined') return '';
