@@ -345,7 +345,7 @@ function PainelDono() {
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Usuarios do Sistema</h2>
             <Button onClick={() => {
-              const testPlan = plans.data?.find((p: any) => p.name.toLowerCase().includes("teste"));
+              const testPlan = plans.data?.find((p: any) => p.name.toLowerCase().includes("teste") || Number(p.price) === 0);
               setUserModal({ 
                 username: "", 
                 password: "", 
@@ -390,7 +390,12 @@ function PainelDono() {
                           {user.display_name || user.username}
                           {user.plan_id && (
                             <div className="flex flex-col">
-                              <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full border border-primary/30 uppercase font-bold w-fit">
+                              <span className={cn(
+                                "text-[10px] px-1.5 py-0.5 rounded-full border uppercase font-bold w-fit",
+                                plans.data?.find((p: any) => p.id === user.plan_id)?.name.toLowerCase().includes("teste") 
+                                  ? "bg-yellow-500/20 text-yellow-500 border-yellow-500/30"
+                                  : "bg-primary/20 text-primary border-primary/30"
+                              )}>
                                 {plans.data?.find((p: any) => p.id === user.plan_id)?.name || "Plano"}
                               </span>
                               <span className="text-[9px] text-muted-foreground mt-0.5">
