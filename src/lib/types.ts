@@ -1,4 +1,3 @@
-
 import { z } from "zod";
 
 export const AppConfigSchema = z.object({
@@ -16,6 +15,9 @@ export const AppConfigSchema = z.object({
   theme_mode: z.enum(["azul", "dark", "light"]).default("azul"),
   support_auto_reply: z.string().default("Olá! Esta é uma resposta automática. Recebemos sua mensagem e em breve um de nossos atendentes irá te ajudar."),
   support_attendant_name: z.string().default("Suporte WebPlayer"),
+  mp_enabled: z.boolean().default(false),
+  mp_access_token: z.string().optional(),
+  mp_public_key: z.string().optional(),
   theme: z.object({
     bg: z.string().default("#05070b"),
     surface: z.string().default("#0f171e"),
@@ -69,4 +71,5 @@ export interface AccessUser {
   online: number;
   plan_id?: string;
   plan?: SubscriptionPlan;
+  referred_by_id?: string;
 }

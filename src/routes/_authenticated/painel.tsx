@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,13 +19,10 @@ import {
   saveTestLink,
   deleteTestLink
 } from "@/lib/test-links.functions";
-import { getMySession } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
 import { getAppConfig, updateAppConfig } from "@/lib/config.functions";
 import { getPlans, savePlan, deletePlan } from "@/lib/plans.functions";
 import { listSupportThreads, markThreadRead } from "@/lib/chat.functions";
-import { AppConfigSchema } from "@/lib/types";
-
 
 import { 
   Card, 
@@ -75,21 +72,19 @@ import {
   Edit, 
   Wifi, 
   WifiOff, 
-  ExternalLink,
   ShieldAlert,
   Calendar,
   Key,
-  Link as LinkIcon,
   Copy,
   MessageSquare,
-  Send,
-  Image as ImageIcon,
-  Mic,
+  Share2,
   X,
-  Share2
+  Send,
+  Image as ImageIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
 
 export const Route = createFileRoute("/_authenticated/painel")({
   head: () => ({
@@ -105,8 +100,6 @@ function PainelDono() {
   const { isOwner } = usePlayerSession();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("acessos");
-  const [appConfig, setAppConfig] = useState<any>(null);
-
 
   // Server functions
   const fetchServers = useServerFn(listServers);
@@ -137,6 +130,7 @@ function PainelDono() {
   });
 
   const [selectedThread, setSelectedThread] = useState<any>(null);
+
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);

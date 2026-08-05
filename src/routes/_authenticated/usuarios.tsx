@@ -41,6 +41,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 
+
 export const Route = createFileRoute("/_authenticated/usuarios")({
   head: () => ({
     meta: [
