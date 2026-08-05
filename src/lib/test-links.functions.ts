@@ -64,6 +64,7 @@ export const saveTestLink = createServerFn({ method: "POST" })
       is_active: z.boolean(),
       bonus_days_monthly: z.number().int().min(0).default(15),
       bonus_days_quarterly: z.number().int().min(0).default(30),
+      description: z.string().optional().or(z.literal("")),
     }).parse(input)
   )
   .handler(async ({ data, context }) => {
