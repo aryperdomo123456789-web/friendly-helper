@@ -333,27 +333,24 @@ export const getChannelEPG = createServerFn({ method: "POST" })
       }>;
     }>(credential, { action: "get_short_epg", stream_id: data.stream_id });
 
-    if (!result?.epg_listings || !Array.isArray(result.epg_listings)) {
-      // Fallback: Tenta um EPG genérico se o painel estiver vazio mas tivermos a URL global
-      const config = await getAppConfig();
-      if (config.epg_xmltv_url) {
-        // Logica para parsear XMLTV poderia entrar aqui, mas por ora retornamos vazio seguro
-        return [];
-      }
-      return [];
-    }
-
     const decode = (str: string) => {
       try {
         if (!str) return "";
-        // Tenta base64, se falhar retorna a string original limpa
+        // A Xtream Codes as vezes retorna strings codificadas em base64, as vezes plain text.
+        // Tentamos base64, se falhar ou contem caracteres invalidos, usamos a original.
         const decoded = atob(str);
-        // Verifica se e UTF-8 valido
+        // Verifica se e UTF-8 valido (hack comum para validar decodificacao)
         return decodeURIComponent(escape(decoded));
       } catch (e) {
         return str; 
       }
     };
+
+    if (!result?.epg_listings || !Array.isArray(result.epg_listings)) {
+      // Fallback: Se o servidor Xtream nao retornar EPG curto, poderíamos implementar
+      // o parse do XMLTV global aqui. Por ora, retornamos vazio para nao quebrar a UI.
+      return [];
+    }
 
     return result.epg_listings.map((item) => ({
       title: decode(item.title),
