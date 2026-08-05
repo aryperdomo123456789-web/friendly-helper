@@ -155,7 +155,7 @@ function SuportePage() {
   );
 }
 
-function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
+function ChatWindow({ thread, onClose, isOwner }: { thread: any, onClose: () => void, isOwner: boolean }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
