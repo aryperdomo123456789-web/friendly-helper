@@ -319,7 +319,8 @@ function PainelDono() {
               display_name: "", 
               max_connections: 1, 
               server_ids: [],
-              is_active: true 
+              is_active: true,
+              plan_id: null
             })}>
               <Plus className="mr-2 h-4 w-4" /> Criar Acesso
             </Button>
