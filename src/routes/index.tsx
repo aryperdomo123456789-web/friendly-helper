@@ -1,6 +1,6 @@
 /**
- * e para reproduzir os conteudos verificar se ta funcioando se nn tiver descobrir porque testar os 4 servidores 
- * preciso que voce faça teste profundos e praticos em todos os fluxos de reprodução canais filmes e series com conteudos variados e nos 4 servidores navegue defato com um user e zapeie pelos conteudos e garanat fluides teste os 4 servidores
+ * ja testei dois servidores e não esta reproduzindo so conteudos 
+ * preciso de fluides que abra rapido os canais leve fluido parrudo
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
