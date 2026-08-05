@@ -17,14 +17,43 @@ export const Route = createFileRoute("/api/public/stream")({
 
         const target = token.url;
         const range = request.headers.get("range");
-        const upstream = await fetch(target, {
-          redirect: "follow",
-          headers: {
-            "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
-            Accept: "*/*",
-            ...(range ? { Range: range } : {}),
-          },
-        });
+        // Panels hand out short-lived, sometimes IP-bound redirect tokens and
+        // occasionally answer 5xx while re-arming the stream. A single attempt
+        // therefore fails intermittently -> retry before giving up.
+        const attemptFetch = async (): Promise<Response | null> => {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 20_000);
+          try {
+            return await fetch(target, {
+              redirect: "follow",
+              signal: controller.signal,
+              headers: {
+                "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
+                Accept: "*/*",
+                ...(range ? { Range: range } : {}),
+              },
+            });
+          } catch {
+            return null;
+          } finally {
+            clearTimeout(timer);
+          }
+        };
+
+        let upstream: Response | null = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+          upstream = await attemptFetch();
+          if (upstream && (upstream.ok || upstream.status === 206 || upstream.status === 404)) break;
+        }
+
+        if (!upstream) {
+          return new Response("Servidor de midia nao respondeu", {
+            status: 504,
+            headers: baseSecurityHeaders(),
+          });
+        }
+
 
         const contentType = upstream.headers.get("content-type") ?? "";
         const baseUrl = upstream.url || target;
