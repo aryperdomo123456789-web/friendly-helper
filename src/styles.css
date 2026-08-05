@@ -135,24 +135,74 @@
 @layer base {
   * {
     border-color: var(--color-border);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Reset para TVs (WebOS/Tizen costumam ter paddings estranhos) */
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden;
+    /* Evita seleções de texto acidentais via controle remoto */
+    -webkit-user-select: none;
+    user-select: none;
+    /* Suaviza rolagem em hardwares limitados */
+    -webkit-overflow-scrolling: touch;
+    /* Fix para fontes pequenas em resoluções 4K simuladas */
+    text-rendering: optimizeLegibility;
   }
 
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     scroll-behavior: smooth;
+    /* Força renderização acelerada por GPU */
+    transform: translateZ(0);
+    backface-visibility: hidden;
   }
 
-  /* TV Navigation Focus Styles */
+  /* TV Navigation Focus Styles - High Contrast & Stability */
   :focus-visible {
     outline: 4px solid var(--primary) !important;
-    outline-offset: 2px;
-    transform: scale(1.02);
-    transition: transform 0.2s ease, outline 0.2s ease;
-    z-index: 50;
+    outline-offset: 4px;
+    /* Escala menor para evitar trepidação em TVs antigas */
+    transform: scale(1.03);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 9999;
     position: relative;
-    box-shadow: 0 0 25px var(--primary);
+    /* Glow mais forte para visibilidade em telas de TV de longe */
+    box-shadow: 0 0 35px var(--primary), 0 0 10px rgba(0,0,0,0.5);
+    background-color: var(--primary) !important;
+    color: var(--primary-foreground) !important;
   }
+
+  /* Garante que SVGs dentro de foco também mudem de cor */
+  :focus-visible svg {
+    color: var(--primary-foreground) !important;
+  }
+}
+
+/* 📺 TV Optimized Queries */
+@media screen and (min-width: 1280px) {
+  :root {
+    /* Aumenta a base de fonte para TVs (distância do sofá) */
+    font-size: 18px;
+  }
+}
+
+@media screen and (min-width: 1920px) {
+  :root {
+    font-size: 20px;
+  }
+}
+
+/* Fix para navegadores de TV que não suportam flex-gap ou subgrid */
+@supports not (gap: 1rem) {
+  .flex.gap-4 > * + * { margin-left: 1rem; }
+  .grid.gap-4 > * { margin-bottom: 1rem; }
 }
 
 

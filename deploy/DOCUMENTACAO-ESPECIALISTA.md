@@ -65,6 +65,11 @@ O sistema tenta automaticamente todos os DNS cadastrados em `server_credentials`
 -   O Player HLS está configurado para 25 retentativas de fragmentos.
 -   **Isolamento de Usuário**: A seleção de servidor é persistida localmente no navegador (`localStorage`), garantindo que a troca de servidor feita por um usuário seja individual e não afete nenhum outro cliente.
 -   **Carrossel TMDB & Busca Inteligente**: O componente `TMDBHeroCarousel` busca tendências mundiais e o botão "ASSISTIR AGORA" navega para `/filmes` ou `/series` enviando o título do conteúdo como parâmetro de busca (`q`). O catálogo, por sua vez, detecta esse parâmetro e realiza uma filtragem automática no servidor IPTV selecionado, garantindo uma transição fluida do marketing (TMDB) para a reprodução real.
+-   **Otimização para Smart TVs (TV Ready)**: 
+    -   **CSS Engine**: Estilos globais em `src/styles.css` garantem o reset de bordas e paddings específicos de navegadores WebOS e Tizen.
+    -   **D-Pad Focus**: O sistema de foco (`:focus-visible`) foi ampliado com glow de alta visibilidade e transformações estáveis para visualização a distância (couch interface).
+    -   **Auto-Scale**: Fontes e ícones escalam automaticamente para 18px-20px em telas 4K para garantir legibilidade.
+    -   **Navegação**: O hook `useTVNavigation` intercepta eventos de teclado (VK_UP, VK_DOWN, etc.) para mapear o controle remoto diretamente nas funções do app.
 
 ---
 
