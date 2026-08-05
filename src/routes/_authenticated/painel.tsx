@@ -78,7 +78,12 @@ import {
   Calendar,
   Key,
   Link as LinkIcon,
-  Copy
+  Copy,
+  MessageSquare,
+  Send,
+  Image as ImageIcon,
+  Mic,
+  X
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -306,6 +311,9 @@ function PainelDono() {
           </TabsTrigger>
           <TabsTrigger value="planos" className="gap-2">
             <Key className="h-4 w-4" /> Planos
+          </TabsTrigger>
+          <TabsTrigger value="suporte" className="gap-2">
+            <MessageSquare className="h-4 w-4" /> Suporte
           </TabsTrigger>
         </TabsList>
 
