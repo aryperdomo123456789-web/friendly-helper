@@ -197,7 +197,7 @@ function LoginPage() {
       
       <div className="absolute bottom-8 flex flex-col items-center gap-2 px-6 text-center">
         <p className="text-xs font-medium text-primary/80 animate-pulse">
-          EPG & TMDB · Stream Otimizado VPS · Multi-Servidor
+          Fluxo Ultra-Rápido · Handshake Otimizado · VPS Ready
         </p>
         <p className="text-[10px] text-muted-foreground/60">
           &copy; 2024 WebPlayer IPTV · Conexão Blindada e Estável

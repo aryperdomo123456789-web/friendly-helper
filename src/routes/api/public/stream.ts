@@ -47,13 +47,27 @@ export const Route = createFileRoute("/api/public/stream")({
         };
 
         let upstream: Response | null = null;
-        for (let attempt = 0; attempt < 3; attempt += 1) {
-          if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 250 * attempt));
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
           upstream = await attemptFetch();
+          
+          // Check for redirect manually if 'follow' is acting up in Worker environment
+          if (upstream && (upstream.status === 301 || upstream.status === 302)) {
+            const location = upstream.headers.get("location");
+            if (location) {
+               // Follow the redirect manually once
+               const redirectRes = await fetch(location, {
+                 headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", "Accept": "*/*" }
+               });
+               if (redirectRes.ok || redirectRes.status === 206) {
+                 upstream = redirectRes;
+                 break;
+               }
+            }
+          }
+
           if (upstream && (upstream.ok || upstream.status === 206 || upstream.status === 404)) break;
-          // A failed response can still carry a body. Explicitly cancel it before
-          // retrying so the provider does not count abandoned requests as active
-          // media connections.
+          
           await upstream?.body?.cancel().catch(() => undefined);
         }
 
