@@ -162,7 +162,6 @@ function ShellLayout() {
             </>
           ) : null}
 
-        </nav>
 
         <div className="space-y-3 border-t border-sidebar-border p-4">
           <div className="text-xs text-muted-foreground">
