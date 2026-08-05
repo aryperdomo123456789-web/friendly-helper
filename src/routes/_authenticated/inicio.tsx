@@ -232,12 +232,12 @@ function FloatingChat({ userId }: { userId?: string }) {
 
     setSending(true);
     try {
-      console.log("Iniciando envio de mensagem...", { threadId: thread.id, userId });
+      console.log("Iniciando envio de mensagem...", { threadId: thread['id'], userId });
       
       const { data, error } = await supabase
         .from('support_messages')
         .insert([{
-          thread_id: thread.id,
+          thread_id: thread['id'],
           sender_id: userId || null,
           content: messageToSend
         }])
@@ -255,9 +255,9 @@ function FloatingChat({ userId }: { userId?: string }) {
         .update({ 
           last_message: messageToSend, 
           last_message_at: new Date().toISOString(),
-          unread_count_owner: (thread.unread_count_owner || 0) + 1
+          unread_count_owner: (thread['unread_count_owner'] || 0) + 1
         })
-        .eq('id', thread.id);
+        .eq('id', thread['id']);
 
       if (updateError) {
         console.error("Erro ao atualizar thread:", updateError);
