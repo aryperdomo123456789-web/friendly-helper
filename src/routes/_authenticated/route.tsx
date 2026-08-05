@@ -39,11 +39,11 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 const NAV = [
-  { to: "/inicio", label: "Inicio", icon: Home },
-  { to: "/canais", label: "TV ao Vivo", icon: Tv },
-  { to: "/filmes", label: "Filmes", icon: Film },
-  { to: "/series", label: "Series", icon: MonitorPlay },
-  { to: "/servidores", label: "Servidores", icon: Server },
+  { to: "/inicio", label: "Inicio", icon: Home, restricted: true },
+  { to: "/canais", label: "TV ao Vivo", icon: Tv, restricted: true },
+  { to: "/filmes", label: "Filmes", icon: Film, restricted: true },
+  { to: "/series", label: "Series", icon: MonitorPlay, restricted: true },
+  { to: "/servidores", label: "Servidores", icon: Server, restricted: true },
 ] as const;
 
 function Shell() {
@@ -55,7 +55,7 @@ function Shell() {
 }
 
 function ShellLayout() {
-  const { profile, isOwner, servers, serverId, setServerId, blocked } = usePlayerSession();
+  const { profile, isOwner, servers, serverId, setServerId, blocked, expired } = usePlayerSession();
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const location = useLocation();
@@ -96,18 +96,24 @@ function ShellLayout() {
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
-          {NAV.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              onClick={() => setOpen(false)}
-              activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </Link>
-          ))}
+          {NAV.map((item) => {
+            const isRestricted = !isOwner && (blocked || expired) && item.restricted;
+            if (isRestricted) return null;
+            
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={() => setOpen(false)}
+                activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              >
+                <item.icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            );
+          })}
+        
           <Link
             to="/conta"
             onClick={() => setOpen(false)}
@@ -155,8 +161,8 @@ function ShellLayout() {
               </Link>
             </>
           ) : null}
-
         </nav>
+
 
         <div className="space-y-3 border-t border-sidebar-border p-4">
           <div className="text-xs text-muted-foreground">
@@ -232,7 +238,7 @@ function ShellLayout() {
           </div>
         </header>
 
-        {blocked ? (
+        {blocked && !expired ? (
           <div className="flex items-start gap-3 border-b border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{blocked}</span>
@@ -240,7 +246,22 @@ function ShellLayout() {
         ) : null}
 
         <main className="p-4 lg:p-6">
-          <Outlet />
+          {!isOwner && (blocked || expired) && location.pathname !== "/conta" ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="mb-6 rounded-full bg-destructive/10 p-6">
+                <AlertTriangle className="h-16 w-16 text-destructive" />
+              </div>
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter text-primary">Acesso Suspenso</h2>
+              <p className="mt-2 max-w-md text-muted-foreground font-medium">
+                Seu plano expirou ou o acesso foi bloqueado. Para continuar assistindo, renove sua assinatura agora mesmo.
+              </p>
+              <Button asChild className="mt-8 font-black uppercase italic tracking-widest h-12 px-8 shadow-lg shadow-primary/20">
+                <Link to="/conta">Ir para Renovação</Link>
+              </Button>
+            </div>
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
     </div>

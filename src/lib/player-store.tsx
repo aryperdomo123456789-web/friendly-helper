@@ -23,6 +23,7 @@ type SessionValue = {
   activeServer: ServerRow | null;
   setServerId: (id: string) => void;
   blocked: string | null;
+  expired: boolean;
 };
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -53,10 +54,12 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     const send = async () => {
       try {
-        await ping({
+        const result = await ping({
           data: { device_id: getDeviceId(), user_agent: navigator.userAgent.slice(0, 280) },
         });
-        if (!cancelled) setBlocked(null);
+        if (!cancelled) {
+          setBlocked(result.expired ? "Plano Expirado" : null);
+        }
       } catch (error) {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : "Conexao recusada";
@@ -86,6 +89,7 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
         toast.success(`Servidor ativo: ${servers.find((s: ServerRow) => s.id === id)?.name ?? ""}`);
       },
       blocked,
+      expired: Boolean(data?.expired),
     }),
     [blocked, data, isLoading, serverId, servers],
   );
