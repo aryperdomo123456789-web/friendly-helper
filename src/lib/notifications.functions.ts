@@ -1,16 +1,15 @@
 import { createServerFn } from "@tanstack/react-start";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 export const getNotifications = createServerFn({ method: "GET" })
-  .handler(async () => {
-    const { data: { session } } = await supabaseAdmin.auth.getSession();
-    if (!session) return [];
-
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await (supabaseAdmin
       .from('notifications' as any)
       .select('*')
-      .eq('user_id', session.user.id)
+      .eq('user_id', context.userId)
       .order('created_at', { ascending: false }) as any);
 
     if (error) throw error;
@@ -18,8 +17,10 @@ export const getNotifications = createServerFn({ method: "GET" })
   });
 
 export const markNotificationRead = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .validator((id: string) => z.string().uuid().parse(id))
   .handler(async ({ data: id }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await (supabaseAdmin
       .from('notifications' as any)
       .update({ is_read: true })
@@ -30,11 +31,13 @@ export const markNotificationRead = createServerFn({ method: "POST" })
   });
 
 export const sendMassNotification = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .validator((data: { title: string, content: string }) => z.object({
     title: z.string(),
     content: z.string()
   }).parse(data))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: profiles } = await supabaseAdmin
       .from('profiles')
       .select('id')
