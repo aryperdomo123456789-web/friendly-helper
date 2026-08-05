@@ -34,6 +34,11 @@ import {
 import { Plus, Trash2, Edit, Wifi, WifiOff, Calendar, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+
 
 export const Route = createFileRoute("/_authenticated/usuarios")({
   head: () => ({
