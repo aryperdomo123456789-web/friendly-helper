@@ -311,6 +311,7 @@ export type Database = {
           bonus_days_quarterly: number | null
           created_at: string
           created_by_id: string | null
+          description: string | null
           duration_minutes: number
           id: string
           is_active: boolean
@@ -323,6 +324,7 @@ export type Database = {
           bonus_days_quarterly?: number | null
           created_at?: string
           created_by_id?: string | null
+          description?: string | null
           duration_minutes?: number
           id?: string
           is_active?: boolean
@@ -335,6 +337,7 @@ export type Database = {
           bonus_days_quarterly?: number | null
           created_at?: string
           created_by_id?: string | null
+          description?: string | null
           duration_minutes?: number
           id?: string
           is_active?: boolean

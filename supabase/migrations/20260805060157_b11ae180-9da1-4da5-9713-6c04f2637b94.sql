@@ -1,0 +1,1 @@
+ALTER TABLE public.test_links ADD COLUMN IF NOT EXISTS description text;

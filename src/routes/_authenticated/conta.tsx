@@ -209,16 +209,41 @@ function ContaPage() {
             </CardTitle>
             <CardDescription>Indique amigos e ganhe dias extras ou descontos.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-2">
-              <Input readOnly value={referralLink} className="bg-muted/50 font-mono text-xs" />
-              <Button size="icon" onClick={copyReferral} variant="secondary">
-                <Copy className="h-4 w-4" />
-              </Button>
-            </div>
+          <CardContent className="space-y-6">
+            {(account.data?.testLinks ?? []).length === 0 ? (
+              <div className="rounded-lg bg-muted/50 p-6 text-center border border-dashed">
+                <p className="text-sm text-muted-foreground uppercase font-bold tracking-widest">Nenhum link de indicação disponível no momento.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {(account.data?.testLinks ?? []).map((link: any) => {
+                  const fullUrl = `${window.location.origin}/teste/${link.slug}?ref=${account.data?.referral_code}`;
+                  return (
+                    <div key={link.slug} className="space-y-2 p-4 rounded-xl border border-primary/10 bg-primary/5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-[10px] uppercase font-black tracking-widest text-primary">
+                          {link.description || `Link: ${link.slug}`}
+                        </Label>
+                        <Badge variant="outline" className="text-[9px] uppercase font-bold border-primary/30">Ativo</Badge>
+                      </div>
+                      <div className="flex gap-2">
+                        <Input readOnly value={fullUrl} className="bg-background font-mono text-[10px] h-8" />
+                        <Button size="icon" onClick={() => {
+                          navigator.clipboard.writeText(fullUrl);
+                          toast.success("Link de indicação copiado!");
+                        }} variant="secondary" className="h-8 w-8">
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
             <div className="rounded-lg bg-primary/10 p-4 border border-primary/20">
               <p className="text-xs font-medium text-primary leading-relaxed">
-                Cada novo usuário que assinar através do seu link gera benefícios automáticos na sua próxima renovação.
+                Cada novo usuário que assinar através de qualquer um dos seus links gera benefícios automáticos na sua conta.
               </p>
             </div>
           </CardContent>

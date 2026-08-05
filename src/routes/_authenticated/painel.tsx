@@ -14,6 +14,7 @@ import {
   kickDevices,
   testServerConnection
 } from "@/lib/owner.functions";
+import { Badge } from "@/components/ui/badge";
 import {
   listTestLinks,
   saveTestLink,
@@ -914,7 +915,16 @@ function PainelDono() {
         <TabsContent value="referencia" className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Links de Indicação / Teste</h2>
-            <Button onClick={() => setTestLinkModal({ slug: "", duration_minutes: 360, max_connections: 1, is_active: true })}>
+            <Button onClick={() => {
+              const testPlan = plans.data?.find((p: any) => p.name.toLowerCase().includes("teste") || Number(p.price) === 0);
+              setTestLinkModal({ 
+                slug: "", 
+                duration_minutes: testPlan ? (testPlan.duration_unit === 'minutes' ? testPlan.duration_value : testPlan.duration_unit === 'hours' ? testPlan.duration_value * 60 : testPlan.duration_value * 1440) : 360, 
+                max_connections: testPlan?.max_connections ?? 1, 
+                is_active: true,
+                description: ""
+              });
+            }}>
               <Plus className="mr-2 h-4 w-4" /> Novo Link Público
             </Button>
           </div>
@@ -1213,30 +1223,44 @@ function PainelDono() {
                   required
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="description">Descrição para o Usuário</Label>
+                <Input
+                  id="description"
+                  value={testLinkModal?.description || ""}
+                  onChange={(e) => setTestLinkModal({ ...testLinkModal, description: e.target.value })}
+                  placeholder="Ex: Teste Premium com Canais 4K"
+                />
+                <p className="text-[10px] text-muted-foreground">Esta descrição aparecerá na aba Conta do usuário.</p>
+              </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="duration">Duração do Teste (minutos)</Label>
+                <div className="space-y-2 relative">
+                  <div className="absolute -top-1 right-0">
+                    <Badge variant="outline" className="text-[9px] font-bold uppercase py-0 px-1 border-primary/30 text-primary">Herdado do Plano Teste</Badge>
+                  </div>
+                  <Label htmlFor="duration" className="opacity-70">Duração do Teste (minutos)</Label>
                   <Input
                     id="duration"
                     type="number"
                     value={testLinkModal?.duration_minutes || 240}
-                    onChange={(e) => setTestLinkModal({ ...testLinkModal, duration_minutes: parseInt(e.target.value) })}
-                    min="1"
-                    required
+                    readOnly
+                    className="bg-muted/50 cursor-not-allowed"
                   />
-                  <p className="text-[10px] text-muted-foreground">Tempo que o cliente terá para testar os canais.</p>
+                  <p className="text-[10px] text-muted-foreground">Configurado automaticamente pelo Plano Teste.</p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="conn">Limite de Conexões</Label>
+                <div className="space-y-2 relative">
+                  <div className="absolute -top-1 right-0">
+                    <Badge variant="outline" className="text-[9px] font-bold uppercase py-0 px-1 border-primary/30 text-primary">Herdado do Plano Teste</Badge>
+                  </div>
+                  <Label htmlFor="conn" className="opacity-70">Limite de Conexões</Label>
                   <Input
                     id="conn"
                     type="number"
                     value={testLinkModal?.max_connections || 1}
-                    onChange={(e) => setTestLinkModal({ ...testLinkModal, max_connections: parseInt(e.target.value) })}
-                    min="1"
-                    required
+                    readOnly
+                    className="bg-muted/50 cursor-not-allowed"
                   />
-                  <p className="text-[10px] text-muted-foreground">Quantos aparelhos podem logar ao mesmo tempo.</p>
+                  <p className="text-[10px] text-muted-foreground">Configurado automaticamente pelo Plano Teste.</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 py-2">
