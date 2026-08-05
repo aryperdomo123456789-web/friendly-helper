@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { usePlayerSession } from "@/lib/player-session-context";
+import { usePlayerSession } from "@/lib/player-store";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Tv, ShieldCheck, Lock, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
-import { bootstrapOwner } from "@/lib/bootstrap.functions";
+import { createFirstOwner } from "@/lib/bootstrap.functions";
 
 export const Route = createFileRoute("/")({
   component: LoginPage,
 });
+
 
 function LoginPage() {
   const navigate = useNavigate();
