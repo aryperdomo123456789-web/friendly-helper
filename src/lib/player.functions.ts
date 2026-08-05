@@ -106,7 +106,8 @@ export const heartbeat = createServerFn({ method: "POST" })
 
     if (!profile.is_active) throw new Error("Acesso desativado");
     if (profile.expires_at && new Date(profile.expires_at).getTime() < Date.now()) {
-      throw new Error("Acesso expirado");
+      // Retorna uma flag especial em vez de lançar erro para permitir navegação limitada
+      return { ok: true, limit: profile.max_connections, expired: true };
     }
 
     const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
