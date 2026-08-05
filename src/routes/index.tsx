@@ -9,6 +9,7 @@
  *    - `/deploy/nginx.conf`: Configuração de Proxy Reverso e SSL.
  * 3. NOVO BACKEND: Codex deve rodar os SQLs no novo projeto Supabase e configurar a SERVICE_ROLE_KEY no .env da VPS.
  * 4. DOCUMENTAÇÃO: Veja `CODEX-RESTAURAR.md` na raiz para o passo-a-passo.
+ * 5. TV READY: Suporte básico a navegação por controle remoto (setas/enter) ativado globalmente.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";

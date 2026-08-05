@@ -10,6 +10,7 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, type ReactNode } from "react";
 import { getAppConfig } from "../lib/config.functions";
+import { useTVNavigation } from "../lib/tv-navigation";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -158,6 +159,7 @@ function ThemeApplier() {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useTVNavigation(); // Ativa escuta global de teclas para TV
 
   return (
     <QueryClientProvider client={queryClient}>
