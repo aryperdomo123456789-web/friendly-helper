@@ -13,7 +13,7 @@ export const getPlans = createServerFn({ method: "GET" })
       .order("price", { ascending: true });
 
     if (error) throw error;
-    return data as SubscriptionPlan[];
+    return (data as any) as SubscriptionPlan[];
   });
 
 export const savePlan = createServerFn({ method: "POST" })
@@ -23,23 +23,30 @@ export const savePlan = createServerFn({ method: "POST" })
       id: z.string().optional(),
       name: z.string(),
       price: z.number(),
-      duration_days: z.number(),
+      duration_value: z.number(),
+      duration_unit: z.enum(["days", "hours"]),
       max_connections: z.number(),
     }).parse(input)
   )
   .handler(async ({ data: input, context }) => {
     const { id, ...data } = input;
 
+    // We keep duration_days for DB compatibility if needed, but the UI uses value/unit
+    const dbData = {
+      ...data,
+      duration_days: data.duration_unit === 'days' ? data.duration_value : Math.ceil(data.duration_value / 24)
+    };
+
     if (id) {
       const { error } = await context.supabase
         .from("subscription_plans")
-        .update(data)
+        .update(dbData)
         .eq("id", id);
       if (error) throw error;
     } else {
       const { error } = await context.supabase
         .from("subscription_plans")
-        .insert(data);
+        .insert(dbData);
       if (error) throw error;
     }
 

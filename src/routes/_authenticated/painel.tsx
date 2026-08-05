@@ -355,7 +355,7 @@ function PainelDono() {
                 is_active: true,
                 plan_id: testPlan?.id || null,
                 expires_at: testPlan 
-                  ? new Date(Date.now() + testPlan.duration_days * 24 * 60 * 60 * 1000).toISOString()
+                  ? new Date(Date.now() + testPlan.duration_value * (testPlan.duration_unit === 'hours' ? 60 : 24 * 60) * 60 * 1000).toISOString()
                   : null
               });
             }}>
@@ -869,7 +869,8 @@ function PainelDono() {
             <Button onClick={() => setPlanModal({ 
               name: "", 
               price: 30, 
-              duration_days: 30, 
+              duration_value: 30, 
+              duration_unit: "days", 
               max_connections: 1 
             })}>
               <Plus className="mr-2 h-4 w-4" /> Novo Plano
@@ -904,7 +905,7 @@ function PainelDono() {
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" /> {plan.duration_days} dias de acesso
+                      <Calendar className="h-4 w-4" /> {plan.duration_value} {plan.duration_unit === 'hours' ? 'horas' : 'dias'} de acesso
                     </div>
                     <div className="flex items-center gap-2">
                       <Wifi className="h-4 w-4" /> {plan.max_connections} conexão(ões)
@@ -1094,7 +1095,8 @@ function PainelDono() {
                       updates.max_connections = selectedPlan.max_connections;
                       // Calculate expiration if creating or if user wants to reset
                       const expiry = new Date();
-                      expiry.setDate(expiry.getDate() + selectedPlan.duration_days);
+                      const msToAdd = selectedPlan.duration_value * (selectedPlan.duration_unit === 'hours' ? 60 : 24 * 60) * 60 * 1000;
+                      expiry.setTime(expiry.getTime() + msToAdd);
                       updates.expires_at = expiry.toISOString();
                     }
                     
@@ -1294,14 +1296,29 @@ function PainelDono() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="plan-duration">Duração (Dias)</Label>
-                  <Input 
-                    id="plan-duration"
-                    type="number"
-                    value={planModal?.duration_days || 30} 
-                    onChange={e => setPlanModal({...planModal, duration_days: parseInt(e.target.value)})}
-                    required 
-                  />
+                  <Label htmlFor="plan-duration">Duração</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      id="plan-duration"
+                      type="number"
+                      className="flex-1"
+                      value={planModal?.duration_value || 30} 
+                      onChange={e => setPlanModal({...planModal, duration_value: parseInt(e.target.value)})}
+                      required 
+                    />
+                    <Select 
+                      value={planModal?.duration_unit || "days"} 
+                      onValueChange={val => setPlanModal({...planModal, duration_unit: val})}
+                    >
+                      <SelectTrigger className="w-[110px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="days">Dias</SelectItem>
+                        <SelectItem value="hours">Horas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
               <div className="grid gap-2">

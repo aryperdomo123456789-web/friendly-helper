@@ -53,7 +53,8 @@ export interface SubscriptionPlan {
   id: string;
   name: string;
   price: number;
-  duration_days: number;
+  duration_value: number;
+  duration_unit: "days" | "hours";
   max_connections: number;
 }
 

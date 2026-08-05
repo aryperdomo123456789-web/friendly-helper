@@ -178,6 +178,8 @@ export type Database = {
         Row: {
           created_at: string
           duration_days: number
+          duration_unit: string | null
+          duration_value: number
           id: string
           max_connections: number
           name: string
@@ -187,6 +189,8 @@ export type Database = {
         Insert: {
           created_at?: string
           duration_days: number
+          duration_unit?: string | null
+          duration_value: number
           id?: string
           max_connections?: number
           name: string
@@ -196,6 +200,8 @@ export type Database = {
         Update: {
           created_at?: string
           duration_days?: number
+          duration_unit?: string | null
+          duration_value?: number
           id?: string
           max_connections?: number
           name?: string
