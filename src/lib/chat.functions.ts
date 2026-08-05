@@ -1,10 +1,12 @@
 
 import { createServerFn } from "@tanstack/react-start";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 export const listSupportThreads = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
   .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await (supabaseAdmin
       .from('support_threads' as any)
       .select('*')
@@ -25,8 +27,10 @@ export const listSupportThreads = createServerFn({ method: "GET" })
   });
 
 export const getOrCreateThread = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .validator((data: { userId: string }) => z.object({ userId: z.string().uuid() }).parse(data))
   .handler(async ({ data: { userId } }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // Try to find existing
     const { data: existing } = await (supabaseAdmin
       .from('support_threads' as any)
@@ -53,11 +57,13 @@ export const getOrCreateThread = createServerFn({ method: "POST" })
   });
 
 export const markThreadRead = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .validator((data: { threadId: string, isOwner: boolean }) => z.object({
     threadId: z.string().uuid(),
     isOwner: z.boolean()
   }).parse(data))
   .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const update = data.isOwner ? { unread_count_owner: 0 } : { unread_count_user: 0 };
     const { error } = await (supabaseAdmin
       .from('support_threads' as any)
