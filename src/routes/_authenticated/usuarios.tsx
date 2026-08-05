@@ -182,8 +182,9 @@ function UsuariosPage() {
         </Button>
       </div>
 
-      <Card>
-        <Table>
+      <Card className="overflow-x-auto">
+        <div className="min-w-[800px]">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Usuario</TableHead>
@@ -275,11 +276,12 @@ function UsuariosPage() {
               ))
             )}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
       </Card>
 
       <Dialog open={!!userModal} onOpenChange={(open) => !open && setUserModal(null)}>
-        <DialogContent className="sm:max-w-[520px]">
+        <DialogContent className="sm:max-w-[520px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSaveUser}>
             <DialogHeader>
               <DialogTitle>{userModal?.id ? "Editar Usuario" : "Novo Usuario"}</DialogTitle>
