@@ -121,7 +121,7 @@ export const createTestUser = createServerFn({ method: "POST" })
       .select("*")
       .eq("slug", data.slug)
       .eq("is_active", true)
-      .single();
+      .maybeSingle();
     
     if (linkError || !link) throw new Error("Link de teste inválido ou inativo");
 
