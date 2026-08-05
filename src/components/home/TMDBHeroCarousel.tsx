@@ -78,6 +78,8 @@ export function TMDBHeroCarousel() {
   if (items.length === 0) return null;
 
   const current = items[currentIndex];
+  if (!current) return null;
+
   const year = (current.release_date || current.first_air_date || "").split("-")[0];
 
   return (
