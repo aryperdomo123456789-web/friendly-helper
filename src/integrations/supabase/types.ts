@@ -198,6 +198,36 @@ export type Database = {
         }
         Relationships: []
       }
+      test_links: {
+        Row: {
+          created_at: string
+          duration_minutes: number
+          id: string
+          is_active: boolean
+          max_connections: number
+          slug: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          is_active?: boolean
+          max_connections?: number
+          slug: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          duration_minutes?: number
+          id?: string
+          is_active?: boolean
+          max_connections?: number
+          slug?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
