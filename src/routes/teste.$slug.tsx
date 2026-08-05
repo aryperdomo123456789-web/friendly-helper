@@ -107,26 +107,31 @@ function TestePublico() {
         </div>
 
         {!credentials ? (
-          <Card className="border-primary/20 bg-card/50 backdrop-blur-xl shadow-2xl">
+          <Card className={`border-primary/20 bg-card/50 backdrop-blur-xl shadow-2xl ${blocked ? 'opacity-75 grayscale' : ''}`}>
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl">Experimente Agora</CardTitle>
+              <CardTitle className="text-2xl">{blocked ? "Acesso Limitado" : "Experimente Agora"}</CardTitle>
               <CardDescription>
-                Clique no botão abaixo para gerar seus dados de acesso temporário.
+                {blocked 
+                  ? "Este dispositivo já atingiu o limite de testes gratuitos." 
+                  : "Clique no botão abaixo para gerar seus dados de acesso temporário."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 flex items-start gap-3">
-                <Zap className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+              <div className={`p-4 rounded-xl border flex items-start gap-3 ${blocked ? 'bg-destructive/10 border-destructive/20' : 'bg-primary/5 border-primary/10'}`}>
+                <Zap className={`w-5 h-5 shrink-0 mt-0.5 ${blocked ? 'text-destructive' : 'text-primary'}`} />
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Seu acesso será liberado instantaneamente. Aproveite canais, filmes e séries com qualidade máxima.
+                  {blocked 
+                    ? "Para garantir a qualidade do serviço para todos, limitamos a um teste por aparelho. Caso precise de ajuda, entre em contato com o suporte."
+                    : "Seu acesso será liberado instantaneamente. Aproveite canais, filmes e séries com qualidade máxima."}
                 </p>
               </div>
               <Button 
                 onClick={handleCreateTest} 
-                disabled={loading}
+                disabled={loading || blocked}
+                variant={blocked ? "destructive" : "default"}
                 className="w-full h-14 text-lg font-bold rounded-xl shadow-lg shadow-primary/20"
               >
-                {loading ? "Gerando..." : "GERAR TESTE GRÁTIS"}
+                {loading ? "Gerando..." : blocked ? "LIMITE ATINGIDO" : "GERAR TESTE GRÁTIS"}
               </Button>
             </CardContent>
           </Card>
