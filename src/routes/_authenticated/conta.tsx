@@ -66,7 +66,7 @@ function ContaPage() {
         email: `${result.username}@iptv.local`,
         password: newPassword || currentPassword,
       });
-      toast.success("Dados de acesso atualizados!");
+      toast.success("Dados de acesso atualizados com sucesso!");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");

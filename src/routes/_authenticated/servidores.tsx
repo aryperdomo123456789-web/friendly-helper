@@ -59,7 +59,12 @@ function Servidores() {
                   {active ? (
                     <Check className="h-5 w-5 text-online" />
                   ) : (
-                    <Button size="sm" onClick={() => setServerId(server.id)}>
+                    <Button size="sm" onClick={() => {
+                      if (confirm("Deseja alternar para este servidor?")) {
+                        setServerId(server.id);
+                        toast.success("Servidor alterado com sucesso!");
+                      }
+                    }}>
                       Usar
                     </Button>
                   )}
