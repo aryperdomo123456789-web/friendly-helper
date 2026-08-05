@@ -112,11 +112,8 @@ export const heartbeat = createServerFn({ method: "POST" })
     if (!profile) return { ok: true, limit: null as number | null };
 
     if (!profile.is_active) throw new Error("Acesso desativado");
-    if (profile.expires_at && new Date(profile.expires_at).getTime() < Date.now()) {
-      // Retorna uma flag especial em vez de lançar erro para permitir navegação limitada
-      return { ok: true, limit: profile.max_connections, expired: true };
-    }
-
+    const expired = profile.expires_at && new Date(profile.expires_at).getTime() < Date.now();
+    
     const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
     await supabaseAdmin
       .from("device_sessions")
@@ -146,7 +143,7 @@ export const heartbeat = createServerFn({ method: "POST" })
       { onConflict: "user_id,device_id" },
     );
 
-    return { ok: true, limit: profile.max_connections };
+    return { ok: true, limit: profile.max_connections, expired: Boolean(expired) };
   });
 
 export const getCategories = createServerFn({ method: "POST" })
