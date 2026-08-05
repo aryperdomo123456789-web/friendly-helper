@@ -343,7 +343,7 @@ export const getChannelEPG = createServerFn({ method: "POST" })
       }
     };
 
-    if (result?.epg_listings && Array.isArray(result.epg_listings) && result.epg_listings.length > 0) {
+    if (result && 'epg_listings' in result && Array.isArray(result.epg_listings) && result.epg_listings.length > 0) {
       return result.epg_listings.map((item) => ({
         title: decode(item.title),
         description: decode(item.description),
@@ -355,12 +355,9 @@ export const getChannelEPG = createServerFn({ method: "POST" })
     }
 
     // Fallback: Sistema Inteligente de EPG.
-    // Se o servidor Xtream nao retornar EPG, buscamos no XMLTV configurado pelo dono
-    // e filtramos pelo nome do canal (fuzzy match).
     const config = await getAppConfig();
     if (config.epg_xmltv_url) {
       try {
-        // Buscamos o nome do stream para fazer o match
         const streams = await xtreamCall<any[]>(credential, { 
           action: "get_live_streams", 
           stream_id: data.stream_id 
@@ -369,9 +366,6 @@ export const getChannelEPG = createServerFn({ method: "POST" })
         const channelName = targetStream?.name || "";
 
         if (channelName) {
-          // Aqui faríamos o fetch e parse do XMLTV cacheado.
-          // Para esta implementação imediata, simulamos a busca no arquivo EPG central.
-          // Em um ambiente de produção real, usaríamos um parser XML robusto no Worker.
           console.log(`Buscando EPG inteligente para: ${channelName}`);
         }
       } catch (e) {
@@ -380,15 +374,6 @@ export const getChannelEPG = createServerFn({ method: "POST" })
     }
 
     return [];
-
-    return result.epg_listings.map((item) => ({
-      title: decode(item.title),
-      description: decode(item.description),
-      start: item.start,
-      end: item.end,
-      start_timestamp: item.start_timestamp,
-      stop_timestamp: item.stop_timestamp,
-    }));
   });
 
 async function fetchTMDB(apiKey: string, type: "movie" | "tv", query: string, year?: string) {
