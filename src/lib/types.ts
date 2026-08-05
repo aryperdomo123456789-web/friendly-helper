@@ -47,6 +47,14 @@ export interface ServerCredential {
   password: string;
 }
 
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  price: number;
+  duration_days: number;
+  max_connections: number;
+}
+
 export interface AccessUser {
   id: string;
   username: string;
@@ -56,4 +64,6 @@ export interface AccessUser {
   is_active: boolean;
   server_ids: string[];
   online: number;
+  plan_id?: string;
+  plan?: SubscriptionPlan;
 }

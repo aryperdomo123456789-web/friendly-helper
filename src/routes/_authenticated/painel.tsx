@@ -21,6 +21,7 @@ import {
 import { getMySession } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
 import { getAppConfig, updateAppConfig } from "@/lib/config.functions";
+import { getPlans, savePlan, deletePlan } from "@/lib/plans.functions";
 import { AppConfigSchema } from "@/lib/types";
 
 
@@ -114,6 +115,15 @@ function PainelDono() {
   const fetchTestLinks = useServerFn(listTestLinks);
   const mutationSaveTestLink = useServerFn(saveTestLink);
   const mutationDeleteTestLink = useServerFn(deleteTestLink);
+  const fetchPlans = useServerFn(getPlans);
+  const mutationSavePlan = useServerFn(savePlan);
+  const mutationDeletePlan = useServerFn(deletePlan);
+
+  const plans = useQuery({
+    queryKey: ["admin-plans"],
+    queryFn: () => fetchPlans(),
+    enabled: isOwner,
+  });
 
   const testLinks = useQuery({
     queryKey: ["admin-test-links"],
@@ -146,6 +156,7 @@ function PainelDono() {
   const [userModal, setUserModal] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [testLinkModal, setTestLinkModal] = useState<any>(null);
+  const [planModal, setPlanModal] = useState<any>(null);
 
   /* ------------------- Handlers Servidores ------------------- */
   const handleSaveServer = async (e: React.FormEvent) => {
@@ -231,6 +242,35 @@ function PainelDono() {
       toast.error(err.message);
     }
   };
+  
+  /* ------------------- Handlers Planos ------------------- */
+  const handleSavePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await mutationSavePlan({ data: planModal });
+      toast.success("Plano salvo com sucesso!");
+      setPlanModal(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
+      // Re-invalidate users because plans affect them
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar plano");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePlan = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este plano?")) return;
+    try {
+      await mutationDeletePlan({ data: { id } });
+      toast.success("Plano removido");
+      queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
 
 
   if (!isOwner) {
@@ -264,6 +304,9 @@ function PainelDono() {
           <TabsTrigger value="configuracao" className="gap-2">
             <Settings className="h-4 w-4" /> Configuração Central
           </TabsTrigger>
+          <TabsTrigger value="planos" className="gap-2">
+            <Key className="h-4 w-4" /> Planos
+          </TabsTrigger>
         </TabsList>
 
 
@@ -276,7 +319,8 @@ function PainelDono() {
               display_name: "", 
               max_connections: 1, 
               server_ids: [],
-              is_active: true 
+              is_active: true,
+              plan_id: null
             })}>
               <Plus className="mr-2 h-4 w-4" /> Criar Acesso
             </Button>
@@ -304,7 +348,19 @@ function PainelDono() {
                   users.data?.map((user: any) => (
                     <TableRow key={user.id}>
                       <TableCell>
-                        <div className="font-medium">{user.display_name || user.username}</div>
+                        <div className="font-medium flex items-center gap-2">
+                          {user.display_name || user.username}
+                          {user.plan_id && (
+                            <div className="flex flex-col">
+                              <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full border border-primary/30 uppercase font-bold w-fit">
+                                {plans.data?.find((p: any) => p.id === user.plan_id)?.name || "Plano"}
+                              </span>
+                              <span className="text-[9px] text-muted-foreground mt-0.5">
+                                R$ {Number(plans.data?.find((p: any) => p.id === user.plan_id)?.price || 0).toFixed(2)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground">@{user.username}</div>
                       </TableCell>
                       <TableCell>
@@ -609,7 +665,61 @@ function PainelDono() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="planos" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Planos de Assinatura</h2>
+            <Button onClick={() => setPlanModal({ 
+              name: "", 
+              price: 30, 
+              duration_days: 30, 
+              max_connections: 1 
+            })}>
+              <Plus className="mr-2 h-4 w-4" /> Novo Plano
+            </Button>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {plans.isLoading ? (
+              <div className="col-span-full p-8 text-center text-muted-foreground">Carregando planos...</div>
+            ) : (plans.data ?? []).length === 0 ? (
+              <div className="col-span-full p-8 text-center text-muted-foreground">Nenhum plano cadastrado.</div>
+            ) : (
+              plans.data?.map((plan: any) => (
+                <Card key={plan.id} className="relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPlanModal(plan)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeletePlan(plan.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <CardHeader>
+                    <CardTitle className="flex justify-between items-center">
+                      <span>{plan.name}</span>
+                    </CardTitle>
+                    <div className="text-2xl font-bold text-primary">
+                      R$ {Number(plan.price).toFixed(2).replace('.', ',')}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" /> {plan.duration_days} dias de acesso
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Wifi className="h-4 w-4" /> {plan.max_connections} conexão(ões)
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </TabsContent>
       </Tabs>
+
 
 
       {/* Modal Servidor */}
@@ -691,6 +801,40 @@ function PainelDono() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label>Plano de Assinatura (Opcional)</Label>
+                <Select 
+                  value={userModal?.plan_id || "none"} 
+                  onValueChange={(val) => {
+                    const planId = val === "none" ? null : val;
+                    const selectedPlan = plans.data?.find((p: any) => p.id === planId);
+                    
+                    const updates: any = { plan_id: planId };
+                    
+                    if (selectedPlan) {
+                      updates.max_connections = selectedPlan.max_connections;
+                      // Calculate expiration if creating or if user wants to reset
+                      const expiry = new Date();
+                      expiry.setDate(expiry.getDate() + selectedPlan.duration_days);
+                      updates.expires_at = expiry.toISOString();
+                    }
+                    
+                    setUserModal({...userModal, ...updates});
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um plano" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Personalizado (Sem plano)</SelectItem>
+                    {plans.data?.map((plan: any) => (
+                      <SelectItem key={plan.id} value={plan.id}>
+                        {plan.name} - R$ {Number(plan.price).toFixed(2)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-2">
                 <Label>Nome de Exibicao (Opcional)</Label>
                 <Input 
@@ -832,6 +976,70 @@ function PainelDono() {
               <Button type="submit" disabled={loading}>
                 {loading ? "Salvando..." : "Salvar Link"}
               </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Plano */}
+      <Dialog open={!!planModal} onOpenChange={(o) => !o && setPlanModal(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <form onSubmit={handleSavePlan}>
+            <DialogHeader>
+              <DialogTitle>{planModal?.id ? "Editar Plano" : "Novo Plano"}</DialogTitle>
+              <DialogDescription>
+                Configure os detalhes do plano de assinatura.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="plan-name">Nome do Plano</Label>
+                <Input 
+                  id="plan-name"
+                  value={planModal?.name || ""} 
+                  onChange={e => setPlanModal({...planModal, name: e.target.value})}
+                  placeholder="Ex: Plano Mensal"
+                  required 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="plan-price">Valor (R$)</Label>
+                  <Input 
+                    id="plan-price"
+                    type="number"
+                    step="0.01"
+                    value={planModal?.price || 0} 
+                    onChange={e => setPlanModal({...planModal, price: parseFloat(e.target.value)})}
+                    required 
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="plan-duration">Duração (Dias)</Label>
+                  <Input 
+                    id="plan-duration"
+                    type="number"
+                    value={planModal?.duration_days || 30} 
+                    onChange={e => setPlanModal({...planModal, duration_days: parseInt(e.target.value)})}
+                    required 
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="plan-conn">Máximo de Conexões</Label>
+                <Input 
+                  id="plan-conn"
+                  type="number"
+                  min="1"
+                  value={planModal?.max_connections || 1} 
+                  onChange={e => setPlanModal({...planModal, max_connections: parseInt(e.target.value)})}
+                  required 
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setPlanModal(null)}>Cancelar</Button>
+              <Button type="submit" disabled={loading}>Salvar Plano</Button>
             </DialogFooter>
           </form>
         </DialogContent>

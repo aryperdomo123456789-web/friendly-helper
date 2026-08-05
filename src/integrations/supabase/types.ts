@@ -98,6 +98,7 @@ export type Database = {
           id: string
           is_active: boolean
           max_connections: number
+          plan_id: string | null
           username: string
         }
         Insert: {
@@ -108,6 +109,7 @@ export type Database = {
           id: string
           is_active?: boolean
           max_connections?: number
+          plan_id?: string | null
           username: string
         }
         Update: {
@@ -118,9 +120,18 @@ export type Database = {
           id?: string
           is_active?: boolean
           max_connections?: number
+          plan_id?: string | null
           username?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       server_credentials: {
         Row: {
@@ -156,6 +167,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      subscription_plans: {
+        Row: {
+          created_at: string
+          duration_days: number
+          id: string
+          max_connections: number
+          name: string
+          price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          duration_days: number
+          id?: string
+          max_connections?: number
+          name: string
+          price?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          duration_days?: number
+          id?: string
+          max_connections?: number
+          name?: string
+          price?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
