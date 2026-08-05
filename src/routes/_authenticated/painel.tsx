@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   listServers, 
   saveServer, 
@@ -22,6 +23,7 @@ import { getMySession } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
 import { getAppConfig, updateAppConfig } from "@/lib/config.functions";
 import { getPlans, savePlan, deletePlan } from "@/lib/plans.functions";
+import { listSupportThreads, markThreadRead } from "@/lib/chat.functions";
 import { AppConfigSchema } from "@/lib/types";
 
 
@@ -78,7 +80,12 @@ import {
   Calendar,
   Key,
   Link as LinkIcon,
-  Copy
+  Copy,
+  MessageSquare,
+  Send,
+  Image as ImageIcon,
+  Mic,
+  X
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -118,6 +125,20 @@ function PainelDono() {
   const fetchPlans = useServerFn(getPlans);
   const mutationSavePlan = useServerFn(savePlan);
   const mutationDeletePlan = useServerFn(deletePlan);
+  const fetchThreads = useServerFn(listSupportThreads);
+  const mutationMarkRead = useServerFn(markThreadRead);
+
+  const threads = useQuery({
+    queryKey: ["support-threads"],
+    queryFn: () => fetchThreads(),
+    enabled: isOwner,
+    refetchInterval: 10000,
+  });
+
+  const [selectedThread, setSelectedThread] = useState<any>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const plans = useQuery({
     queryKey: ["admin-plans"],
@@ -306,6 +327,9 @@ function PainelDono() {
           </TabsTrigger>
           <TabsTrigger value="planos" className="gap-2">
             <Key className="h-4 w-4" /> Planos
+          </TabsTrigger>
+          <TabsTrigger value="suporte" className="gap-2">
+            <MessageSquare className="h-4 w-4" /> Suporte
           </TabsTrigger>
         </TabsList>
 
@@ -1092,6 +1116,262 @@ function PainelDono() {
           </form>
         </DialogContent>
       </Dialog>
+      <TabsContent value="suporte" className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-[70vh]">
+          {/* Threads List */}
+          <Card className="md:col-span-4 flex flex-col overflow-hidden">
+            <CardHeader className="py-4">
+              <CardTitle className="text-lg">Conversas</CardTitle>
+            </CardHeader>
+            <div className="flex-1 overflow-y-auto">
+              {threads.isLoading ? (
+                <div className="p-4 text-center">Carregando...</div>
+              ) : (threads.data ?? []).length === 0 ? (
+                <div className="p-4 text-center text-muted-foreground text-sm">Nenhuma conversa.</div>
+              ) : (
+                threads.data?.map((thread: any) => (
+                  <button
+                    key={thread.id}
+                    onClick={() => {
+                      setSelectedThread(thread);
+                      mutationMarkRead({ data: { threadId: thread.id, isOwner: true } });
+                    }}
+                    className={cn(
+                      "w-full p-4 text-left hover:bg-muted/50 border-b transition-colors flex items-center justify-between",
+                      selectedThread?.id === thread.id && "bg-muted"
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold truncate">{thread.profile?.display_name || thread.profile?.username || "Usuário"}</div>
+                      <div className="text-xs text-muted-foreground truncate">{thread.last_message || "Iniciou chat"}</div>
+                    </div>
+                    {thread.unread_count_owner > 0 && (
+                      <span className="ml-2 bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        {thread.unread_count_owner}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </Card>
+
+          {/* Chat Window */}
+          <Card className="md:col-span-8 flex flex-col overflow-hidden">
+            {selectedThread ? (
+              <ChatWindow 
+                thread={selectedThread} 
+                onClose={() => setSelectedThread(null)} 
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                Selecione uma conversa para começar
+              </div>
+            )}
+          </Card>
+        </div>
+      </TabsContent>
+    </div>
+  );
+}
+
+function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    // Initial fetch
+    const fetchMessages = async () => {
+      const { data } = await (supabase
+        .from('support_messages' as any)
+        .select('*')
+        .eq('thread_id', thread.id)
+        .order('created_at', { ascending: true }) as any);
+      if (data) setMessages(data);
+    };
+    fetchMessages();
+
+    // Subscribe to new messages
+    const channel = supabase
+      .channel(`thread:${thread.id}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'support_messages', 
+        filter: `thread_id=eq.${thread.id}` 
+      }, (payload) => {
+        setMessages(prev => [...prev, payload.new]);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [thread.id]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!newMessage.trim()) return;
+
+    setSending(true);
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    try {
+      const { error } = await (supabase
+        .from('support_messages' as any)
+        .insert([{
+          thread_id: thread.id,
+          sender_id: session.user.id,
+          content: newMessage
+        }]) as any);
+
+      if (error) throw error;
+
+      // Update thread last message
+      await (supabase
+        .from('support_threads' as any)
+        .update({ 
+          last_message: newMessage, 
+          last_message_at: new Date().toISOString(),
+          unread_count_user: (thread.unread_count_user || 0) + 1
+        } as any)
+        .eq('id', thread.id) as any);
+
+      setNewMessage("");
+    } catch (err: any) {
+      toast.error("Erro ao enviar: " + err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSending(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `chat/${thread.id}/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('chat-files-v2')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('chat-files-v2')
+        .getPublicUrl(filePath);
+
+      const fileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'file';
+
+      const { data: { session } } = await supabase.auth.getSession();
+      await (supabase.from('support_messages' as any).insert([{
+        thread_id: thread.id,
+        sender_id: session?.user.id,
+        file_url: publicUrl,
+        file_type: fileType,
+        content: `Enviou um ${fileType}`
+      }]) as any);
+
+      toast.success("Arquivo enviado!");
+    } catch (err: any) {
+      toast.error("Erro no upload: " + err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      <div className="p-4 border-b flex items-center justify-between bg-muted/20">
+        <div className="flex items-center gap-3">
+          <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+            {(thread.profile?.display_name || thread.profile?.username || "?")[0].toUpperCase()}
+          </div>
+          <div>
+            <div className="font-semibold text-sm">{thread.profile?.display_name || thread.profile?.username}</div>
+            <div className="text-[10px] text-online font-medium flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-online animate-pulse" /> Online
+            </div>
+          </div>
+        </div>
+        <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-sidebar-accent/10">
+        {messages.map((msg) => {
+          const isMe = msg.sender_id === thread.user_id ? false : true;
+          return (
+            <div key={msg.id} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
+              <div className={cn(
+                "max-w-[80%] rounded-2xl px-4 py-2 text-sm",
+                isMe ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-card border rounded-tl-none"
+              )}>
+                {msg.file_url ? (
+                  <div className="space-y-2">
+                    {msg.file_type === 'image' ? (
+                      <img src={msg.file_url} alt="Imagem" className="max-w-full rounded-lg cursor-pointer hover:opacity-90" onClick={() => window.open(msg.file_url)} />
+                    ) : msg.file_type === 'audio' ? (
+                      <audio controls src={msg.file_url} className="w-full max-w-[200px]" />
+                    ) : (
+                      <a href={msg.file_url} target="_blank" className="flex items-center gap-2 underline">
+                        <ImageIcon className="h-4 w-4" /> Ver Arquivo
+                      </a>
+                    )}
+                  </div>
+                ) : (
+                  msg.content
+                )}
+                <div className="text-[10px] mt-1 opacity-60 text-right">
+                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        <div ref={scrollRef} />
+      </div>
+
+      <form onSubmit={handleSend} className="p-4 border-t bg-card">
+        <div className="flex items-center gap-2">
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            className="hidden" 
+            onChange={handleFileUpload}
+            accept="image/*,audio/*"
+          />
+          <Button 
+            type="button" 
+            variant="ghost" 
+            size="icon" 
+            className="text-muted-foreground"
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <ImageIcon className="h-5 w-5" />
+          </Button>
+          <Input 
+            placeholder="Digite sua mensagem..." 
+            value={newMessage}
+            onChange={e => setNewMessage(e.target.value)}
+            className="flex-1 bg-muted/40 border-none focus-visible:ring-1"
+          />
+          <Button type="submit" size="icon" disabled={sending || !newMessage.trim()}>
+            <Send className="h-4 w-4" />
+          </Button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -11,6 +11,7 @@ type SessionValue = {
   loading: boolean;
   isOwner: boolean;
   profile: {
+    id: string;
     username: string;
     display_name: string | null;
     max_connections: number;

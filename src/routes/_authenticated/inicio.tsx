@@ -1,14 +1,18 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { usePlayerSession } from "@/lib/player-store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Film, MonitorPlay, Server, Tv, Zap, CreditCard, Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Film, MonitorPlay, Server, Tv, Zap, CreditCard, Loader2, MessageSquare, X, Send, Image as ImageIcon } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
 import { createPaymentPreference, getMercadoPagoConfig } from "@/lib/payments.functions";
 import { getPlans } from "@/lib/plans.functions";
+import { getOrCreateThread, markThreadRead } from "@/lib/chat.functions";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/inicio")({
   head: () => ({
@@ -134,6 +138,194 @@ function Inicio() {
           </Link>
         ))}
       </div>
+
+      {!isOwner && <FloatingChat userId={profile?.id as any} />}
+    </div>
+  );
+}
+
+function FloatingChat({ userId }: { userId?: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [thread, setThread] = useState<any>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const fetchThread = useServerFn(getOrCreateThread);
+  const mutationMarkRead = useServerFn(markThreadRead);
+
+  useEffect(() => {
+    if (!userId || !isOpen) return;
+
+    const init = async () => {
+      const data = await fetchThread({ data: { userId } });
+      setThread(data);
+      setUnread(0);
+      mutationMarkRead({ data: { threadId: data.id, isOwner: false } });
+
+      const { data: msgs } = await (supabase
+        .from('support_messages' as any)
+        .select('*')
+        .eq('thread_id', data.id)
+        .order('created_at', { ascending: true }) as any);
+      if (msgs) setMessages(msgs);
+
+      // Subscribe
+      const channel = supabase
+        .channel(`thread_user:${data.id}`)
+        .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'support_messages', 
+          filter: `thread_id=eq.${data.id}` 
+        }, (payload) => {
+          setMessages(prev => [...prev, payload.new]);
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    };
+    init();
+  }, [userId, isOpen]);
+
+  // Handle unread indicator when closed
+  useEffect(() => {
+    if (!userId || isOpen) return;
+    const checkUnread = async () => {
+      const { data } = await (supabase
+        .from('support_threads' as any)
+        .select('unread_count_user')
+        .eq('user_id', userId)
+        .maybeSingle() as any);
+      if (data) setUnread(data.unread_count_user);
+    };
+    checkUnread();
+  }, [userId, isOpen]);
+
+  useEffect(() => {
+    scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !thread) return;
+
+    setSending(true);
+    try {
+      const { error } = await (supabase
+        .from('support_messages' as any)
+        .insert([{
+          thread_id: thread.id,
+          sender_id: userId,
+          content: newMessage
+        }]) as any);
+
+      if (error) throw error;
+
+      await (supabase
+        .from('support_threads' as any)
+        .update({ 
+          last_message: newMessage, 
+          last_message_at: new Date().toISOString(),
+          unread_count_owner: (thread.unread_count_owner || 0) + 1
+        })
+        .eq('id', thread.id) as any);
+
+      setNewMessage("");
+    } catch (err: any) {
+      toast.error("Erro: " + err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+      {isOpen && (
+        <Card className="mb-4 w-[320px] sm:w-[380px] h-[450px] flex flex-col shadow-2xl overflow-hidden border-primary/20 animate-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-primary p-4 text-primary-foreground flex justify-between items-center shrink-0">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" />
+              <span className="font-bold">Suporte Direto</span>
+            </div>
+            <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/10" onClick={() => setIsOpen(false)}>
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
+            {messages.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2">
+                <div className="bg-primary/10 p-4 rounded-full">
+                  <MessageSquare className="h-8 w-8 text-primary" />
+                </div>
+                <p className="text-sm font-medium">Como podemos ajudar?</p>
+                <p className="text-xs text-muted-foreground">Envie sua dúvida para o dono do sistema.</p>
+              </div>
+            ) : (
+              messages.map(msg => {
+                const isMe = msg.sender_id === userId;
+                return (
+                  <div key={msg.id} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
+                    <div className={cn(
+                      "max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm",
+                      isMe ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-card border rounded-tl-none"
+                    )}>
+                      {msg.file_url ? (
+                        <div className="space-y-1">
+                          {msg.file_type === 'image' ? (
+                            <img src={msg.file_url} alt="Envio" className="max-w-full rounded-lg" />
+                          ) : (
+                            <a href={msg.file_url} target="_blank" className="flex items-center gap-2 underline text-xs">
+                              <ImageIcon className="h-3 w-3" /> Ver Arquivo
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        msg.content
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <div ref={scrollRef} />
+          </div>
+
+          <form onSubmit={handleSend} className="p-3 border-t bg-card shrink-0">
+            <div className="flex gap-2">
+              <Input 
+                placeholder="Diga algo..." 
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                className="bg-muted/50 border-none h-9 text-sm"
+              />
+              <Button size="icon" className="h-9 w-9" disabled={sending || !newMessage.trim()}>
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      <Button 
+        size="lg" 
+        className={cn(
+          "h-14 w-14 rounded-full shadow-2xl transition-all duration-300 hover:scale-105",
+          unread > 0 ? "animate-bounce" : ""
+        )}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <MessageSquare className="h-6 w-6" />
+        {unread > 0 && (
+          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+            {unread}
+          </span>
+        )}
+      </Button>
     </div>
   );
 }
