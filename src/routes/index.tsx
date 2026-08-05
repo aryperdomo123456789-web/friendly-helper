@@ -1,3 +1,6 @@
+/**
+ * Sistema Inteligente de TMDB e EPG integrado para match de conteúdos variados.
+ */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
