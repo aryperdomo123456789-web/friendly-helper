@@ -34,6 +34,11 @@ import {
 import { Plus, Trash2, Edit, Wifi, WifiOff, Calendar, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Calendar as CalendarPicker } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+
 
 export const Route = createFileRoute("/_authenticated/usuarios")({
   head: () => ({
@@ -320,21 +325,69 @@ function UsuariosPage() {
                 </div>
                 <div className="grid gap-2">
                   <Label>Vencimento (opcional)</Label>
-                  <Input
-                    type="datetime-local"
-                    value={
-                      userModal?.expires_at
-                        ? new Date(userModal.expires_at).toISOString().slice(0, 16)
-                        : ""
-                    }
-                    onChange={(e) =>
-                      setUserModal({
-                        ...userModal,
-                        expires_at: e.target.value ? new Date(e.target.value).toISOString() : null,
-                      })
-                    }
-                  />
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                          "justify-start text-left font-normal",
+                          !userModal?.expires_at && "text-muted-foreground",
+                        )}
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {userModal?.expires_at
+                          ? format(new Date(userModal.expires_at), "dd/MM/yyyy")
+                          : "Escolher data"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarPicker
+                        mode="single"
+                        locale={ptBR}
+                        captionLayout="dropdown"
+                        startMonth={new Date(1970, 0)}
+                        endMonth={new Date(2100, 11)}
+                        defaultMonth={
+                          userModal?.expires_at ? new Date(userModal.expires_at) : new Date()
+                        }
+                        selected={
+                          userModal?.expires_at ? new Date(userModal.expires_at) : undefined
+                        }
+                        onSelect={(date) =>
+                          setUserModal({
+                            ...userModal,
+                            expires_at: date
+                              ? new Date(
+                                  date.getFullYear(),
+                                  date.getMonth(),
+                                  date.getDate(),
+                                  23,
+                                  59,
+                                  59,
+                                ).toISOString()
+                              : null,
+                          })
+                        }
+                        className="pointer-events-auto p-3"
+                      />
+                      {userModal?.expires_at ? (
+                        <div className="border-t p-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => setUserModal({ ...userModal, expires_at: null })}
+                          >
+                            Sem validade
+                          </Button>
+                        </div>
+                      ) : null}
+                    </PopoverContent>
+                  </Popover>
                 </div>
+
               </div>
               <div className="grid gap-2">
                 <Label>Servidores liberados</Label>
