@@ -13,6 +13,8 @@
  * 5. TV READY: Suporte básico a navegação por controle remoto (setas/enter) ativado globalmente.
  * 6. MULTI-SERVIDOR: O sistema garante que cada usuário tenha sua própria seleção de servidor independente via localStorage (`wp_server_id`), sem interferir na escolha de outros usuários.
  * 7. CARROSSEL TMDB: Componente de tendências integrado via API TMDB com lógica de redirecionamento inteligente para busca automática de conteúdos nos servidores IPTV ativos.
+ * 8. SUPORTE GLOBAL: Bolha de suporte persistente integrada globalmente para usuários finais, garantindo atendimento em tempo real em todas as telas com histórico vinculado ao protocolo.
+
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";

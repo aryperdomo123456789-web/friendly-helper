@@ -73,3 +73,19 @@ export const markThreadRead = createServerFn({ method: "POST" })
     if (error) throw error;
     return { success: true };
   });
+
+export const closeThread = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((data: { threadId: string }) => z.object({
+    threadId: z.string().uuid()
+  }).parse(data))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await (supabaseAdmin
+      .from('support_threads' as any)
+      .update({ status: 'closed' })
+      .eq('id', data.threadId) as any);
+    
+    if (error) throw error;
+    return { success: true };
+  });

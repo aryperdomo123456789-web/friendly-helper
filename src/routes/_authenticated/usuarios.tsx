@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -32,7 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Plus, Trash2, Edit, Wifi, WifiOff, Calendar, LogOut } from "lucide-react";
+import { Plus, Trash2, Edit, Wifi, WifiOff, Calendar, LogOut, MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
@@ -64,6 +64,8 @@ export const Route = createFileRoute("/_authenticated/usuarios")({
 function UsuariosPage() {
   const { isOwner } = usePlayerSession();
   const queryClient = useQueryClient();
+  const router = useRouter();
+
 
   const fetchServers = useServerFn(listServers);
   const fetchUsers = useServerFn(listAccessUsers);
@@ -458,9 +460,28 @@ function UsuariosPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        title="Abrir Suporte"
+                        onClick={async () => {
+                          const { getOrCreateThread } = await import("@/lib/chat.functions");
+                          const fetchThread = useServerFn(getOrCreateThread);
+                          try {
+                            const thread = await fetchThread({ data: { userId: user.id } });
+                            // Redireciona para o suporte selecionando o thread (ou apenas navega)
+                            void router.navigate({ to: "/suporte" });
+                          } catch (err) {
+                            toast.error("Erro ao abrir suporte");
+                          }
+                        }}
+                      >
+                        <MessageSquare className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         title="Desconectar dispositivos"
                         onClick={() => handleKick(user.id)}
                       >
+
                         <LogOut className="h-4 w-4" />
                       </Button>
                       <Button variant="ghost" size="icon" onClick={() => setUserModal(user)}>

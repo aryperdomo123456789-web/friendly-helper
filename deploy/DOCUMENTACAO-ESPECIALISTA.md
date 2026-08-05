@@ -8,10 +8,6 @@ O sistema implementa uma camada rigorosa de proteção contra a geração múlti
 
 ---
 
-Este documento fornece as diretrizes técnicas necessárias para o Codex ou um administrador de sistemas realizar o deploy do **WebPlayer IPTV** em um ambiente de produção (Ubuntu 22.04 + aaPanel + PM2 + Backend Próprio).
-
----
-
 ## 🏗️ 1. Estrutura do Backend (Supabase/PostgreSQL)
 
 O sistema foi desenhado para ser totalmente portável. Toda a lógica de dados reside em um conjunto de tabelas otimizadas com **Row Level Security (RLS)**.
@@ -21,12 +17,18 @@ O sistema foi desenhado para ser totalmente portável. Toda a lógica de dados r
 2.  `iptv_servers` & `server_credentials`: Gerencia o pool de DNS (DNS Failover) para cada servidor IPTV.
 3.  `profiles`: Extensão da tabela de autenticação, controlando expiração, conexões simultâneas e indicações.
 4.  `user_roles`: Gerenciamento de privilégios (`admin`, `owner`, `user`).
-5.  `support_threads` & `notifications`: Sistema de chat persistente e alertas em massa/expiração.
-6.  `device_sessions`: Controle rígido de multi-conexão por hardware ID.
+5.  `support_threads` & `notifications`: Sistema de chat persistente (Protocolos `SUP-YYYYMMDD-XXXX`), alertas em massa e controle de expiração.
+6.  `support_messages`: Histórico persistente de mensagens com suporte a anexos (via Storage `chat-files-v2`).
+7.  `device_sessions`: Controle rígido de multi-conexão por hardware ID.
 
-### Scripts SQL (Localizados em `/deploy/sql`):
--   `01-schema.sql`: Estrutura completa, triggers de auditoria e políticas de segurança.
--   `02-dados-base.sql`: Carga inicial de planos e servidores de exemplo.
+---
+
+## 💬 1.2 Fluxo de Suporte & Notificações
+O sistema de atendimento foi desenhado para escalabilidade e persistência:
+- **Bolha de Suporte Global**: Usuários comuns possuem acesso imediato ao suporte através de uma bolha flutuante no canto inferior direito, disponível em todas as abas.
+- **Protocolos Únicos**: Cada linha de atendimento gera um protocolo persistente para rastreabilidade.
+- **Notificações em Tempo Real**: O sino de notificações alerta sobre expirações (3 dias, 1 dia e no dia do vencimento) e mensagens globais enviadas pelo dono.
+- **Isolamento de Conversas**: RLS garante que um usuário só veja suas próprias conversas, enquanto o dono visualiza o pool completo.
 
 ---
 
@@ -70,4 +72,5 @@ O sistema tenta automaticamente todos os DNS cadastrados em `server_credentials`
 Caso migre de banco, utilize o script `deploy/seed/seed-users.mjs` junto com o arquivo `users.json` exportado para recriar as contas de autenticação mantendo os IDs vinculados aos perfis.
 
 ---
+
 *Documento gerado automaticamente para suporte técnico avançado.*
