@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedCanaisRouteImport } from './routes/_authenticated/canais'
 import { Route as AuthenticatedFilmesRouteImport } from './routes/_authenticated/filmes'
 import { Route as AuthenticatedInicioRouteImport } from './routes/_authenticated/inicio'
+import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedSeriesRouteImport } from './routes/_authenticated/series'
 import { Route as AuthenticatedServidoresRouteImport } from './routes/_authenticated/servidores'
 
@@ -41,6 +42,11 @@ const AuthenticatedInicioRoute = AuthenticatedInicioRouteImport.update({
   path: '/inicio',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPainelRoute = AuthenticatedPainelRouteImport.update({
+  id: '/painel',
+  path: '/painel',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedSeriesRoute = AuthenticatedSeriesRouteImport.update({
   id: '/series',
   path: '/series',
@@ -57,6 +63,7 @@ export interface FileRoutesByFullPath {
   '/canais': typeof AuthenticatedCanaisRoute
   '/filmes': typeof AuthenticatedFilmesRoute
   '/inicio': typeof AuthenticatedInicioRoute
+  '/painel': typeof AuthenticatedPainelRoute
   '/series': typeof AuthenticatedSeriesRoute
   '/servidores': typeof AuthenticatedServidoresRoute
 }
@@ -65,6 +72,7 @@ export interface FileRoutesByTo {
   '/canais': typeof AuthenticatedCanaisRoute
   '/filmes': typeof AuthenticatedFilmesRoute
   '/inicio': typeof AuthenticatedInicioRoute
+  '/painel': typeof AuthenticatedPainelRoute
   '/series': typeof AuthenticatedSeriesRoute
   '/servidores': typeof AuthenticatedServidoresRoute
 }
@@ -75,14 +83,29 @@ export interface FileRoutesById {
   '/_authenticated/canais': typeof AuthenticatedCanaisRoute
   '/_authenticated/filmes': typeof AuthenticatedFilmesRoute
   '/_authenticated/inicio': typeof AuthenticatedInicioRoute
+  '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/series': typeof AuthenticatedSeriesRoute
   '/_authenticated/servidores': typeof AuthenticatedServidoresRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/canais' | '/filmes' | '/inicio' | '/series' | '/servidores'
+  fullPaths:
+    | '/'
+    | '/canais'
+    | '/filmes'
+    | '/inicio'
+    | '/painel'
+    | '/series'
+    | '/servidores'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/canais' | '/filmes' | '/inicio' | '/series' | '/servidores'
+  to:
+    | '/'
+    | '/canais'
+    | '/filmes'
+    | '/inicio'
+    | '/painel'
+    | '/series'
+    | '/servidores'
   id:
     | '__root__'
     | '/'
@@ -90,6 +113,7 @@ export interface FileRouteTypes {
     | '/_authenticated/canais'
     | '/_authenticated/filmes'
     | '/_authenticated/inicio'
+    | '/_authenticated/painel'
     | '/_authenticated/series'
     | '/_authenticated/servidores'
   fileRoutesById: FileRoutesById
@@ -136,6 +160,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedInicioRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/painel': {
+      id: '/_authenticated/painel'
+      path: '/painel'
+      fullPath: '/painel'
+      preLoaderRoute: typeof AuthenticatedPainelRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/series': {
       id: '/_authenticated/series'
       path: '/series'
@@ -157,6 +188,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCanaisRoute: typeof AuthenticatedCanaisRoute
   AuthenticatedFilmesRoute: typeof AuthenticatedFilmesRoute
   AuthenticatedInicioRoute: typeof AuthenticatedInicioRoute
+  AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
   AuthenticatedSeriesRoute: typeof AuthenticatedSeriesRoute
   AuthenticatedServidoresRoute: typeof AuthenticatedServidoresRoute
 }
@@ -165,6 +197,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCanaisRoute: AuthenticatedCanaisRoute,
   AuthenticatedFilmesRoute: AuthenticatedFilmesRoute,
   AuthenticatedInicioRoute: AuthenticatedInicioRoute,
+  AuthenticatedPainelRoute: AuthenticatedPainelRoute,
   AuthenticatedSeriesRoute: AuthenticatedSeriesRoute,
   AuthenticatedServidoresRoute: AuthenticatedServidoresRoute,
 }

@@ -1,4 +1,4 @@
-import { createFileRoute, Outlet, redirect, Link, useRouter } from "@tanstack/react-router";
+import { createFileRoute, Outlet, redirect, Link, useRouter, useLocation } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { PlayerSessionProvider, usePlayerSession } from "@/lib/player-store";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,9 @@ function ShellLayout() {
   const { profile, isOwner, servers, serverId, setServerId, blocked } = usePlayerSession();
   const [open, setOpen] = useState(false);
   const router = useRouter();
+  const location = useLocation();
   const queryClient = useQueryClient();
+
 
   const signOut = async () => {
     await queryClient.cancelQueries();
@@ -146,13 +148,23 @@ function ShellLayout() {
           >
             <Menu className="h-5 w-5" />
           </Button>
+
+          <div className="flex items-center gap-2 font-semibold">
+            {location.pathname === "/painel" && (
+              <span className="flex items-center gap-2 text-gold">
+                <ShieldCheck className="h-5 w-5" /> Configurações do Sistema
+              </span>
+            )}
+          </div>
+
           <div className="ml-auto flex items-center gap-3">
-            {servers.length > 0 ? (
+            {servers.length > 0 && location.pathname !== "/painel" ? (
               <Select value={serverId ?? ""} onValueChange={setServerId}>
-                <SelectTrigger className="w-[190px]">
+                <SelectTrigger className="w-[190px] bg-sidebar/50 border-border/50">
                   <SelectValue placeholder="Servidor" />
                 </SelectTrigger>
-                <SelectContent>
+
+                <SelectContent className="bg-sidebar border-sidebar-border">
                   {servers.map((server) => (
                     <SelectItem key={server.id} value={server.id}>
                       {server.name}
