@@ -1,8 +1,5 @@
 /**
- * garanta que tudo esteja no git hub 
- * https://github.com/aryperdomo123456789-web/friendly-helper
- * 
- * ja no jeito no esquema de ir pro aapanel
+ * tudo que temos aqui no local mande pro git hub user dono os user criados os planos tudo que aj temos aqui ja amnda pra la para la no aapanel ja ter um fluxo
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
