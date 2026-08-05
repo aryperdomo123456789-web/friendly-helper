@@ -18,6 +18,7 @@ import { Route as AuthenticatedInicioRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedSeriesRouteImport } from './routes/_authenticated/series'
 import { Route as AuthenticatedServidoresRouteImport } from './routes/_authenticated/servidores'
+import { Route as AuthenticatedSuporteRouteImport } from './routes/_authenticated/suporte'
 import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
 import { Route as TesteSlugRouteImport } from './routes/teste.$slug'
 import { Route as ApiPublicStreamRouteImport } from './routes/api/public/stream'
@@ -66,6 +67,11 @@ const AuthenticatedServidoresRoute = AuthenticatedServidoresRouteImport.update({
   path: '/servidores',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSuporteRoute = AuthenticatedSuporteRouteImport.update({
+  id: '/suporte',
+  path: '/suporte',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedUsuariosRoute = AuthenticatedUsuariosRouteImport.update({
   id: '/usuarios',
   path: '/usuarios',
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/painel': typeof AuthenticatedPainelRoute
   '/series': typeof AuthenticatedSeriesRoute
   '/servidores': typeof AuthenticatedServidoresRoute
+  '/suporte': typeof AuthenticatedSuporteRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/teste/$slug': typeof TesteSlugRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
@@ -104,6 +111,7 @@ export interface FileRoutesByTo {
   '/painel': typeof AuthenticatedPainelRoute
   '/series': typeof AuthenticatedSeriesRoute
   '/servidores': typeof AuthenticatedServidoresRoute
+  '/suporte': typeof AuthenticatedSuporteRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/teste/$slug': typeof TesteSlugRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
@@ -119,6 +127,7 @@ export interface FileRoutesById {
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/series': typeof AuthenticatedSeriesRoute
   '/_authenticated/servidores': typeof AuthenticatedServidoresRoute
+  '/_authenticated/suporte': typeof AuthenticatedSuporteRoute
   '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
   '/teste/$slug': typeof TesteSlugRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
@@ -134,6 +143,7 @@ export interface FileRouteTypes {
     | '/painel'
     | '/series'
     | '/servidores'
+    | '/suporte'
     | '/usuarios'
     | '/teste/$slug'
     | '/api/public/stream'
@@ -147,6 +157,7 @@ export interface FileRouteTypes {
     | '/painel'
     | '/series'
     | '/servidores'
+    | '/suporte'
     | '/usuarios'
     | '/teste/$slug'
     | '/api/public/stream'
@@ -161,6 +172,7 @@ export interface FileRouteTypes {
     | '/_authenticated/painel'
     | '/_authenticated/series'
     | '/_authenticated/servidores'
+    | '/_authenticated/suporte'
     | '/_authenticated/usuarios'
     | '/teste/$slug'
     | '/api/public/stream'
@@ -238,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedServidoresRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/suporte': {
+      id: '/_authenticated/suporte'
+      path: '/suporte'
+      fullPath: '/suporte'
+      preLoaderRoute: typeof AuthenticatedSuporteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/usuarios': {
       id: '/_authenticated/usuarios'
       path: '/usuarios'
@@ -270,6 +289,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
   AuthenticatedSeriesRoute: typeof AuthenticatedSeriesRoute
   AuthenticatedServidoresRoute: typeof AuthenticatedServidoresRoute
+  AuthenticatedSuporteRoute: typeof AuthenticatedSuporteRoute
   AuthenticatedUsuariosRoute: typeof AuthenticatedUsuariosRoute
 }
 
@@ -281,6 +301,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,
   AuthenticatedSeriesRoute: AuthenticatedSeriesRoute,
   AuthenticatedServidoresRoute: AuthenticatedServidoresRoute,
+  AuthenticatedSuporteRoute: AuthenticatedSuporteRoute,
   AuthenticatedUsuariosRoute: AuthenticatedUsuariosRoute,
 }
 

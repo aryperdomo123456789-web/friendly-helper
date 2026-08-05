@@ -328,9 +328,6 @@ function PainelDono() {
           <TabsTrigger value="planos" className="gap-2">
             <Key className="h-4 w-4" /> Planos
           </TabsTrigger>
-          <TabsTrigger value="suporte" className="gap-2">
-            <MessageSquare className="h-4 w-4" /> Suporte
-          </TabsTrigger>
         </TabsList>
 
 
@@ -791,61 +788,6 @@ function PainelDono() {
           </div>
         </TabsContent>
 
-        <TabsContent value="suporte" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-[70vh]">
-            {/* Threads List */}
-            <Card className="md:col-span-4 flex flex-col overflow-hidden">
-              <CardHeader className="py-4">
-                <CardTitle className="text-lg">Conversas</CardTitle>
-              </CardHeader>
-              <div className="flex-1 overflow-y-auto">
-                {threads.isLoading ? (
-                  <div className="p-4 text-center">Carregando...</div>
-                ) : (threads.data ?? []).length === 0 ? (
-                  <div className="p-4 text-center text-muted-foreground text-sm">Nenhuma conversa.</div>
-                ) : (
-                  threads.data?.map((thread: any) => (
-                    <button
-                      key={thread.id}
-                      onClick={() => {
-                        setSelectedThread(thread);
-                        mutationMarkRead({ data: { threadId: thread.id, isOwner: true } });
-                      }}
-                      className={cn(
-                        "w-full p-4 text-left hover:bg-muted/50 border-b transition-colors flex items-center justify-between",
-                        selectedThread?.id === thread.id && "bg-muted"
-                      )}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="font-semibold truncate">{thread.profile?.display_name || thread.profile?.username || "Usuário"}</div>
-                        <div className="text-xs text-muted-foreground truncate">{thread.last_message || "Iniciou chat"}</div>
-                      </div>
-                      {thread.unread_count_owner > 0 && (
-                        <span className="ml-2 bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full">
-                          {thread.unread_count_owner}
-                        </span>
-                      )}
-                    </button>
-                  ))
-                )}
-              </div>
-            </Card>
-
-            {/* Chat Window */}
-            <Card className="md:col-span-8 flex flex-col overflow-hidden">
-              {selectedThread ? (
-                <ChatWindow
-                  thread={selectedThread}
-                  onClose={() => setSelectedThread(null)}
-                />
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                  Selecione uma conversa para começar
-                </div>
-              )}
-            </Card>
-          </div>
-        </TabsContent>
       </Tabs>
 
 

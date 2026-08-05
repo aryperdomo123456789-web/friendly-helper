@@ -21,11 +21,12 @@ import {
   Menu,
   UserCog,
   Users,
+  MessageSquare,
 } from "lucide-react";
-
-
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { listSupportThreads } from "@/lib/chat.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -59,7 +60,16 @@ function ShellLayout() {
   const router = useRouter();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const fetchThreads = useServerFn(listSupportThreads);
 
+  const { data: threads } = useQuery({
+    queryKey: ["support-threads-nav"],
+    queryFn: () => fetchThreads(),
+    enabled: isOwner,
+    refetchInterval: 10000,
+  });
+
+  const totalUnread = (threads ?? []).reduce((acc: number, t: any) => acc + (t.unread_count_owner || 0), 0);
 
   const signOut = async () => {
     await queryClient.cancelQueries();
@@ -127,6 +137,22 @@ function ShellLayout() {
                 <ShieldCheck className="h-4 w-4" />
                 Painel do Dono
               </Link>
+              <Link
+                to="/suporte"
+                onClick={() => setOpen(false)}
+                activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
+                className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent"
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquare className="h-4 w-4" />
+                  Suporte
+                </div>
+                {totalUnread > 0 && (
+                  <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground animate-pulse">
+                    {totalUnread}
+                  </span>
+                )}
+              </Link>
             </>
           ) : null}
 
@@ -180,10 +206,15 @@ function ShellLayout() {
                 <ShieldCheck className="h-5 w-5" /> Configurações do Sistema
               </span>
             )}
+            {location.pathname === "/suporte" && (
+              <span className="flex items-center gap-2 text-primary font-bold">
+                <MessageSquare className="h-5 w-5" /> Chat de Atendimento
+              </span>
+            )}
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            {servers.length > 0 && location.pathname !== "/painel" ? (
+            {servers.length > 0 && location.pathname !== "/painel" && location.pathname !== "/suporte" ? (
               <Select value={serverId ?? ""} onValueChange={setServerId}>
                 <SelectTrigger className="w-[190px] bg-sidebar/50 border-border/50">
                   <SelectValue placeholder="Servidor" />
