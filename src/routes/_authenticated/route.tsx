@@ -22,12 +22,25 @@ import {
   UserCog,
   Users,
   MessageSquare,
+  Bell,
+  History,
+  Clock,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { listSupportThreads } from "@/lib/chat.functions";
+import { listSupportThreads, getOrCreateThread } from "@/lib/chat.functions";
+import { getNotifications, markNotificationRead } from "@/lib/notifications.functions";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -57,10 +70,14 @@ function Shell() {
 function ShellLayout() {
   const { profile, isOwner, servers, serverId, setServerId, blocked, expired } = usePlayerSession();
   const [open, setOpen] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
   const router = useRouter();
   const location = useLocation();
   const queryClient = useQueryClient();
   const fetchThreads = useServerFn(listSupportThreads);
+  const fetchNotifications = useServerFn(getNotifications);
+  const mutationMarkRead = useServerFn(markNotificationRead);
+  const fetchOrCreateThread = useServerFn(getOrCreateThread);
 
   const { data: threads } = useQuery({
     queryKey: ["support-threads-nav"],
@@ -68,6 +85,16 @@ function ShellLayout() {
     enabled: isOwner,
     refetchInterval: 10000,
   });
+
+  const { data: userNotifications } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => fetchNotifications(),
+    refetchInterval: 30000,
+  });
+
+  const unreadNotificationsCount = useMemo(() => 
+    (userNotifications ?? []).filter((n: any) => !n.is_read).length,
+  [userNotifications]);
 
   const totalUnread = (threads ?? []).reduce((acc: number, t: any) => acc + (t.unread_count_owner || 0), 0);
 
@@ -160,7 +187,17 @@ function ShellLayout() {
                 )}
               </Link>
             </>
-          ) : null}
+          ) : (
+            <Link
+              to="/suporte"
+              onClick={() => setOpen(false)}
+              activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <History className="h-4 w-4" />
+              Historico de Suporte
+            </Link>
+          )}
         </nav>
 
 
@@ -220,9 +257,72 @@ function ShellLayout() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full border border-border/50 bg-sidebar/40 hover:bg-primary/10 hover:text-primary transition-all">
+                  <Bell className="h-5 w-5" />
+                  {unreadNotificationsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-black text-destructive-foreground shadow-lg animate-bounce">
+                      {unreadNotificationsCount}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80 bg-sidebar border-sidebar-border p-2 shadow-2xl backdrop-blur-xl">
+                <DropdownMenuLabel className="flex items-center justify-between px-2 py-1.5">
+                  <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">Notificações</span>
+                  {unreadNotificationsCount > 0 && (
+                    <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full font-bold">
+                      {unreadNotificationsCount} NOVAS
+                    </span>
+                  )}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-sidebar-border opacity-50" />
+                <div className="max-h-[350px] overflow-y-auto py-1 custom-scrollbar">
+                  {userNotifications?.length === 0 ? (
+                    <div className="px-4 py-8 text-center">
+                      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50 opacity-20">
+                        <Bell className="h-5 w-5" />
+                      </div>
+                      <p className="text-xs font-medium text-muted-foreground">Tudo em dia! Nenhuma notificação por aqui.</p>
+                    </div>
+                  ) : (
+                    userNotifications?.map((n: any) => (
+                      <DropdownMenuItem 
+                        key={n.id} 
+                        className={cn(
+                          "flex flex-col items-start gap-1 p-3 rounded-xl transition-all mb-1 cursor-default",
+                          !n.is_read ? "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary" : "opacity-60 grayscale hover:grayscale-0 hover:bg-sidebar-accent"
+                        )}
+                        onSelect={async () => {
+                          if (!n.is_read) {
+                            await mutationMarkRead({ data: n.id });
+                            queryClient.invalidateQueries({ queryKey: ["notifications"] });
+                          }
+                        }}
+                      >
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span className={cn(
+                            "text-xs font-black uppercase tracking-tight",
+                            n.type === 'expiration' ? 'text-destructive' : 'text-primary'
+                          )}>
+                            {n.title}
+                          </span>
+                          <span className="text-[9px] font-bold text-muted-foreground/60">
+                            {new Date(n.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-sidebar-foreground/80">{n.content}</p>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {servers.length > 0 && location.pathname !== "/painel" && location.pathname !== "/suporte" ? (
               <Select value={serverId ?? ""} onValueChange={setServerId}>
-                <SelectTrigger className="w-[190px] bg-sidebar/50 border-border/50">
+                <SelectTrigger className="w-[190px] bg-sidebar/50 border-border/50 h-10 rounded-xl">
                   <SelectValue placeholder="Servidor" />
                 </SelectTrigger>
 
