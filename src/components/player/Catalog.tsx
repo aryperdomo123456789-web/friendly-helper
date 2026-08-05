@@ -78,6 +78,7 @@ export function Catalog({ kind }: { kind: Kind }) {
     queryKey: ["categories", kind, serverId],
     queryFn: () => fetchCategories({ data: { server_id: serverId!, kind } }),
     enabled: Boolean(serverId),
+    retry: 1,
     staleTime: 10 * 60_000,
   });
 

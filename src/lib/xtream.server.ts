@@ -4,6 +4,8 @@ export type XtreamCreds = {
   dns: string;
   username: string;
   password: string;
+  /** DNS alternativos do mesmo servidor, usados como failover. */
+  dnsPool?: string[];
 };
 
 function normalizeDns(dns: string): string {
@@ -25,10 +27,10 @@ export function buildPlayerApiUrl(
   return url.toString();
 }
 
-export async function xtreamCall<T>(
+async function xtreamCallOnce<T>(
   creds: XtreamCreds,
   params: Record<string, string | undefined>,
-  timeoutMs = 15000,
+  timeoutMs: number,
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -50,6 +52,30 @@ export async function xtreamCall<T>(
     clearTimeout(timer);
   }
 }
+
+export async function xtreamCall<T>(
+  creds: XtreamCreds,
+  params: Record<string, string | undefined>,
+  timeoutMs = 15000,
+): Promise<T> {
+  const candidates = Array.from(
+    new Set([creds.dns, ...(creds.dnsPool ?? [])].filter(Boolean)),
+  );
+  let lastError: unknown;
+  for (const dns of candidates) {
+    try {
+      return await xtreamCallOnce<T>({ ...creds, dns }, params, timeoutMs);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError instanceof Error
+    ? new Error(
+        `Servidor IPTV indisponivel (${lastError.message}). Verifique DNS, usuario e senha no painel.`,
+      )
+    : new Error("Servidor IPTV indisponivel");
+}
+
 
 export function buildStreamUrl(
   creds: XtreamCreds,

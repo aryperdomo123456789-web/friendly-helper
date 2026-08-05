@@ -45,10 +45,14 @@ async function resolveAccess(userId: string, serverId: string) {
     .from("server_credentials")
     .select("username, password, dns")
     .eq("server_id", serverId)
-    .order("created_at")
-    .limit(1);
-  const credential = creds?.[0];
-  if (!credential) throw new Error("Servidor sem credenciais cadastradas");
+    .order("created_at");
+  const first = creds?.[0];
+  if (!first) throw new Error("Servidor sem credenciais cadastradas");
+  // Failover: alguns DNS do servidor podem responder 404/offline.
+  const credential = {
+    ...first,
+    dnsPool: (creds ?? []).map((c: any) => c.dns).filter(Boolean),
+  };
 
   return { credential, server, isOwner };
 }
