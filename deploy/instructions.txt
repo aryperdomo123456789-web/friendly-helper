@@ -1,0 +1,34 @@
+# Instruções de Deploy para Ubuntu 22.04 + aaPanel
+
+Siga estes passos via SSH no seu servidor para colocar o projeto no ar na porta 6873:
+
+1. **Acesse o diretório do projeto:**
+   cd /www/wwwroot/stream.mago-bot.com
+
+2. **Instale as dependências (certifique-se de ter Node.js 20+ instalado):**
+   npm install --frozen-lockfile
+   # ou
+   bun install
+
+3. **Gere o build de produção para Node.js:**
+   # Este comando cria a pasta .output/
+   npm run build:node
+
+4. **Inicie com o PM2 usando o arquivo de configuração fornecido:**
+   # Se não tiver o PM2: npm install -g pm2
+   pm2 start deploy/ecosystem.config.cjs
+   pm2 save
+
+5. **Configuração do Nginx no aaPanel:**
+   - Vá em "Website" -> "stream.mago-bot.com" -> "Configuration" -> "Reverse Proxy".
+   - Clique em "Add reverse proxy".
+   - Proxy Name: stream-proxy
+   - Target URL: http://127.0.0.1:6873
+   - Sent Domain: $host
+   - Ou se preferir editar o arquivo de configuração manualmente, use o modelo em `deploy/nginx.conf`.
+
+6. **Verificação:**
+   - Verifique os logs do PM2: `pm2 logs stream-mago-bot`
+   - Teste o acesso via: http://stream.mago-bot.com
+
+DICA: Certifique-se de que a porta 6873 está aberta no Firewall do aaPanel e do provedor (ex: AWS, Google, Oracle).
