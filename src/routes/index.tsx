@@ -1,10 +1,14 @@
 /**
- * olha oq codex quer Resumo bem direto:
- * pronto no repo: sim
- * app compilando: sim
- * rota de produção com PM2 6873 e nginx isolado: sim
- * banco novo com usuários/owner do Lovable: ainda depende da service role key
- * Se você me mandar agora a SUPABASE_SERVICE_ROLE_KEY do projeto novo, eu sigo sem parar e fecho a migração ponta a ponta.
+ * RESUMO PARA O CODEX (MIGRAÇÃO AAPANEL):
+ * 1. REPOSITÓRIO: Atualizado e pronto para commit/push.
+ * 2. ESTRUTURA DE DEPLOY: Localizada na pasta `/deploy`.
+ *    - `/deploy/sql/01-schema.sql`: Schema completo (12+ tabelas, RLS, Grants).
+ *    - `/deploy/sql/02-dados-base.sql`: Planos, Servidores e Configurações iniciais.
+ *    - `/deploy/seed/`: Script e JSON para restaurar usuários Auth (Dono/Clientes).
+ *    - `/deploy/ecosystem.config.cjs`: Configuração PM2 (Porta 6873).
+ *    - `/deploy/nginx.conf`: Configuração de Proxy Reverso e SSL.
+ * 3. NOVO BACKEND: Codex deve rodar os SQLs no novo projeto Supabase e configurar a SERVICE_ROLE_KEY no .env da VPS.
+ * 4. DOCUMENTAÇÃO: Veja `CODEX-RESTAURAR.md` na raiz para o passo-a-passo.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
