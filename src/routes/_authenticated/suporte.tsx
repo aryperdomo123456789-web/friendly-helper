@@ -185,13 +185,15 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
     if (!session) return;
 
     try {
-      const { error } = await supabase
+      const { data: msgData, error } = await supabase
         .from('support_messages')
         .insert([{
           thread_id: thread.id,
           sender_id: session.user.id,
           content: newMessage
-        }]);
+        }])
+        .select()
+        .single();
 
       if (error) throw error;
 
@@ -206,6 +208,9 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
       
       if (updateError) console.error("Erro ao atualizar thread:", updateError);
 
+      if (msgData) {
+        setMessages(prev => [...prev, msgData]);
+      }
       setNewMessage("");
     } catch (err: any) {
       toast.error("Erro ao enviar: " + err.message);
