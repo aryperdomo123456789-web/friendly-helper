@@ -143,7 +143,7 @@ export function Catalog({ kind }: { kind: Kind }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 min-w-0">
+    <div className="flex flex-col gap-4 min-w-0 w-full overflow-x-hidden">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-bold sm:text-2xl">{LABEL[kind].title}</h1>
