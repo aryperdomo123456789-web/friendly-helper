@@ -75,31 +75,35 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "WebPlayer IPTV" },
-      { name: "description", content: "O melhor player IPTV multi-servidor." },
-      { name: "author", content: "WebPlayer" },
-      { property: "og:title", content: "WebPlayer IPTV" },
-      { property: "og:description", content: "O melhor player IPTV multi-servidor." },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "theme-color", content: "#05070b" },
-      { name: "apple-mobile-web-app-capable", content: "yes" },
-      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
-    ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
-      { rel: "manifest", href: "/manifest.webmanifest" },
-    ],
-  }),
+  head: () => {
+    // Note: We use a separate query or fetch in ThemeApplier for runtime, 
+    // but head() is SSR-ready. For dynamic favicons/titles, we'd need to pre-fetch.
+    return {
+      meta: [
+        { charSet: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        { title: "WebPlayer IPTV" },
+        { name: "description", content: "O melhor player IPTV multi-servidor." },
+        { name: "author", content: "WebPlayer" },
+        { property: "og:title", content: "WebPlayer IPTV" },
+        { property: "og:description", content: "O melhor player IPTV multi-servidor." },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:site", content: "@Lovable" },
+        { name: "theme-color", content: "#05070b" },
+        { name: "apple-mobile-web-app-capable", content: "yes" },
+        { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      ],
+      links: [
+        {
+          rel: "stylesheet",
+          href: appCss,
+        },
+        { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+        { rel: "manifest", href: "/manifest.webmanifest" },
+      ],
+    };
+  },
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
@@ -130,10 +134,22 @@ function ThemeApplier() {
   });
 
   useEffect(() => {
-    const mode = config?.theme_mode ?? "azul";
+    if (!config) return;
+    const mode = config.theme_mode ?? "azul";
     document.documentElement.setAttribute("data-theme", mode);
     document.documentElement.classList.toggle("dark", mode !== "light");
-  }, [config?.theme_mode]);
+
+    // Dynamic Icon/Favicon
+    if (config.favicon_url) {
+      let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.getElementsByTagName('head')[0].appendChild(link);
+      }
+      link.href = config.favicon_url;
+    }
+  }, [config]);
 
   return null;
 }
