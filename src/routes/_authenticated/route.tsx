@@ -1,4 +1,9 @@
 import { createFileRoute, Outlet, redirect, Link, useRouter, useLocation } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { listSupportThreads } from "@/lib/chat.functions";
+import { MessageSquare, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PlayerSessionProvider, usePlayerSession } from "@/lib/player-store";
 import { Button } from "@/components/ui/button";
@@ -59,6 +64,17 @@ function ShellLayout() {
   const router = useRouter();
   const location = useLocation();
   const queryClient = useQueryClient();
+  const fetchThreads = useServerFn(listSupportThreads);
+
+  const { data: threads } = useQuery({
+    queryKey: ["support-threads-nav"],
+    queryFn: () => fetchThreads(),
+    enabled: isOwner,
+    refetchInterval: 10000,
+  });
+
+  const totalUnread = (threads ?? []).reduce((acc: number, t: any) => acc + (t.unread_count_owner || 0), 0);
+
 
 
   const signOut = async () => {
@@ -126,6 +142,22 @@ function ShellLayout() {
               >
                 <ShieldCheck className="h-4 w-4" />
                 Painel do Dono
+              </Link>
+              <Link
+                to="/suporte"
+                onClick={() => setOpen(false)}
+                activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
+                className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent"
+              >
+                <div className="flex items-center gap-3">
+                  <MessageSquare className="h-4 w-4" />
+                  Suporte
+                </div>
+                {totalUnread > 0 && (
+                  <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-destructive-foreground animate-pulse">
+                    {totalUnread}
+                  </span>
+                )}
               </Link>
             </>
           ) : null}

@@ -328,9 +328,6 @@ function PainelDono() {
           <TabsTrigger value="planos" className="gap-2">
             <Key className="h-4 w-4" /> Planos
           </TabsTrigger>
-          <TabsTrigger value="suporte" className="gap-2">
-            <MessageSquare className="h-4 w-4" /> Suporte
-          </TabsTrigger>
         </TabsList>
 
 
