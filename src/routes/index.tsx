@@ -12,8 +12,27 @@ import { useServerFn } from "@tanstack/react-start";
 import { createFirstOwner } from "@/lib/bootstrap.functions";
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "WebPlayer IPTV — Acesso Multi-Servidor" },
+      {
+        name: "description",
+        content:
+          "Entre no WebPlayer IPTV: canais, filmes e series em multiplos servidores, com controle de conexoes por dispositivo.",
+      },
+      { property: "og:title", content: "WebPlayer IPTV — Acesso Multi-Servidor" },
+      {
+        property: "og:description",
+        content:
+          "Painel do dono para cadastrar servidores Xtream e gerar acessos de usuario com limite de conexoes.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
   component: LoginPage,
 });
+
 
 
 function LoginPage() {
