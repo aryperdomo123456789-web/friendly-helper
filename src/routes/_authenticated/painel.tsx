@@ -869,7 +869,8 @@ function PainelDono() {
             <Button onClick={() => setPlanModal({ 
               name: "", 
               price: 30, 
-              duration_days: 30, 
+              duration_value: 30, 
+              duration_unit: "days", 
               max_connections: 1 
             })}>
               <Plus className="mr-2 h-4 w-4" /> Novo Plano
