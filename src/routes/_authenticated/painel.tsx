@@ -199,10 +199,10 @@ function PainelDono() {
     if (!confirm("Tem certeza que deseja excluir este servidor?")) return;
     try {
       await mutationDeleteServer({ data: { id } });
-      toast.success("Servidor removido");
+      toast.success("Servidor removido com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["admin-servers"] });
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || "Erro ao excluir servidor");
     }
   };
 
@@ -213,10 +213,10 @@ function PainelDono() {
     try {
       if (userModal.id) {
         await mutationUpdateUser({ data: userModal });
-        toast.success("Acesso atualizado");
+        toast.success("Acesso atualizado com sucesso!");
       } else {
         await mutationCreateUser({ data: userModal });
-        toast.success("Novo acesso criado!");
+        toast.success("Novo acesso criado com sucesso!");
       }
       setUserModal(null);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
@@ -232,7 +232,7 @@ function PainelDono() {
     setLoading(true);
     try {
       await mutationSaveTestLink({ data: testLinkModal });
-      toast.success("Link de teste salvo!");
+      toast.success("Link de teste salvo com sucesso!");
       setTestLinkModal(null);
       queryClient.invalidateQueries({ queryKey: ["admin-test-links"] });
     } catch (err: any) {
@@ -246,10 +246,10 @@ function PainelDono() {
     if (!confirm("Tem certeza que deseja excluir este link de teste?")) return;
     try {
       await mutationDeleteTestLink({ data: { id } });
-      toast.success("Link removido");
+      toast.success("Link removido com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["admin-test-links"] });
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || "Erro ao excluir link");
     }
   };
 
@@ -257,10 +257,10 @@ function PainelDono() {
     if (!confirm("Tem certeza que deseja remover este acesso? O usuario sera desconectado.")) return;
     try {
       await mutationDeleteUser({ data: { id } });
-      toast.success("Acesso removido");
+      toast.success("Acesso removido com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || "Erro ao excluir usuário");
     }
   };
   
@@ -286,10 +286,10 @@ function PainelDono() {
     if (!confirm("Tem certeza que deseja excluir este plano?")) return;
     try {
       await mutationDeletePlan({ data: { id } });
-      toast.success("Plano removido");
+      toast.success("Plano removido com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(err.message || "Erro ao excluir plano");
     }
   };
 
@@ -541,7 +541,7 @@ function PainelDono() {
                               onClick={() => {
                                 const url = `${window.location.origin}/teste/${link.slug}`;
                                 navigator.clipboard.writeText(url);
-                                toast.success("URL copiada!");
+                                toast.success("URL copiada com sucesso!");
                               }}
                             >
                               <Copy className="h-3.3 w-3.3" />
@@ -619,7 +619,7 @@ function PainelDono() {
                       };
 
                       await mutationSaveConfig({ data: newConfig });
-                      toast.success("Configurações salvas!");
+                      toast.success("Configurações salvas com sucesso!");
                       configQuery.refetch();
                     } catch (err: any) {
                       toast.error("Erro ao salvar: " + err.message);

@@ -119,10 +119,10 @@ function UsuariosPage() {
     try {
       if (userModal.id) {
         await mutationUpdateUser({ data: userModal });
-        toast.success("Acesso atualizado");
+        toast.success("Acesso atualizado com sucesso!");
       } else {
         await mutationCreateUser({ data: userModal });
-        toast.success("Novo acesso criado!");
+        toast.success("Novo acesso criado com sucesso!");
       }
       setUserModal(null);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
@@ -134,20 +134,21 @@ function UsuariosPage() {
   };
 
   const handleDeleteUser = async (id: string) => {
-    if (!confirm("Remover este acesso? O usuario sera desconectado.")) return;
+    if (!confirm("Tem certeza que deseja remover este acesso? O usuario sera desconectado.")) return;
     try {
       await mutationDeleteUser({ data: { id } });
-      toast.success("Acesso removido");
+      toast.success("Acesso removido com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Erro ao remover");
+      toast.error(error instanceof Error ? error.message : "Erro ao remover usuário");
     }
   };
 
   const handleKick = async (id: string) => {
+    if (!confirm("Tem certeza que deseja desconectar todos os dispositivos deste usuário?")) return;
     try {
       await mutationKick({ data: { id } });
-      toast.success("Dispositivos desconectados");
+      toast.success("Dispositivos desconectados com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao desconectar");

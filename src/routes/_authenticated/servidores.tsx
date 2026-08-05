@@ -3,6 +3,7 @@ import { usePlayerSession } from "@/lib/player-store";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Check, Server } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/servidores")({
@@ -59,7 +60,12 @@ function Servidores() {
                   {active ? (
                     <Check className="h-5 w-5 text-online" />
                   ) : (
-                    <Button size="sm" onClick={() => setServerId(server.id)}>
+                    <Button size="sm" onClick={() => {
+                      if (confirm("Deseja alternar para este servidor?")) {
+                        setServerId(server.id);
+                        toast.success("Servidor alterado com sucesso!");
+                      }
+                    }}>
                       Usar
                     </Button>
                   )}
