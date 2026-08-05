@@ -26,6 +26,7 @@ export const getMyAccount = createServerFn({ method: "GET" })
     ]);
 
     return {
+      userId: context.userId,
       username: profile?.username ?? "",
       display_name: profile?.display_name ?? "",
       max_connections: profile?.max_connections ?? 1,
