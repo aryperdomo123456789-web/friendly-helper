@@ -140,13 +140,16 @@ function ThemeApplier() {
 
     // Dynamic Icon/Favicon
     if (config?.favicon_url) {
-      let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
-      if (!link) {
-        link = document.createElement('link');
-        link.rel = 'icon';
-        document.getElementsByTagName('head')[0].appendChild(link);
+      const head = document.getElementsByTagName('head')[0];
+      if (head) {
+        let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+        if (!link) {
+          link = document.createElement('link');
+          link.rel = 'icon';
+          head.appendChild(link);
+        }
+        link.href = config.favicon_url;
       }
-      link.href = config.favicon_url;
     }
   }, [config]);
 
