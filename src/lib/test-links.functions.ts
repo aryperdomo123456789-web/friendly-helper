@@ -62,6 +62,8 @@ export const saveTestLink = createServerFn({ method: "POST" })
       duration_minutes: z.number().int().min(1),
       max_connections: z.number().int().min(1),
       is_active: z.boolean(),
+      bonus_days_monthly: z.number().int().min(0).default(15),
+      bonus_days_quarterly: z.number().int().min(0).default(30),
     }).parse(input)
   )
   .handler(async ({ data, context }) => {
