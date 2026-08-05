@@ -113,6 +113,11 @@ function PainelDono() {
   const mutationKick = useServerFn(kickDevices);
   const mutationTest = useServerFn(testServerConnection);
   const fetchConfig = useServerFn(getAppConfig);
+  const mutationMassNotif = useServerFn(sendMassNotification);
+  const [notifTitle, setNotifTitle] = useState("");
+  const [notifContent, setNotifContent] = useState("");
+  const [sendingNotif, setSendingNotif] = useState(false);
+  const [showNotifDialog, setShowNotifDialog] = useState(false);
   const mutationSaveConfig = useServerFn(updateAppConfig);
   const fetchTestLinks = useServerFn(listTestLinks);
   const mutationSaveTestLink = useServerFn(saveTestLink);
