@@ -215,7 +215,8 @@ function PainelDono() {
 
           <Card className="overflow-x-auto">
             <div className="min-w-[800px]">
-              <TableHeader>
+              <Table>
+                <TableHeader>
                 <TableRow>
                   <TableHead>Usuario</TableHead>
                   <TableHead>Servidores</TableHead>
