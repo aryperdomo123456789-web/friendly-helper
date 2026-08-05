@@ -1,0 +1,32 @@
+{
+  "$comment": "Usuarios exportados do ambiente Lovable. As senhas de auth NAO podem ser exportadas (sao hashes), por isso cada usuario recebe a senha definida em 'password' abaixo. Troque antes de rodar em producao.",
+  "users": [
+    {
+      "username": "magodono",
+      "password": "magodono123",
+      "display_name": "Dono",
+      "role": "owner",
+      "max_connections": 10,
+      "expires_at": null,
+      "is_active": true,
+      "plan": null,
+      "referral_code": "49d83466",
+      "referred_by": null,
+      "servers": ["METAPLAY", "WOLF TV", "ALPHA PLAY", "ZEUS PLAY"]
+    },
+    {
+      "username": "teste",
+      "password": "teste123456",
+      "display_name": "teste",
+      "role": "user",
+      "max_connections": 1,
+      "expires_at": "2026-09-04T03:31:42.019Z",
+      "is_active": true,
+      "plan": "Mensal",
+      "referral_code": "12eede78",
+      "referred_by": null,
+      "servers": ["METAPLAY", "WOLF TV", "ALPHA PLAY"]
+    }
+  ],
+  "$comment2": "Os usuarios temporarios de teste (teste_m9la8u, friend_5t0gzd, userA_ppw5k4, userB_i3yhks) foram gerados por testes automatizados e nao foram migrados de proposito. Adicione objetos aqui se quiser recria-los."
+}
