@@ -433,16 +433,26 @@ function UsuariosPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {user.is_active ? (
-                      <span className="flex items-center gap-1.5 text-xs text-online">
-                        <Wifi className="h-3 w-3" /> Ativo
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 text-xs text-destructive">
-                        <WifiOff className="h-3 w-3" /> Bloqueado
-                      </span>
-                    )}
+                    {(() => {
+                      const isExpired = user.expires_at && new Date(user.expires_at) < new Date();
+                      if (!user.is_active) return (
+                        <span className="flex items-center gap-1.5 text-xs text-destructive">
+                          <WifiOff className="h-3 w-3" /> Bloqueado
+                        </span>
+                      );
+                      if (isExpired) return (
+                        <span className="flex items-center gap-1.5 text-xs text-yellow-500">
+                          <Calendar className="h-3 w-3" /> Expirado
+                        </span>
+                      );
+                      return (
+                        <span className="flex items-center gap-1.5 text-xs text-online">
+                          <Wifi className="h-3 w-3" /> Ativo
+                        </span>
+                      );
+                    })()}
                   </TableCell>
+
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button
