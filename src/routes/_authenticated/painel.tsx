@@ -350,9 +350,14 @@ function PainelDono() {
                         <div className="font-medium flex items-center gap-2">
                           {user.display_name || user.username}
                           {user.plan_id && (
-                            <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full border border-primary/30 uppercase font-bold">
-                              {plans.data?.find((p: any) => p.id === user.plan_id)?.name || "Plano"}
-                            </span>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full border border-primary/30 uppercase font-bold w-fit">
+                                {plans.data?.find((p: any) => p.id === user.plan_id)?.name || "Plano"}
+                              </span>
+                              <span className="text-[9px] text-muted-foreground mt-0.5">
+                                R$ {Number(plans.data?.find((p: any) => p.id === user.plan_id)?.price || 0).toFixed(2)}
+                              </span>
+                            </div>
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground">@{user.username}</div>
