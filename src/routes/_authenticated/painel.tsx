@@ -1274,89 +1274,175 @@ function PainelDono() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Test Link */}
-      <Dialog open={!!testLinkModal} onOpenChange={(open) => !open && setTestLinkModal(null)}>
-        <DialogContent className="sm:max-w-[425px]">
+      {/* Modal Link de Teste / Indicação */}
+      <Dialog open={!!testLinkModal} onOpenChange={(o) => !o && setTestLinkModal(null)}>
+        <DialogContent className="sm:max-w-[550px] w-[95vw] max-h-[95vh] overflow-y-auto bg-sidebar border-sidebar-border shadow-2xl p-0 overflow-hidden">
           <form onSubmit={handleSaveTestLink}>
-            <DialogHeader>
-              <DialogTitle>{testLinkModal?.id ? "Editar Link" : "Novo Link de Teste"}</DialogTitle>
-              <DialogDescription>
-                Configure o link que será enviado para novos clientes.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="slug">Slug do Link (Ex: promo-4h)</Label>
-                <Input
-                  id="slug"
-                  value={testLinkModal?.slug || ""}
-                  onChange={(e) => setTestLinkModal({ ...testLinkModal, slug: e.target.value })}
-                  placeholder="identificador-unico"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Descrição para o Usuário</Label>
-                <Input
-                  id="description"
-                  value={testLinkModal?.description || ""}
-                  onChange={(e) => setTestLinkModal({ ...testLinkModal, description: e.target.value })}
-                  placeholder="Ex: Teste Premium com Canais 4K"
-                />
-                <p className="text-[10px] text-muted-foreground">Esta descrição aparecerá na aba Conta do usuário.</p>
-              </div>
-              <div className="flex items-center gap-2 py-2">
-                <input
-                  type="checkbox"
-                  id="active-link"
-                  checked={testLinkModal?.is_active ?? true}
-                  onChange={(e) => setTestLinkModal({ ...testLinkModal, is_active: e.target.checked })}
-                  className="rounded border-border bg-sidebar-accent"
-                />
-                <Label htmlFor="active-link">Link Ativo</Label>
+            <div className="p-6 border-b border-sidebar-border bg-sidebar-accent/20">
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                    <Share2 className="h-6 w-6" />
+                  </div>
+                  {testLinkModal?.id ? "Configurar Link" : "Novo Link de Indicação"}
+                </DialogTitle>
+                <DialogDescription className="text-muted-foreground font-medium mt-2">
+                  Crie links estratégicos para capturar novos usuários e gerenciar bônus automáticos.
+                </DialogDescription>
+              </DialogHeader>
+            </div>
+
+            <div className="p-6 space-y-6">
+              <div className="grid gap-4 p-5 rounded-2xl bg-background/40 border border-border/50 shadow-inner">
+                <div className="grid gap-2">
+                  <Label htmlFor="slug" className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Slug do Link (Ex: promo-4h)</Label>
+                  <Input 
+                    id="slug" 
+                    placeholder="dono-livre"
+                    value={testLinkModal?.slug || ""} 
+                    onChange={e => setTestLinkModal({...testLinkModal, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")})}
+                    className="bg-background h-12 font-mono text-lg focus:ring-2 focus:ring-primary/50 border-primary/20"
+                    required 
+                  />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="description" className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Descrição para o Usuário</Label>
+                  <Input 
+                    id="description" 
+                    placeholder="Link Exclusivo do Dono"
+                    value={testLinkModal?.description || ""} 
+                    onChange={e => setTestLinkModal({...testLinkModal, description: e.target.value})}
+                    className="bg-background h-12 border-primary/10"
+                  />
+                  <p className="text-[10px] text-muted-foreground/60 italic">Esta descrição aparecerá na aba Conta do usuário.</p>
+                </div>
               </div>
 
-              <div className="space-y-4 pt-4 border-t border-border/50">
-                <h4 className="text-sm font-bold text-primary flex items-center gap-2">
-                  <Share2 className="h-4 w-4" /> Bonificação (Configuração Global para este Link)
-                </h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs">Bônus Mensal (Dias)</Label>
-                    <Input 
-                      type="number" 
-                      value={testLinkModal?.bonus_days_monthly ?? 15}
-                      onChange={(e) => setTestLinkModal({ ...testLinkModal, bonus_days_monthly: parseInt(e.target.value) || 0 })}
-                      placeholder="15"
-                      className="h-8"
+              <div className="grid gap-4 p-5 rounded-2xl bg-primary/5 border border-primary/20 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="is_owner_exclusive"
+                      checked={testLinkModal?.is_owner_exclusive || false}
+                      onChange={e => setTestLinkModal({...testLinkModal, is_owner_exclusive: e.target.checked})}
+                      className="h-5 w-5 rounded-md border-primary bg-background accent-primary cursor-pointer"
                     />
-                    <p className="text-[10px] text-muted-foreground">Para planos de até 30 dias.</p>
+                    <Label htmlFor="is_owner_exclusive" className="font-bold cursor-pointer text-sm">Exclusivo do Dono</Label>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Bônus Trimestral+ (Dias)</Label>
-                    <Input 
-                      type="number" 
-                      value={testLinkModal?.bonus_days_quarterly ?? 30}
-                      onChange={(e) => setTestLinkModal({ ...testLinkModal, bonus_days_quarterly: parseInt(e.target.value) || 0 })}
-                      placeholder="30"
-                      className="h-8"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Para planos {" > "} 30 dias.</p>
+                  <Badge variant="secondary" className="bg-primary/10 text-primary text-[9px] font-black">PRIVADO</Badge>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="bypass_device_limit"
+                    checked={testLinkModal?.bypass_device_limit || false}
+                    onChange={e => setTestLinkModal({...testLinkModal, bypass_device_limit: e.target.checked})}
+                    className="h-5 w-5 rounded-md border-primary bg-background accent-primary cursor-pointer"
+                  />
+                  <Label htmlFor="bypass_device_limit" className="font-bold cursor-pointer text-sm">Não bloquear o mesmo dispositivo</Label>
+                </div>
+                
+                <div className="bg-background/50 p-3 rounded-xl border border-primary/10">
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    <span className="text-primary font-bold">DICA:</span> O modo sem bloqueio permite criar vários testes no mesmo navegador sem travar o aparelho por fingerprint.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-5 rounded-2xl bg-sidebar-accent/30 border border-border/50 relative overflow-hidden group hover:border-primary/30 transition-all">
+                  <Badge variant="outline" className="absolute top-2 right-2 text-[8px] font-black bg-primary/5 text-primary border-primary/20 px-2 py-0">HERDADO</Badge>
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">Duração do Teste</Label>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-primary">{testLinkModal?.duration_minutes || 180}</span>
+                    <span className="text-xs font-bold text-muted-foreground">min</span>
                   </div>
                 </div>
-                <p className="text-[10px] text-muted-foreground italic">
-                  * Estas regras valem para qualquer usuário que usar este link específico.
+
+                <div className="p-5 rounded-2xl bg-sidebar-accent/30 border border-border/50 relative overflow-hidden group hover:border-primary/30 transition-all">
+                  <Badge variant="outline" className="absolute top-2 right-2 text-[8px] font-black bg-primary/5 text-primary border-primary/20 px-2 py-0">HERDADO</Badge>
+                  <Label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-2 block">Conexões</Label>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-primary">{testLinkModal?.max_connections || 1}</span>
+                    <span className="text-xs font-bold text-muted-foreground">conn</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-sidebar-border">
+                <div className="flex items-center gap-3 mb-5">
+                  <div className="h-1 flex-1 bg-gradient-to-r from-primary/50 to-transparent rounded-full" />
+                  <h4 className="text-[11px] font-black uppercase tracking-[0.3em] text-primary whitespace-nowrap">Bonificação Automática</h4>
+                  <div className="h-1 flex-1 bg-gradient-to-l from-primary/50 to-transparent rounded-full" />
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold text-muted-foreground ml-1">Bônus Mensal (Dias)</Label>
+                    <div className="relative">
+                      <Input 
+                        type="number"
+                        value={testLinkModal?.bonus_days_monthly || 15}
+                        onChange={e => setTestLinkModal({...testLinkModal, bonus_days_monthly: parseInt(e.target.value) || 0})}
+                        className="bg-background h-12 text-center font-bold text-lg border-primary/10"
+                      />
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary/30" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] font-bold text-muted-foreground ml-1">Bônus Trimestral+ (Dias)</Label>
+                    <div className="relative">
+                      <Input 
+                        type="number"
+                        value={testLinkModal?.bonus_days_quarterly || 30}
+                        onChange={e => setTestLinkModal({...testLinkModal, bonus_days_quarterly: parseInt(e.target.value) || 0})}
+                        className="bg-background h-12 text-center font-bold text-lg border-primary/10"
+                      />
+                      <Plus className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary/30" />
+                    </div>
+                  </div>
+                </div>
+                <p className="text-[10px] text-center text-muted-foreground mt-4 italic opacity-60">
+                  Os dias de bônus são creditados automaticamente ao indicador após o pagamento.
                 </p>
               </div>
             </div>
-            <DialogFooter>
-              <Button type="submit" disabled={loading}>
-                {loading ? "Salvando..." : "Salvar Link"}
-              </Button>
-            </DialogFooter>
+
+            <div className="p-6 bg-sidebar-accent/10 border-t border-sidebar-border flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="link_active"
+                  checked={testLinkModal?.is_active ?? true}
+                  onChange={e => setTestLinkModal({...testLinkModal, is_active: e.target.checked})}
+                  className="h-5 w-5 rounded-full border-primary bg-background accent-online cursor-pointer"
+                />
+                <Label htmlFor="link_active" className="text-[10px] font-black uppercase tracking-widest cursor-pointer">
+                  {testLinkModal?.is_active ?? true ? (
+                    <span className="text-online flex items-center gap-1.5"><div className="h-2 w-2 rounded-full bg-online animate-pulse" /> Link Ativo</span>
+                  ) : (
+                    <span className="text-destructive">Link Inativo</span>
+                  )}
+                </Label>
+              </div>
+
+              <div className="flex gap-2">
+                <Button type="button" variant="ghost" onClick={() => setTestLinkModal(null)} className="font-bold text-xs hover:bg-destructive/10 hover:text-destructive">
+                  Cancelar
+                </Button>
+                <Button type="submit" disabled={loading} className="font-black text-xs px-10 h-12 shadow-xl shadow-primary/20 bg-primary hover:scale-[1.02] transition-transform">
+                  {loading ? <Loader2 className="animate-spin h-4 w-4 mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+                  Salvar Configurações
+                </Button>
+              </div>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
+
 
       {/* Modal Plano */}
       <Dialog open={!!planModal} onOpenChange={(o) => !o && setPlanModal(null)}>
