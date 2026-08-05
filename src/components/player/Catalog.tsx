@@ -233,11 +233,19 @@ export function Catalog({ kind }: { kind: Kind }) {
                 <button
                   key={category.category_id}
                   type="button"
-                  onClick={() => setCategoryId(category.category_id)}
+                  onClick={() => {
+                    setCategoryId(category.category_id);
+                    // No mobile, apos selecionar categoria, dar um pequeno scroll para a lista de itens
+                    if (window.innerWidth < 1024) {
+                      const listArea = document.getElementById("wp-items-area");
+                      if (listArea) listArea.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+                  }}
                   className={cn(
                     "w-full truncate rounded-lg px-3 py-2 text-left text-sm transition-colors",
                     activeCategory === category.category_id
-                      ? "bg-primary/15 font-semibold text-primary"
+                      ? "bg-primary/20 font-bold text-primary shadow-sm shadow-primary/10"
+
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
@@ -266,9 +274,10 @@ export function Catalog({ kind }: { kind: Kind }) {
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <p className="truncate text-sm font-semibold">{openSeries.name}</p>
+                <p className="truncate text-sm font-bold uppercase tracking-tight">{openSeries.name}</p>
               </div>
-              <div className="wp-scroll max-h-[62vh] space-y-3 overflow-y-auto px-1">
+              <div className="wp-scroll max-h-[62vh] space-y-3 overflow-y-auto px-1 pb-4">
+
                 {seriesInfo.isLoading ? (
                   <div className="flex justify-center p-8">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -325,7 +334,7 @@ export function Catalog({ kind }: { kind: Kind }) {
                   className="h-9 pl-9"
                 />
               </div>
-              <div className="wp-scroll max-h-[300px] overflow-y-auto px-1 lg:max-h-[62vh]">
+              <div id="wp-items-area" className="wp-scroll max-h-[400px] overflow-y-auto px-1 lg:max-h-[62vh] pb-4">
                 {streams.isLoading ? (
                   <div className="flex justify-center p-16">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -390,7 +399,7 @@ export function Catalog({ kind }: { kind: Kind }) {
           )}
         </section>
 
-        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start">
+        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start lg:min-h-[400px]">
           {playing ? (
             <div className="space-y-2">
               <VideoPlayer url={playing.url} poster={playing.icon} title={playing.name} />
