@@ -13,6 +13,8 @@ import {
   kickDevices,
   testServerConnection
 } from "@/lib/owner.functions";
+import { usePlayerSession } from "@/lib/player-store";
+
 import { 
   Card, 
   CardContent, 
