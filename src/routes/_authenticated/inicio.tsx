@@ -238,9 +238,13 @@ function FloatingChat({ userId }: { userId?: string }) {
         })
         .eq('id', thread.id);
 
-      if (updateError) console.error("Erro ao atualizar thread:", updateError);
-
+      if (updateError) {
+        console.error("Erro ao atualizar thread:", updateError);
+        // Don't toast here as the message was already sent
+      }
+      
       setNewMessage("");
+      toast.success("Mensagem enviada!");
     } catch (err: any) {
       toast.error("Erro: " + err.message);
     } finally {
