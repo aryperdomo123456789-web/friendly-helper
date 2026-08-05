@@ -1,6 +1,6 @@
 /**
  * RESUMO PARA O CODEX (MIGRAÇÃO AAPANEL):
- * 1. REPOSITÓRIO: Atualizado e pronto para commit/push.
+ * 1. REPOSITÓRIO ATUALIZADO: https://github.com/aryperdomo123456789-web/friendly-helper/tree/backup/stream-mago-bot-2026-08-05
  * 2. ESTRUTURA DE DEPLOY: Localizada na pasta `/deploy`.
  *    - `/deploy/sql/01-schema.sql`: Schema completo (12+ tabelas, RLS, Grants).
  *    - `/deploy/sql/02-dados-base.sql`: Planos, Servidores e Configurações iniciais.
