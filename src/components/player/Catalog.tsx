@@ -42,7 +42,7 @@ const LABEL: Record<Kind, { title: string; list: string; empty: string; search: 
   },
 };
 
-export function Catalog({ kind }: { kind: Kind }) {
+export function Catalog({ kind, initialSearch }: { kind: Kind; initialSearch?: string }) {
   const { serverId, activeServer, blocked, profile } = usePlayerSession();
   const queryClient = useQueryClient();
   const fetchCategories = useServerFn(getCategories);
@@ -54,7 +54,7 @@ export function Catalog({ kind }: { kind: Kind }) {
 
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [catTerm, setCatTerm] = useState("");
-  const [term, setTerm] = useState("");
+  const [term, setTerm] = useState(initialSearch || "");
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [playing, setPlaying] = useState<{ url: string; name: string; icon: string | null } | null>(
     null,

@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getAppConfig } from "@/lib/config.functions";
 import { useQuery } from "@tanstack/react-query";
+import { getPlaybackUrl } from "@/lib/player.functions";
+import { usePlayerSession } from "@/lib/player-store";
+import { getDeviceId } from "@/lib/device";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Star, Play, Info, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,10 +27,13 @@ interface TMDBContent {
 
 export function TMDBHeroCarousel() {
   const fetchConfig = useServerFn(getAppConfig);
+  const fetchPlayback = useServerFn(getPlaybackUrl);
+  const { serverId } = usePlayerSession();
   const navigate = useNavigate();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [items, setItems] = useState<TMDBContent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [playingId, setPlayingId] = useState<number | null>(null);
 
   const { data: config } = useQuery({
     queryKey: ["app-config-public"],
@@ -62,10 +69,42 @@ export function TMDBHeroCarousel() {
   useEffect(() => {
     if (items.length <= 1) return;
     const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % items.length);
+      if (!playingId) {
+        setCurrentIndex((prev) => (prev + 1) % items.length);
+      }
     }, 8000);
     return () => clearInterval(timer);
-  }, [items]);
+  }, [items, playingId]);
+
+  const handlePlayNow = async (item: TMDBContent) => {
+    if (!serverId) {
+      toast.error("Selecione um servidor primeiro");
+      return;
+    }
+
+    setPlayingId(item.id);
+    try {
+      // 1. Encontrar o stream correspondente no servidor ativo
+      const kind = item.media_type === "movie" ? "movie" : "series";
+      
+      // Como não temos um ID direto do Xtream aqui, precisamos navegar para a busca
+      // ou implementar uma busca rápida. Para manter fluidez, vamos redirecionar para a busca
+      // do catálogo com o nome já preenchido
+      navigate({ 
+        to: kind === "movie" ? "/filmes" : "/series",
+        search: { q: item.title || item.name }
+      });
+      
+      // No Catalog.tsx, vamos precisar de uma forma de receber esse termo.
+      // Por enquanto, o comportamento padrão será levar para a aba correta.
+      // Se quisermos levar direto ao player, precisaríamos casar o ID do TMDB com o ID do Xtream.
+      toast.info(`Buscando "${item.title || item.name}" no servidor...`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao iniciar reprodução");
+    } finally {
+      setPlayingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -129,9 +168,15 @@ export function TMDBHeroCarousel() {
                 <Button 
                   size="lg" 
                   className="rounded-full font-bold px-8 h-12 shadow-xl shadow-primary/20 hover:scale-105 transition-transform"
-                  onClick={() => navigate({ to: item.media_type === "movie" ? "/filmes" : "/series" })}
+                  onClick={() => handlePlayNow(item)}
+                  disabled={playingId === item.id}
                 >
-                  <Play className="mr-2 h-5 w-5 fill-current" /> ASSISTIR AGORA
+                  {playingId === item.id ? (
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  ) : (
+                    <Play className="mr-2 h-5 w-5 fill-current" />
+                  )}
+                  ASSISTIR AGORA
                 </Button>
                 <Button 
                   variant="outline" 
