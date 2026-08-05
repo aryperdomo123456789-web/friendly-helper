@@ -820,7 +820,7 @@ function PainelDono() {
 
             <Card className="md:col-span-8 flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20">
               {selectedThread ? (
-                <ThreadChat 
+                <ChatWindow 
                   thread={selectedThread} 
                   onClose={() => setSelectedThread(null)}
                 />
@@ -1291,12 +1291,17 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
     if (!session) return;
 
     try {
+      // Get attendant name from config
+      const { data: configData } = await supabase.from('app_config').select('config').maybeSingle();
+      const config = (configData?.config as any) || {};
+      const attendantName = config.support_attendant_name || "Suporte";
+
       const { error } = await (supabase
         .from('support_messages' as any)
         .insert([{
           thread_id: thread.id,
           sender_id: session.user.id,
-          content: newMessage
+          content: `${attendantName}: ${newMessage}`
         }]) as any);
 
       if (error) throw error;
