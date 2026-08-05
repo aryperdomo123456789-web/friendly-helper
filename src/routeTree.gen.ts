@@ -15,6 +15,7 @@ import { Route as AuthenticatedCanaisRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedFilmesRouteImport } from './routes/_authenticated/filmes'
 import { Route as AuthenticatedInicioRouteImport } from './routes/_authenticated/inicio'
 import { Route as AuthenticatedSeriesRouteImport } from './routes/_authenticated/series'
+import { Route as AuthenticatedServidoresRouteImport } from './routes/_authenticated/servidores'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -45,6 +46,11 @@ const AuthenticatedSeriesRoute = AuthenticatedSeriesRouteImport.update({
   path: '/series',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedServidoresRoute = AuthenticatedServidoresRouteImport.update({
+  id: '/servidores',
+  path: '/servidores',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/filmes': typeof AuthenticatedFilmesRoute
   '/inicio': typeof AuthenticatedInicioRoute
   '/series': typeof AuthenticatedSeriesRoute
+  '/servidores': typeof AuthenticatedServidoresRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/filmes': typeof AuthenticatedFilmesRoute
   '/inicio': typeof AuthenticatedInicioRoute
   '/series': typeof AuthenticatedSeriesRoute
+  '/servidores': typeof AuthenticatedServidoresRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -68,12 +76,13 @@ export interface FileRoutesById {
   '/_authenticated/filmes': typeof AuthenticatedFilmesRoute
   '/_authenticated/inicio': typeof AuthenticatedInicioRoute
   '/_authenticated/series': typeof AuthenticatedSeriesRoute
+  '/_authenticated/servidores': typeof AuthenticatedServidoresRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/canais' | '/filmes' | '/inicio' | '/series'
+  fullPaths: '/' | '/canais' | '/filmes' | '/inicio' | '/series' | '/servidores'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/canais' | '/filmes' | '/inicio' | '/series'
+  to: '/' | '/canais' | '/filmes' | '/inicio' | '/series' | '/servidores'
   id:
     | '__root__'
     | '/'
@@ -82,6 +91,7 @@ export interface FileRouteTypes {
     | '/_authenticated/filmes'
     | '/_authenticated/inicio'
     | '/_authenticated/series'
+    | '/_authenticated/servidores'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -133,6 +143,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSeriesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/servidores': {
+      id: '/_authenticated/servidores'
+      path: '/servidores'
+      fullPath: '/servidores'
+      preLoaderRoute: typeof AuthenticatedServidoresRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -141,6 +158,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedFilmesRoute: typeof AuthenticatedFilmesRoute
   AuthenticatedInicioRoute: typeof AuthenticatedInicioRoute
   AuthenticatedSeriesRoute: typeof AuthenticatedSeriesRoute
+  AuthenticatedServidoresRoute: typeof AuthenticatedServidoresRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -148,6 +166,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedFilmesRoute: AuthenticatedFilmesRoute,
   AuthenticatedInicioRoute: AuthenticatedInicioRoute,
   AuthenticatedSeriesRoute: AuthenticatedSeriesRoute,
+  AuthenticatedServidoresRoute: AuthenticatedServidoresRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
