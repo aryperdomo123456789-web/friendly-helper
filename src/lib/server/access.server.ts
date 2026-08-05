@@ -12,7 +12,7 @@ export async function resolveAccess(userId: string, serverId: string) {
     supabaseAdmin.from("user_roles").select("role").eq("user_id", userId),
   ]);
 
-  const isOwner = !profile || !!roles?.some((r) => r.role === "owner" || r.role === "admin");
+  const isOwner = !profile || !!roles?.some((r: any) => r.role === "owner" || r.role === "admin");
 
   if (profile && !isOwner) {
     if (!profile.is_active) throw new Error("Acesso desativado. Fale com o suporte.");
