@@ -72,13 +72,9 @@ function LoginPage() {
   };
 
 
-  if (sessionLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
+  // O loading agora e gerido pelo contexto do router/shell, mas podemos adicionar um local se quiser
+  if (profile) return null;
+
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background p-4">
