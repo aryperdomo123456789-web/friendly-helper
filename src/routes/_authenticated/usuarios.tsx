@@ -91,6 +91,15 @@ function UsuariosPage() {
 
   const [userModal, setUserModal] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  
+  // Estados para filtros
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "blocked" | "expired" | "online">("all");
+  const [serverFilter, setServerFilter] = useState<string>("all");
+  const [planFilter, setPlanFilter] = useState<string>("all");
+  const [referralFilter, setReferralFilter] = useState<"all" | "direct" | "referred">("all");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "expiry">("newest");
+
 
   if (!isOwner) {
     return (
@@ -166,42 +175,202 @@ function UsuariosPage() {
     });
   };
 
+  const filteredUsers = (users.data ?? []).filter((user: any) => {
+    // Busca por nome ou username
+    const matchesSearch = 
+      user.username.toLowerCase().includes(search.toLowerCase()) ||
+      (user.display_name && user.display_name.toLowerCase().includes(search.toLowerCase()));
+    
+    // Filtro de status
+    const now = new Date();
+    const isExpired = user.expires_at && new Date(user.expires_at) < now;
+    const matchesStatus = 
+      statusFilter === "all" ||
+      (statusFilter === "active" && user.is_active && !isExpired) ||
+      (statusFilter === "blocked" && !user.is_active) ||
+      (statusFilter === "expired" && isExpired) ||
+      (statusFilter === "online" && user.online > 0);
+
+    // Filtro de servidor
+    const matchesServer = serverFilter === "all" || user.server_ids.includes(serverFilter);
+
+    // Filtro de plano
+    const matchesPlan = planFilter === "all" || user.plan_id === planFilter;
+
+    // Filtro de indicação
+    const matchesReferral = 
+      referralFilter === "all" ||
+      (referralFilter === "direct" && !user.referred_by_id) ||
+      (referralFilter === "referred" && !!user.referred_by_id);
+
+    return matchesSearch && matchesStatus && matchesServer && matchesPlan && matchesReferral;
+  }).sort((a: any, b: any) => {
+    if (sortOrder === "newest") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    if (sortOrder === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    if (sortOrder === "expiry") {
+      if (!a.expires_at) return 1;
+      if (!b.expires_at) return -1;
+      return new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime();
+    }
+    return 0;
+  });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Usuarios</h1>
           <p className="text-muted-foreground">
-            Cada usuario criado acessa Canais, Filmes, Series e troca de servidor.
+            Gerencie acessos e monitore conexões em tempo real.
           </p>
         </div>
-        <Button
-          onClick={() => {
-            const testPlan = plans.data?.find((p: any) => p.name.toLowerCase().includes("teste"));
-            setUserModal({
-              username: "",
-              password: "",
-              display_name: "",
-              max_connections: testPlan?.max_connections ?? 1,
-              server_ids: (servers.data ?? []).map((server: any) => server.id),
-              is_active: true,
-              plan_id: testPlan?.id || null,
-              expires_at: testPlan 
-                ? new Date(Date.now() + testPlan.duration_value * (testPlan.duration_unit === 'minutes' ? 60 * 1000 : testPlan.duration_unit === 'hours' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000)).toISOString()
-                : null
-            });
-          }}
-        >
-          <Plus className="mr-2 h-4 w-4" /> Criar Usuario
-        </Button>
+        <div className="flex gap-2">
+           <Button
+            variant="outline"
+            onClick={() => {
+              const csv = [
+                ["Username", "Exibicao", "Plano", "Expira em", "Conexoes", "Status"].join(","),
+                ...filteredUsers.map((u: any) => [
+                  u.username,
+                  u.display_name || "",
+                  u.plan?.name || "Personalizado",
+                  u.expires_at ? format(new Date(u.expires_at), "dd/MM/yyyy") : "Sem limite",
+                  `${u.online}/${u.max_connections}`,
+                  u.is_active ? "Ativo" : "Bloqueado"
+                ].join(","))
+              ].join("\n");
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+              const link = document.createElement("a");
+              link.href = URL.createObjectURL(blob);
+              link.setAttribute("download", `usuarios-webplayer-${format(new Date(), 'yyyy-MM-dd')}.csv`);
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
+          >
+            Exportar CSV
+          </Button>
+          <Button
+            onClick={() => {
+              const testPlan = plans.data?.find((p: any) => p.name.toLowerCase().includes("teste"));
+              setUserModal({
+                username: "",
+                password: "",
+                display_name: "",
+                max_connections: testPlan?.max_connections ?? 1,
+                server_ids: (servers.data ?? []).map((server: any) => server.id),
+                is_active: true,
+                plan_id: testPlan?.id || null,
+                expires_at: testPlan 
+                  ? new Date(Date.now() + testPlan.duration_value * (testPlan.duration_unit === 'minutes' ? 60 * 1000 : testPlan.duration_unit === 'hours' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000)).toISOString()
+                  : null
+              });
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" /> Criar Usuario
+          </Button>
+        </div>
       </div>
 
-      <Card className="overflow-x-auto">
+      {/* Painel de Filtros Profissional */}
+      <Card className="p-4 border-primary/20 bg-card/50 backdrop-blur-sm">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className="space-y-1.5 xl:col-span-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Buscar</Label>
+            <Input 
+              placeholder="Username ou nome..." 
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
+            <select 
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as any)}
+            >
+              <option value="all">Todos</option>
+              <option value="active">Ativos</option>
+              <option value="online">Online</option>
+              <option value="blocked">Bloqueados</option>
+              <option value="expired">Expirados</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Servidor</Label>
+            <select 
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={serverFilter}
+              onChange={(e) => setServerFilter(e.target.value)}
+            >
+              <option value="all">Todos</option>
+              {servers.data?.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Plano</Label>
+            <select 
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={planFilter}
+              onChange={(e) => setPlanFilter(e.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="">Sem Plano</option>
+              {plans.data?.map((p: any) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Ordenar</Label>
+            <select 
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={sortOrder}
+              onChange={(e) => setSortOrder(e.target.value as any)}
+            >
+              <option value="newest">Mais recentes</option>
+              <option value="oldest">Mais antigos</option>
+              <option value="expiry">Vencimento</option>
+            </select>
+          </div>
+        </div>
+        
+        <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-3">
+          <div className="text-xs text-muted-foreground">
+            Mostrando <span className="font-bold text-primary">{filteredUsers.length}</span> de <span className="font-bold">{users.data?.length || 0}</span> usuários
+          </div>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-7 text-xs"
+            onClick={() => {
+              setSearch("");
+              setStatusFilter("all");
+              setServerFilter("all");
+              setPlanFilter("all");
+              setReferralFilter("all");
+              setSortOrder("newest");
+            }}
+          >
+            Limpar Filtros
+          </Button>
+        </div>
+      </Card>
+
+      <Card className="overflow-x-auto border-primary/10">
         <div className="min-w-[800px]">
           <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead>Usuario</TableHead>
+            <TableRow className="hover:bg-transparent border-b border-primary/10">
+              <TableHead className="w-[200px]">Usuario</TableHead>
               <TableHead>Indicação</TableHead>
               <TableHead>Servidores</TableHead>
               <TableHead className="text-center">Conexoes</TableHead>
@@ -217,14 +386,15 @@ function UsuariosPage() {
                   Carregando usuários...
                 </TableCell>
               </TableRow>
-            ) : (users.data ?? []).length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
-                  Nenhum usuario cadastrado.
+                  Nenhum usuario encontrado com os filtros atuais.
                 </TableCell>
               </TableRow>
             ) : (
-              users.data?.map((user: any) => (
+              filteredUsers.map((user: any) => (
+
                 <TableRow key={user.id}>
                   <TableCell>
                     <div className="font-medium">{user.display_name || user.username}</div>
@@ -263,16 +433,26 @@ function UsuariosPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    {user.is_active ? (
-                      <span className="flex items-center gap-1.5 text-xs text-online">
-                        <Wifi className="h-3 w-3" /> Ativo
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 text-xs text-destructive">
-                        <WifiOff className="h-3 w-3" /> Bloqueado
-                      </span>
-                    )}
+                    {(() => {
+                      const isExpired = user.expires_at && new Date(user.expires_at) < new Date();
+                      if (!user.is_active) return (
+                        <span className="flex items-center gap-1.5 text-xs text-destructive">
+                          <WifiOff className="h-3 w-3" /> Bloqueado
+                        </span>
+                      );
+                      if (isExpired) return (
+                        <span className="flex items-center gap-1.5 text-xs text-yellow-500">
+                          <Calendar className="h-3 w-3" /> Expirado
+                        </span>
+                      );
+                      return (
+                        <span className="flex items-center gap-1.5 text-xs text-online">
+                          <Wifi className="h-3 w-3" /> Ativo
+                        </span>
+                      );
+                    })()}
                   </TableCell>
+
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button
