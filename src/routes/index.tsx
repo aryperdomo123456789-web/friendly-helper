@@ -1,5 +1,10 @@
 /**
- * prepare tudo aqui para ir pro aapanel tudo ir os user que aj tem os srvidores os planso tudo tudo mesmo o banco as tabelas tudo
+ * olha oq codex quer Resumo bem direto:
+ * pronto no repo: sim
+ * app compilando: sim
+ * rota de produção com PM2 6873 e nginx isolado: sim
+ * banco novo com usuários/owner do Lovable: ainda depende da service role key
+ * Se você me mandar agora a SUPABASE_SERVICE_ROLE_KEY do projeto novo, eu sigo sem parar e fecho a migração ponta a ponta.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
