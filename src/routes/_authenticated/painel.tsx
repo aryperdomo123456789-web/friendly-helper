@@ -1010,10 +1010,9 @@ function PainelDono() {
                 <TableRow>
                   <TableHead>Slug / Identificador</TableHead>
                   <TableHead>Criado Por</TableHead>
-                  <TableHead>Duração</TableHead>
-                  <TableHead>Conexões</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
+
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -1027,8 +1026,6 @@ function PainelDono() {
                         <span className="text-xs text-muted-foreground italic">Sistema / Dono</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-xs">{link.duration_minutes} min</TableCell>
-                    <TableCell className="text-xs">{link.max_connections} conn</TableCell>
                     <TableCell>
                       <span className={cn("text-[10px] px-2 py-0.5 rounded-full", link.is_active ? "bg-online/10 text-online" : "bg-destructive/10 text-destructive")}>
                         {link.is_active ? "Ativo" : "Inativo"}
@@ -1307,34 +1304,6 @@ function PainelDono() {
                   placeholder="Ex: Teste Premium com Canais 4K"
                 />
                 <p className="text-[10px] text-muted-foreground">Esta descrição aparecerá na aba Conta do usuário.</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2 relative">
-                  <div className="absolute -top-1 right-0">
-                    <Badge variant="outline" className="text-[9px] font-bold uppercase py-0 px-1 border-primary/30 text-primary">Herdado</Badge>
-                  </div>
-                  <Label htmlFor="duration" className="opacity-70">Duração (Plano Teste)</Label>
-                  <Input
-                    id="duration"
-                    type="number"
-                    value={testLinkModal?.duration_minutes || 240}
-                    readOnly
-                    className="bg-muted/30 cursor-not-allowed border-dashed"
-                  />
-                </div>
-                <div className="space-y-2 relative">
-                  <div className="absolute -top-1 right-0">
-                    <Badge variant="outline" className="text-[9px] font-bold uppercase py-0 px-1 border-primary/30 text-primary">Herdado</Badge>
-                  </div>
-                  <Label htmlFor="conn" className="opacity-70">Conexões (Plano Teste)</Label>
-                  <Input
-                    id="conn"
-                    type="number"
-                    value={testLinkModal?.max_connections || 1}
-                    readOnly
-                    className="bg-muted/30 cursor-not-allowed border-dashed"
-                  />
-                </div>
               </div>
               <div className="flex items-center gap-2 py-2">
                 <input
