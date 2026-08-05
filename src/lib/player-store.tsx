@@ -23,6 +23,7 @@ type SessionValue = {
   activeServer: ServerRow | null;
   setServerId: (id: string) => void;
   blocked: string | null;
+  expired: boolean;
 };
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -86,6 +87,7 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
         toast.success(`Servidor ativo: ${servers.find((s: ServerRow) => s.id === id)?.name ?? ""}`);
       },
       blocked,
+      expired: Boolean(data?.expired),
     }),
     [blocked, data, isLoading, serverId, servers],
   );
