@@ -1279,7 +1279,7 @@ function PainelDono() {
                       placeholder="30"
                       className="h-8"
                     />
-                    <p className="text-[10px] text-muted-foreground">Para planos > 30 dias.</p>
+                    <p className="text-[10px] text-muted-foreground">Para planos {" > "} 30 dias.</p>
                   </div>
                 </div>
               </div>
