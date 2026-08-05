@@ -1311,31 +1311,29 @@ function PainelDono() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2 relative">
                   <div className="absolute -top-1 right-0">
-                    <Badge variant="outline" className="text-[9px] font-bold uppercase py-0 px-1 border-primary/30 text-primary">Herdado do Plano Teste</Badge>
+                    <Badge variant="outline" className="text-[9px] font-bold uppercase py-0 px-1 border-primary/30 text-primary">Herdado</Badge>
                   </div>
-                  <Label htmlFor="duration" className="opacity-70">Duração do Teste (minutos)</Label>
+                  <Label htmlFor="duration" className="opacity-70">Duração (Plano Teste)</Label>
                   <Input
                     id="duration"
                     type="number"
                     value={testLinkModal?.duration_minutes || 240}
                     readOnly
-                    className="bg-muted/50 cursor-not-allowed"
+                    className="bg-muted/30 cursor-not-allowed border-dashed"
                   />
-                  <p className="text-[10px] text-muted-foreground">Configurado automaticamente pelo Plano Teste.</p>
                 </div>
                 <div className="space-y-2 relative">
                   <div className="absolute -top-1 right-0">
-                    <Badge variant="outline" className="text-[9px] font-bold uppercase py-0 px-1 border-primary/30 text-primary">Herdado do Plano Teste</Badge>
+                    <Badge variant="outline" className="text-[9px] font-bold uppercase py-0 px-1 border-primary/30 text-primary">Herdado</Badge>
                   </div>
-                  <Label htmlFor="conn" className="opacity-70">Limite de Conexões</Label>
+                  <Label htmlFor="conn" className="opacity-70">Conexões (Plano Teste)</Label>
                   <Input
                     id="conn"
                     type="number"
                     value={testLinkModal?.max_connections || 1}
                     readOnly
-                    className="bg-muted/50 cursor-not-allowed"
+                    className="bg-muted/30 cursor-not-allowed border-dashed"
                   />
-                  <p className="text-[10px] text-muted-foreground">Configurado automaticamente pelo Plano Teste.</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 py-2">
