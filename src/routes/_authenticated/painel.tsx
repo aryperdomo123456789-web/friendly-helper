@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   listServers, 
   saveServer, 
@@ -76,10 +77,14 @@ import {
   Key,
   Copy,
   MessageSquare,
-  Share2
+  Share2,
+  X,
+  Send,
+  Image as ImageIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+
 
 export const Route = createFileRoute("/_authenticated/painel")({
   head: () => ({
