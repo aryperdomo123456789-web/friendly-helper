@@ -1,4 +1,4 @@
-import { IPTVKind } from "./types";
+import { IPTVKind } from "../types";
 
 export async function resolveAccess(userId: string, serverId: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -69,7 +69,7 @@ export async function checkConcurrentConnections(supabaseAdmin: any, userId: str
     .select("device_id")
     .eq("user_id", userId);
 
-  const known = (active ?? []).some((row) => row.device_id === deviceId);
+  const known = (active ?? []).some((row: any) => row.device_id === deviceId);
   if (!known && (active ?? []).length >= profile.max_connections) {
     throw new Error(`Limite de ${profile.max_connections} conexao(oes) simultanea(s) atingido`);
   }

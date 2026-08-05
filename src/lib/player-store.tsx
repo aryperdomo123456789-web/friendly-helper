@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getMySession, heartbeat } from "@/lib/player.functions";
+import { getMySession, heartbeat } from "@/lib/session.functions";
 import { getDeviceId, SERVER_KEY } from "@/lib/device";
 import { toast } from "sonner";
 
@@ -38,12 +38,12 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
-  const servers = data?.servers ?? [];
+  const servers: ServerRow[] = data?.servers ?? [];
 
   useEffect(() => {
     if (servers.length === 0) return;
     const stored = typeof window !== "undefined" ? window.localStorage.getItem(SERVER_KEY) : null;
-    const valid = servers.find((server) => server.id === stored)?.id ?? servers[0]!.id;
+    const valid = servers.find((server: ServerRow) => server.id === stored)?.id ?? servers[0]!.id;
     setServerIdState((current) => current ?? valid);
   }, [servers]);
 
@@ -78,11 +78,11 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
       profile: (data?.profile as SessionValue["profile"]) ?? null,
       servers,
       serverId,
-      activeServer: servers.find((server) => server.id === serverId) ?? null,
+      activeServer: servers.find((server: ServerRow) => server.id === serverId) ?? null,
       setServerId: (id: string) => {
         setServerIdState(id);
         window.localStorage.setItem(SERVER_KEY, id);
-        toast.success(`Servidor ativo: ${servers.find((s) => s.id === id)?.name ?? ""}`);
+        toast.success(`Servidor ativo: ${servers.find((s: ServerRow) => s.id === id)?.name ?? ""}`);
       },
       blocked,
     }),
