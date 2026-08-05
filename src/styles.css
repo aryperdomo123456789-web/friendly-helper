@@ -238,9 +238,7 @@
 }
 
 body {
-  background-image:
-    radial-gradient(1000px 500px at 12% -10%, var(--primary) / 0.16, transparent 60%),
-    radial-gradient(900px 500px at 105% 0%, var(--secondary) / 0.12, transparent 60%);
+  background-image: none;
   background-attachment: fixed;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
