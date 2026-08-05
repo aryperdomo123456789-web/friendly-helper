@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getMySession, heartbeat } from "@/lib/session.functions";
+import { getMySession, heartbeat } from "@/lib/player.functions";
 import { getDeviceId, SERVER_KEY } from "@/lib/device";
 import { toast } from "sonner";
 
