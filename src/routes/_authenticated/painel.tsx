@@ -347,7 +347,14 @@ function PainelDono() {
                   users.data?.map((user: any) => (
                     <TableRow key={user.id}>
                       <TableCell>
-                        <div className="font-medium">{user.display_name || user.username}</div>
+                        <div className="font-medium flex items-center gap-2">
+                          {user.display_name || user.username}
+                          {user.plan_id && (
+                            <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full border border-primary/30 uppercase font-bold">
+                              {plans.data?.find((p: any) => p.id === user.plan_id)?.name || "Plano"}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground">@{user.username}</div>
                       </TableCell>
                       <TableCell>
@@ -652,7 +659,61 @@ function PainelDono() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="planos" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Planos de Assinatura</h2>
+            <Button onClick={() => setPlanModal({ 
+              name: "", 
+              price: 30, 
+              duration_days: 30, 
+              max_connections: 1 
+            })}>
+              <Plus className="mr-2 h-4 w-4" /> Novo Plano
+            </Button>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {plans.isLoading ? (
+              <div className="col-span-full p-8 text-center text-muted-foreground">Carregando planos...</div>
+            ) : (plans.data ?? []).length === 0 ? (
+              <div className="col-span-full p-8 text-center text-muted-foreground">Nenhum plano cadastrado.</div>
+            ) : (
+              plans.data?.map((plan: any) => (
+                <Card key={plan.id} className="relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-1">
+                      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setPlanModal(plan)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeletePlan(plan.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  <CardHeader>
+                    <CardTitle className="flex justify-between items-center">
+                      <span>{plan.name}</span>
+                    </CardTitle>
+                    <div className="text-2xl font-bold text-primary">
+                      R$ {Number(plan.price).toFixed(2).replace('.', ',')}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4" /> {plan.duration_days} dias de acesso
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Wifi className="h-4 w-4" /> {plan.max_connections} conexão(ões)
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </div>
+        </TabsContent>
       </Tabs>
+
 
 
       {/* Modal Servidor */}
@@ -734,6 +795,40 @@ function PainelDono() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label>Plano de Assinatura (Opcional)</Label>
+                <Select 
+                  value={userModal?.plan_id || "none"} 
+                  onValueChange={(val) => {
+                    const planId = val === "none" ? null : val;
+                    const selectedPlan = plans.data?.find((p: any) => p.id === planId);
+                    
+                    const updates: any = { plan_id: planId };
+                    
+                    if (selectedPlan) {
+                      updates.max_connections = selectedPlan.max_connections;
+                      // Calculate expiration if creating or if user wants to reset
+                      const expiry = new Date();
+                      expiry.setDate(expiry.getDate() + selectedPlan.duration_days);
+                      updates.expires_at = expiry.toISOString();
+                    }
+                    
+                    setUserModal({...userModal, ...updates});
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um plano" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Personalizado (Sem plano)</SelectItem>
+                    {plans.data?.map((plan: any) => (
+                      <SelectItem key={plan.id} value={plan.id}>
+                        {plan.name} - R$ {Number(plan.price).toFixed(2)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-2">
                 <Label>Nome de Exibicao (Opcional)</Label>
                 <Input 
