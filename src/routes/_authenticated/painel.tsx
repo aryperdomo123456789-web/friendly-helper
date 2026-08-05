@@ -610,6 +610,9 @@ function PainelDono() {
                           primary: values['primary'] as string,
                           bg: values['bg'] as string,
                         },
+                        },
+                        support_attendant_name: values['support_attendant_name'] as string,
+                        support_auto_reply: values['support_auto_reply'] as string,
                         copy: {
                           ...configQuery.data?.copy,
                           home_title: values['home_title'] as string,
