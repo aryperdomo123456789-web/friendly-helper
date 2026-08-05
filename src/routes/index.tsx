@@ -195,9 +195,14 @@ function LoginPage() {
         </CardContent>
       </Card>
       
-      <p className="absolute bottom-8 text-center text-xs text-muted-foreground">
-        &copy; 2024 WebPlayer IPTV · Multi-Servidor Inteligente
-      </p>
+      <div className="absolute bottom-8 flex flex-col items-center gap-2 px-6 text-center">
+        <p className="text-xs font-medium text-primary/80 animate-pulse">
+          EPG e TMDB integrados · Alta Performance em VPS Ubuntu 22.04
+        </p>
+        <p className="text-[10px] text-muted-foreground/60">
+          &copy; 2024 WebPlayer IPTV · Multi-Servidor Inteligente
+        </p>
+      </div>
     </div>
   );
 }
