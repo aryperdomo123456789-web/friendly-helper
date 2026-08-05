@@ -7,11 +7,21 @@ export const listSupportThreads = createServerFn({ method: "GET" })
   .handler(async () => {
     const { data, error } = await (supabaseAdmin
       .from('support_threads' as any)
-      .select('*, profile:user_id(username, display_name)')
+      .select('*')
       .order('last_message_at', { ascending: false }) as any);
 
     if (error) throw error;
-    return data;
+
+    const threads = (data ?? []) as any[];
+    if (threads.length === 0) return threads;
+
+    const { data: profiles } = await supabaseAdmin
+      .from('profiles')
+      .select('id, username, display_name')
+      .in('id', threads.map((t) => t.user_id));
+
+    const map = new Map((profiles ?? []).map((p) => [p.id, p]));
+    return threads.map((t) => ({ ...t, profile: map.get(t.user_id) ?? null }));
   });
 
 export const getOrCreateThread = createServerFn({ method: "POST" })
