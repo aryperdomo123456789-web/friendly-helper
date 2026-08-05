@@ -21,7 +21,7 @@ export function VideoPlayer({ url, poster, title }: Props) {
     setError(null);
     setLoading(true);
 
-    const isHls = url.includes(".m3u8");
+    const isHls = url.includes(".m3u8") || url.includes("hls=1");
     const nativeHls = video.canPlayType("application/vnd.apple.mpegurl") !== "";
 
     async function start() {
