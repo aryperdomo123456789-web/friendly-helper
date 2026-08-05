@@ -64,7 +64,7 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
       }
     };
     void send();
-    const timer = setInterval(send, 120_000);
+    const timer = setInterval(send, 60_000);
     return () => {
       cancelled = true;
       clearInterval(timer);

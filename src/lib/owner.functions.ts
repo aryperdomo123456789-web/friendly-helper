@@ -156,7 +156,7 @@ export const listAccessUsers = createServerFn({ method: "GET" })
       supabaseAdmin.from("user_server_access").select("user_id, server_id"),
       supabaseAdmin.from("device_sessions").select("user_id, device_id, last_seen"),
     ]);
-    const cutoff = Date.now() - 5 * 60 * 1000;
+    const cutoff = Date.now() - 3 * 60 * 1000;
     return (profiles ?? []).map((profile) => ({
       ...profile,
       server_ids: (access ?? [])
