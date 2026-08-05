@@ -905,7 +905,7 @@ function PainelDono() {
                     <SelectItem value="none">Personalizado (Sem plano)</SelectItem>
                     {plans.data?.map((plan: any) => (
                       <SelectItem key={plan.id} value={plan.id}>
-                        {plan.name} - R$ {Number(plan.price).toFixed(2)}
+                        {plan.name} - R$ {Number(plan.price).toFixed(2).replace('.', ',')}
                       </SelectItem>
                     ))}
                   </SelectContent>
