@@ -17,6 +17,26 @@
  * - Acoplamento excessivo entre componentes
  * - Imports desorganizados
  * - Regras de negócio misturadas com UI
+ *
+ * Objetivos principais:
+ * - Reduzir duplicação de código
+ * - Melhorar legibilidade e separação de responsabilidades
+ * - Melhorar reutilização de componentes
+ * - Criar padrões consistentes no projeto
+ * - Facilitar manutenção futura
+ * - Reduzir complexidade desnecessária
+ * - Melhorar escalabilidade
+ *
+ * Diretrizes:
+ * - NÃO alterar funcionalidades existentes
+ * - NÃO mudar comportamento da interface
+ * - NÃO quebrar fluxos já existentes
+ * - Priorizar separação de responsabilidades (UI / lógica / dados)
+ * - Componentização inteligente e reutilização
+ * - Nomeação clara e consistente
+ * - Organização por domínio ou feature
+ *
+ * Resultado esperado: projeto muito mais organizado, fácil de entender e manter, escalável, livre de duplicações, com arquitetura profissional e padrões consistentes.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
