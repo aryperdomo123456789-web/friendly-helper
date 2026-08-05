@@ -194,73 +194,78 @@ function TestePublico() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <Card className="border-green-500/30 bg-card/50 backdrop-blur-xl shadow-2xl overflow-hidden">
-              <div className="h-1.5 bg-green-500" />
+          <div className="space-y-4 animate-in fade-in slide-in-from-bottom-8 duration-700">
+            <Card className="border-green-500/20 bg-green-500/[0.02] backdrop-blur-2xl shadow-[0_0_50px_-12px_rgba(34,197,94,0.2)] overflow-hidden">
+              <div className="h-1.5 bg-gradient-to-r from-green-500 to-emerald-400" />
               <CardHeader className="pb-2 text-center">
-                <CardTitle className="text-green-500 flex items-center justify-center gap-2">
-                  <Check className="h-6 w-6" /> Teste Liberado!
+                <CardTitle className="text-3xl font-black text-green-500 flex items-center justify-center gap-3 tracking-tighter">
+                  <div className="p-1.5 bg-green-500/20 rounded-full animate-bounce">
+                    <Check className="h-6 w-6" />
+                  </div> 
+                  ACESSO ATIVO
                 </CardTitle>
-                <CardDescription>Guarde seus dados de acesso abaixo.</CardDescription>
+                <CardDescription className="text-white/60 font-medium">Copie seus dados e comece a assistir agora.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3 pt-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase tracking-widest text-muted-foreground ml-1">Usuário</Label>
+              <CardContent className="space-y-5 pt-6">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase tracking-[0.2em] text-primary font-black ml-1">USUÁRIO</Label>
                   <div className="relative group">
-                    <div className="absolute inset-y-0 left-3 flex items-center text-muted-foreground">
-                      <User className="h-4 w-4" />
+                    <div className="absolute inset-y-0 left-4 flex items-center text-white/30">
+                      <User className="h-5 w-5" />
                     </div>
                     <Input 
                       readOnly 
                       value={credentials.username} 
-                      className="pl-10 pr-12 h-12 bg-background/50 font-mono text-lg"
+                      className="pl-12 pr-12 h-14 bg-white/[0.03] border-white/10 font-mono text-xl text-white selection:bg-primary/30"
                     />
                     <Button 
                       size="icon" 
                       variant="ghost" 
-                      className="absolute right-1 top-1 h-10 w-10"
+                      className="absolute right-2 top-2 h-10 w-10 text-white/50 hover:text-white hover:bg-white/10"
                       onClick={() => copyToClipboard(credentials.username, "user")}
                     >
-                      {copied === "user" ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                      {copied === "user" ? <Check className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5" />}
                     </Button>
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase tracking-widest text-muted-foreground ml-1">Senha</Label>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase tracking-[0.2em] text-primary font-black ml-1">SENHA</Label>
                   <div className="relative group">
-                    <div className="absolute inset-y-0 left-3 flex items-center text-muted-foreground">
-                      <Key className="h-4 w-4" />
+                    <div className="absolute inset-y-0 left-4 flex items-center text-white/30">
+                      <Key className="h-5 w-5" />
                     </div>
                     <Input 
                       readOnly 
                       value={credentials.password} 
-                      className="pl-10 pr-12 h-12 bg-background/50 font-mono text-lg"
+                      className="pl-12 pr-12 h-14 bg-white/[0.03] border-white/10 font-mono text-xl text-white selection:bg-primary/30"
                     />
                     <Button 
                       size="icon" 
                       variant="ghost" 
-                      className="absolute right-1 top-1 h-10 w-10"
+                      className="absolute right-2 top-2 h-10 w-10 text-white/50 hover:text-white hover:bg-white/10"
                       onClick={() => copyToClipboard(credentials.password, "pass")}
                     >
-                      {copied === "pass" ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                      {copied === "pass" ? <Check className="h-5 w-5 text-green-500" /> : <Copy className="h-5 w-5" />}
                     </Button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg text-xs text-muted-foreground mt-4">
-                  <Calendar className="h-4 w-4" />
-                  <span>Válido até: <b>{new Date(credentials.expiresAt).toLocaleString("pt-BR")}</b></span>
+                <div className="flex items-center gap-3 p-4 bg-white/[0.02] border border-white/5 rounded-2xl text-xs text-white/50 mt-6">
+                  <div className="p-2 bg-white/5 rounded-lg">
+                    <Calendar className="h-4 w-4" />
+                  </div>
+                  <span>Expira em: <b className="text-white">{new Date(credentials.expiresAt).toLocaleString("pt-BR")}</b></span>
                 </div>
 
-                <div className="pt-6 space-y-3">
+                <div className="pt-6 space-y-4">
                   <Link to="/" search={{ username: credentials.username, password: credentials.password }}>
-                    <Button className="w-full h-12 font-bold gap-2 rounded-xl">
-                      IR PARA LOGIN <ExternalLink className="h-4 w-4" />
+                    <Button className="w-full h-16 font-black text-lg gap-3 rounded-2xl bg-gradient-to-r from-primary to-blue-600 hover:scale-[1.02] transition-transform shadow-[0_0_30px_-5px_rgba(var(--primary),0.5)]">
+                      ACESSAR WEBPLAYER <ExternalLink className="h-5 w-5" />
                     </Button>
                   </Link>
-                  <p className="text-[10px] text-center text-muted-foreground uppercase tracking-widest">
-                    Clique em ir para login para entrar automaticamente
+                  <p className="text-[9px] text-center text-white/30 uppercase tracking-[0.2em] font-black animate-pulse">
+                    🚀 REDIRECIONAMENTO COM UM CLIQUE
                   </p>
                 </div>
               </CardContent>
@@ -268,9 +273,9 @@ function TestePublico() {
           </div>
         )}
         
-        <div className="mt-8 text-center">
-          <p className="text-xs text-muted-foreground/60">
-            &copy; 2024 WebPlayer IPTV · Sistema Profissional
+        <div className="mt-12 text-center pb-8">
+          <p className="text-[10px] text-white/20 uppercase tracking-[0.3em] font-bold">
+            &copy; 2026 WEBPLAYER PRO · TECNOLOGIA DE PONTA
           </p>
         </div>
       </div>
