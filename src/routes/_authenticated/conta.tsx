@@ -216,7 +216,7 @@ function ContaPage() {
               </div>
             ) : (
               <div className="grid gap-4">
-                {account.data.testLinks.map((link: any) => {
+                {(account.data?.testLinks ?? []).map((link: any) => {
                   const fullUrl = `${window.location.origin}/teste/${link.slug}?ref=${account.data?.referral_code}`;
                   return (
                     <div key={link.slug} className="space-y-2 p-4 rounded-xl border border-primary/10 bg-primary/5">
