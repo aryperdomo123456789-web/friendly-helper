@@ -13,6 +13,7 @@ export const AppConfigSchema = z.object({
   logo_url: z.string().optional(),
   logo_small_url: z.string().optional(),
   favicon_url: z.string().optional(),
+  theme_mode: z.enum(["azul", "dark", "light"]).default("azul"),
   theme: z.object({
     bg: z.string().default("#05070b"),
     surface: z.string().default("#0f171e"),
