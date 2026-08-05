@@ -1,5 +1,13 @@
 # 📘 Documentação Especialista de Deploy & Configuração
 
+## 🛡️ Segurança Anti-Abuso (Anti-Papateste)
+O sistema implementa uma camada rigorosa de proteção contra a geração múltipla de testes gratuitos:
+- **Fingerprinting de Dispositivo**: Cada solicitação de teste captura uma identidade única baseada em 6 vetores de hardware e software do navegador.
+- **Bloqueio por Identidade**: O backend valida se o fingerprint já consta no banco de dados antes de liberar novas credenciais.
+- **Segurança em Indicações**: A proteção de dispositivo é soberana; mesmo usando links de indicação diferentes, um mesmo aparelho só consegue gerar um teste uma única vez.
+
+---
+
 Este documento fornece as diretrizes técnicas necessárias para o Codex ou um administrador de sistemas realizar o deploy do **WebPlayer IPTV** em um ambiente de produção (Ubuntu 22.04 + aaPanel + PM2 + Backend Próprio).
 
 ---
