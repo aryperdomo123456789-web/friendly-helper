@@ -306,8 +306,10 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
     // Proxied through our own origin: the panels only serve plain HTTP and the
     // browser refuses mixed content on an HTTPS page.
     const proxied = await signStreamUrl(direct, { subject: context.userId, ttlSeconds: 6 * 60 * 60 });
-    const isHls = direct.endsWith(".m3u8");
-    return { url: isHls ? `${proxied}&hls=1` : proxied };
+    const isHls = direct.endsWith(".m3u8") || direct.includes("m3u8");
+    // For live channels, force HLS mode if the URL structure suggests it
+    const forceHls = data.kind === "live" && !direct.includes("ext=ts");
+    return { url: (isHls || forceHls) ? `${proxied}&hls=1` : proxied };
   });
 
 export const getChannelEPG = createServerFn({ method: "POST" })
