@@ -104,10 +104,12 @@ function PainelDono() {
     enabled: isOwner,
   });
 
+  const servers = useQuery({
     queryKey: ["admin-servers"],
     queryFn: () => fetchServers(),
     enabled: isOwner,
   });
+
 
   const users = useQuery({
     queryKey: ["admin-users"],
