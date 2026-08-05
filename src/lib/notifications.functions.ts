@@ -7,23 +7,23 @@ export const getNotifications = createServerFn({ method: "GET" })
     const { data: { session } } = await supabaseAdmin.auth.getSession();
     if (!session) return [];
 
-    const { data, error } = await supabaseAdmin
-      .from('notifications')
+    const { data, error } = await (supabaseAdmin
+      .from('notifications' as any)
       .select('*')
       .eq('user_id', session.user.id)
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false }) as any);
 
     if (error) throw error;
-    return data || [];
+    return (data || []) as any[];
   });
 
 export const markNotificationRead = createServerFn({ method: "POST" })
   .validator((id: string) => z.string().uuid().parse(id))
   .handler(async ({ data: id }) => {
-    const { error } = await supabaseAdmin
-      .from('notifications')
+    const { error } = await (supabaseAdmin
+      .from('notifications' as any)
       .update({ is_read: true })
-      .eq('id', id);
+      .eq('id', id) as any);
 
     if (error) throw error;
     return { success: true };
@@ -35,7 +35,6 @@ export const sendMassNotification = createServerFn({ method: "POST" })
     content: z.string()
   }).parse(data))
   .handler(async ({ data }) => {
-    // Pegar todos os usuários ativos
     const { data: profiles } = await supabaseAdmin
       .from('profiles')
       .select('id')
@@ -50,9 +49,9 @@ export const sendMassNotification = createServerFn({ method: "POST" })
       type: 'mass'
     }));
 
-    const { error } = await supabaseAdmin
-      .from('notifications')
-      .insert(notifications);
+    const { error } = await (supabaseAdmin
+      .from('notifications' as any)
+      .insert(notifications) as any);
 
     if (error) throw error;
     return { count: profiles.length };
