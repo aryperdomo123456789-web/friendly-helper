@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_config: {
+        Row: {
+          config: Json
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          config?: Json
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          config?: Json
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       device_sessions: {
         Row: {
           created_at: string

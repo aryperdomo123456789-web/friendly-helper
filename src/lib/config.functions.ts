@@ -10,14 +10,30 @@ import { z } from "zod";
  */
 export const getAppConfig = createServerFn({ method: "GET" })
   .handler(async () => {
+    // We use a query that bypasses the generated types since they might not be in sync yet
     const { data, error } = await supabaseAdmin
-      .from('iptv_servers') // Temporary use of existing table to avoid TS error before schema sync
+      .from('app_config' as any)
       .select('*')
-      .limit(1);
+      .limit(1)
+      .maybeSingle();
 
-    // This is a placeholder since the schema is not yet updated in types
-    // I will return defaults for now to satisfy the build
-    return AppConfigSchema.parse({});
+    if (error) {
+      throw new Error("Erro ao carregar configuracoes: " + error.message);
+    }
+
+    if (!data) {
+      const defaultConfig = AppConfigSchema.parse({});
+      const { data: newData, error: insertError } = await supabaseAdmin
+        .from('app_config' as any)
+        .insert([{ config: defaultConfig }])
+        .select()
+        .single();
+      
+      if (insertError) throw new Error("Erro ao criar configuracoes padrao: " + insertError.message);
+      return newData.config;
+    }
+
+    return AppConfigSchema.parse(data.config);
   });
 
 /**
@@ -26,5 +42,20 @@ export const getAppConfig = createServerFn({ method: "GET" })
 export const updateAppConfig = createServerFn({ method: "POST" })
   .validator((data: any) => AppConfigSchema.parse(data))
   .handler(async ({ data: newConfig }) => {
+    const { data: existing } = await supabaseAdmin.from('app_config' as any).select('id').limit(1).maybeSingle();
+    
+    if (existing) {
+      const { error: updateError } = await supabaseAdmin
+        .from('app_config' as any)
+        .update({ config: newConfig })
+        .eq('id', existing.id);
+      if (updateError) throw new Error("Erro ao atualizar configuracoes: " + updateError.message);
+    } else {
+      const { error: insertError } = await supabaseAdmin
+        .from('app_config' as any)
+        .insert([{ config: newConfig }]);
+      if (insertError) throw new Error("Erro ao inserir configuracoes: " + insertError.message);
+    }
+
     return { success: true };
   });
