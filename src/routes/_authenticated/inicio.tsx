@@ -304,7 +304,7 @@ function FloatingChat({ userId }: { userId?: string }) {
               messages.map(msg => {
                 const isMe = msg['sender_id'] === userId;
                 return (
-                  <div key={msg['id']} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
+                  <div key={msg['id']} className={cn("chat-bubble-container flex", isMe ? "justify-end" : "justify-start")}>
                     <div className={cn(
                       "max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm",
                       isMe ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-card border rounded-tl-none"
