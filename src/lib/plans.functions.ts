@@ -1,0 +1,61 @@
+
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
+import { supabase } from "@/integrations/supabase/client";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { SubscriptionPlan } from "./types";
+
+export const getPlans = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("subscription_plans")
+      .select("*")
+      .order("price", { ascending: true });
+
+    if (error) throw error;
+    return data as SubscriptionPlan[];
+  });
+
+export const savePlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .input(
+    z.object({
+      id: z.string().optional(),
+      name: z.string(),
+      price: z.number(),
+      duration_days: z.number(),
+      max_connections: z.number(),
+    })
+  )
+  .handler(async ({ input, context }) => {
+    const { id, ...data } = input;
+
+    if (id) {
+      const { error } = await context.supabase
+        .from("subscription_plans")
+        .update(data)
+        .eq("id", id);
+      if (error) throw error;
+    } else {
+      const { error } = await context.supabase
+        .from("subscription_plans")
+        .insert(data);
+      if (error) throw error;
+    }
+
+    return { success: true };
+  });
+
+export const deletePlan = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .input(z.object({ id: z.string() }))
+  .handler(async ({ input, context }) => {
+    const { error } = await context.supabase
+      .from("subscription_plans")
+      .delete()
+      .eq("id", input.id);
+
+    if (error) throw error;
+    return { success: true };
+  });
