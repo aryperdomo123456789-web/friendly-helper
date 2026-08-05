@@ -541,7 +541,7 @@ function PainelDono() {
                               onClick={() => {
                                 const url = `${window.location.origin}/teste/${link.slug}`;
                                 navigator.clipboard.writeText(url);
-                                toast.success("URL copiada!");
+                                toast.success("URL copiada com sucesso!");
                               }}
                             >
                               <Copy className="h-3.3 w-3.3" />
