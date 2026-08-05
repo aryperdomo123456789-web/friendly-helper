@@ -162,7 +162,11 @@ function FloatingChat({ userId }: { userId?: string }) {
       const data = await fetchThread({ data: { userId } });
       setThread(data);
       setUnread(0);
-      mutationMarkRead({ data: { threadId: data.id, isOwner: false } });
+      try {
+        await mutationMarkRead({ data: { threadId: data.id, isOwner: false } });
+      } catch (e) {
+        console.error("Erro ao marcar como lido:", e);
+      }
 
       const { data: msgs } = await (supabase
         .from('support_messages' as any)
@@ -215,26 +219,32 @@ function FloatingChat({ userId }: { userId?: string }) {
 
     setSending(true);
     try {
-      const { error } = await (supabase
-        .from('support_messages' as any)
+      const { error } = await supabase
+        .from('support_messages')
         .insert([{
           thread_id: thread.id,
-          sender_id: userId,
+          sender_id: userId || null,
           content: newMessage
-        }]) as any);
+        }]);
 
       if (error) throw error;
 
-      await (supabase
-        .from('support_threads' as any)
+      const { error: updateError } = await supabase
+        .from('support_threads')
         .update({ 
           last_message: newMessage, 
           last_message_at: new Date().toISOString(),
           unread_count_owner: (thread.unread_count_owner || 0) + 1
         })
-        .eq('id', thread.id) as any);
+        .eq('id', thread.id);
 
+      if (updateError) {
+        console.error("Erro ao atualizar thread:", updateError);
+        // Don't toast here as the message was already sent
+      }
+      
       setNewMessage("");
+      toast.success("Mensagem enviada!");
     } catch (err: any) {
       toast.error("Erro: " + err.message);
     } finally {
@@ -303,7 +313,7 @@ function FloatingChat({ userId }: { userId?: string }) {
                 onChange={e => setNewMessage(e.target.value)}
                 className="bg-muted/50 border-none h-9 text-sm"
               />
-              <Button size="icon" className="h-9 w-9" disabled={sending || !newMessage.trim()}>
+              <Button type="submit" size="icon" className="h-9 w-9" disabled={sending || !newMessage.trim()}>
                 <Send className="h-4 w-4" />
               </Button>
             </div>
