@@ -215,7 +215,7 @@ function ContaPage() {
                 )}
                 <CardHeader>
                   <CardTitle className="text-lg font-bold uppercase tracking-tighter">{plan.name}</CardTitle>
-                  <CardDescription>{plan.duration_value} {plan.duration_unit === 'hours' ? 'horas' : 'dias'} de acesso</CardDescription>
+                  <CardDescription>{plan.duration_value} {plan.duration_unit === 'minutes' ? 'minutos' : plan.duration_unit === 'hours' ? 'horas' : 'dias'} de acesso</CardDescription>
                 </CardHeader>
                 <CardContent className="flex-1 space-y-4">
                   <div className="flex items-baseline gap-1">
