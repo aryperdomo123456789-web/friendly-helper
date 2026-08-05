@@ -14,17 +14,17 @@ import { createFirstOwner } from "@/lib/bootstrap.functions";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "WebPlayer IPTV — Acesso Multi-Servidor" },
+      { title: "WebPlayer IPTV — TMDB & EPG" },
       {
         name: "description",
         content:
-          "Entre no WebPlayer IPTV: canais, filmes e series em multiplos servidores, com controle de conexoes por dispositivo.",
+          "Entre no WebPlayer IPTV: canais com guia de programação (EPG), filmes e séries enriquecidos com TMDB.",
       },
-      { property: "og:title", content: "WebPlayer IPTV — Acesso Multi-Servidor" },
+      { property: "og:title", content: "WebPlayer IPTV — Multi-Servidor" },
       {
         property: "og:description",
         content:
-          "Painel do dono para cadastrar servidores Xtream e gerar acessos de usuario com limite de conexoes.",
+          "Webplayer avançado com integração TMDB e guia de programação em tempo real.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
