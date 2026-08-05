@@ -89,6 +89,36 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          is_read: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -254,6 +284,7 @@ export type Database = {
           id: string
           last_message: string | null
           last_message_at: string
+          protocol: string | null
           status: string
           unread_count_owner: number
           unread_count_user: number
@@ -265,6 +296,7 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_at?: string
+          protocol?: string | null
           status?: string
           unread_count_owner?: number
           unread_count_user?: number
@@ -276,6 +308,7 @@ export type Database = {
           id?: string
           last_message?: string | null
           last_message_at?: string
+          protocol?: string | null
           status?: string
           unread_count_owner?: number
           unread_count_user?: number
