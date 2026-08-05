@@ -143,19 +143,19 @@ export function Catalog({ kind }: { kind: Kind }) {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 sm:flex sm:justify-between">
+    <div className="flex flex-col gap-4 min-w-0">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-bold sm:text-2xl">{LABEL[kind].title}</h1>
-          <p className="truncate text-sm text-muted-foreground">
+          <p className="truncate text-xs sm:text-sm text-muted-foreground">
             Servidor ativo: <span className="text-primary">{activeServer?.name ?? "-"}</span>
           </p>
         </div>
       </div>
 
       {/* Layout do legado: categorias | lista | player sempre na tela */}
-      <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.15fr)]">
-        <aside className="flex flex-col rounded-xl border border-border bg-card p-2">
+      <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.15fr)] min-w-0">
+        <aside className="flex flex-col rounded-xl border border-border bg-card p-2 min-w-0">
           <p className="px-2 pb-2 text-sm font-semibold">Categorias</p>
           <div className="relative px-1 pb-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -166,7 +166,7 @@ export function Catalog({ kind }: { kind: Kind }) {
               className="h-9 pl-9"
             />
           </div>
-          <div className="wp-scroll max-h-[26vh] space-y-1 overflow-y-auto lg:max-h-[62vh]">
+          <div className="wp-scroll max-h-[180px] space-y-1 overflow-y-auto lg:max-h-[62vh]">
             {categories.isLoading ? (
               <div className="flex justify-center p-6">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -196,7 +196,7 @@ export function Catalog({ kind }: { kind: Kind }) {
           </div>
         </aside>
 
-        <section className="flex flex-col rounded-xl border border-border bg-card p-2">
+        <section className="flex flex-col rounded-xl border border-border bg-card p-2 min-w-0">
           {openSeries ? (
             <>
               <div className="flex items-center gap-2 px-1 pb-2">
@@ -268,7 +268,7 @@ export function Catalog({ kind }: { kind: Kind }) {
                   className="h-9 pl-9"
                 />
               </div>
-              <div className="wp-scroll max-h-[36vh] overflow-y-auto px-1 lg:max-h-[62vh]">
+              <div className="wp-scroll max-h-[300px] overflow-y-auto px-1 lg:max-h-[62vh]">
                 {streams.isLoading ? (
                   <div className="flex justify-center p-16">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
