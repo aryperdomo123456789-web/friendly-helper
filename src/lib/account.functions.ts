@@ -8,10 +8,10 @@ export const getMyAccount = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [{ data: profile }, { data: roles }] = await Promise.all([
+    const [{ data: profile }, { data: roles }, { data: plans }] = await Promise.all([
       supabaseAdmin
         .from("profiles")
-        .select("username, display_name, max_connections, expires_at, is_active, referral_code, referred_by_id")
+        .select("username, display_name, max_connections, expires_at, is_active, referral_code, referred_by_id, plan_id, plan:subscription_plans(*)")
         .eq("id", context.userId)
         .maybeSingle(),
       context.supabase
@@ -19,10 +19,19 @@ export const getMyAccount = createServerFn({ method: "GET" })
         .select("role")
         .eq("user_id", context.userId)
         .in("role", ["owner", "admin"]),
+      context.supabase
+        .from("subscription_plans")
+        .select("*")
+        .order("price", { ascending: true }),
     ]);
+
     return {
       username: profile?.username ?? "",
       display_name: profile?.display_name ?? "",
+      max_connections: profile?.max_connections ?? 1,
+      expires_at: profile?.expires_at ?? null,
+      plan: profile?.plan ?? null,
+      availablePlans: plans ?? [],
       isOwner: (roles ?? []).length > 0,
       referral_code: profile?.referral_code ?? null,
       referred_by_id: profile?.referred_by_id ?? null,
