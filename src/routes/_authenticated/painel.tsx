@@ -15,6 +15,9 @@ import {
 } from "@/lib/owner.functions";
 import { getMySession } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
+import { getAppConfig, updateAppConfig } from "@/lib/config.functions";
+import { AppConfigSchema } from "@/lib/types";
+
 
 import { 
   Card, 
@@ -79,6 +82,8 @@ function PainelDono() {
   const { isOwner } = usePlayerSession();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("acessos");
+  const [appConfig, setAppConfig] = useState<any>(null);
+
 
   // Server functions
   const fetchServers = useServerFn(listServers);
@@ -90,8 +95,15 @@ function PainelDono() {
   const mutationDeleteUser = useServerFn(deleteAccessUser);
   const mutationKick = useServerFn(kickDevices);
   const mutationTest = useServerFn(testServerConnection);
+  const fetchConfig = useServerFn(getAppConfig);
+  const mutationSaveConfig = useServerFn(updateAppConfig);
 
-  const servers = useQuery({
+  const configQuery = useQuery({
+    queryKey: ["app-config"],
+    queryFn: () => fetchConfig(),
+    enabled: isOwner,
+  });
+
     queryKey: ["admin-servers"],
     queryFn: () => fetchServers(),
     enabled: isOwner,
@@ -196,7 +208,11 @@ function PainelDono() {
           <TabsTrigger value="servidores" className="gap-2">
             <Server className="h-4 w-4" /> Servidores
           </TabsTrigger>
+          <TabsTrigger value="configuracao" className="gap-2">
+            <Settings className="h-4 w-4" /> Configuração Central
+          </TabsTrigger>
         </TabsList>
+
 
         <TabsContent value="acessos" className="space-y-4">
           <div className="flex items-center justify-between">
@@ -331,7 +347,106 @@ function PainelDono() {
             ))}
           </div>
         </TabsContent>
+
+        <TabsContent value="configuracao" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Configuração Central da Webplayer</CardTitle>
+              <CardDescription>Gerencie identidade, temas e textos globais do sistema.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {configQuery.isLoading ? (
+                <div className="p-8 text-center text-muted-foreground">Carregando configurações...</div>
+              ) : (
+                <form 
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setLoading(true);
+                    try {
+                      const data = new FormData(e.currentTarget);
+                      const values = Object.fromEntries(data.entries());
+                      const newConfig = {
+                        ...configQuery.data,
+                        name: values.name,
+                        short_name: values.short_name,
+                        domain: values.domain,
+                        base_url: values.base_url,
+                        theme: {
+                          ...configQuery.data?.theme,
+                          primary: values.primary,
+                          bg: values.bg,
+                        },
+                        copy: {
+                          ...configQuery.data?.copy,
+                          home_title: values.home_title,
+                        }
+                      };
+                      await mutationSaveConfig({ data: newConfig });
+                      toast.success("Configurações salvas!");
+                      configQuery.refetch();
+                    } catch (err: any) {
+                      toast.error("Erro ao salvar: " + err.message);
+                    } finally {
+                      setLoading(false);
+                    }
+                  }} 
+                  className="grid gap-6"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Nome do Site</Label>
+                      <Input name="name" defaultValue={configQuery.data?.name} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Nome Curto</Label>
+                      <Input name="short_name" defaultValue={configQuery.data?.short_name} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Domínio Principal</Label>
+                      <Input name="domain" defaultValue={configQuery.data?.domain} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>URL Base (DNS Cliente)</Label>
+                      <Input name="base_url" defaultValue={configQuery.data?.base_url} />
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h3 className="text-sm font-semibold mb-3">Identidade Visual & Tema</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label>Cor Primária</Label>
+                        <div className="flex gap-2">
+                          <Input name="primary" type="color" className="w-12 p-1 h-10" defaultValue={configQuery.data?.theme?.primary} />
+                          <Input defaultValue={configQuery.data?.theme?.primary} />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Cor de Fundo</Label>
+                        <div className="flex gap-2">
+                          <Input name="bg" type="color" className="w-12 p-1 h-10" defaultValue={configQuery.data?.theme?.bg} />
+                          <Input defaultValue={configQuery.data?.theme?.bg} />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Título Home</Label>
+                        <Input name="home_title" defaultValue={configQuery.data?.copy?.home_title} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end pt-4">
+                    <Button type="submit" disabled={loading}>
+                      Salvar Alterações
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
 
       {/* Modal Servidor */}
       <Dialog open={!!serverModal} onOpenChange={(o) => !o && setServerModal(null)}>
