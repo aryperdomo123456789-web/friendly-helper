@@ -309,7 +309,7 @@ function FloatingChat({ userId }: { userId?: string }) {
                 onChange={e => setNewMessage(e.target.value)}
                 className="bg-muted/50 border-none h-9 text-sm"
               />
-              <Button size="icon" className="h-9 w-9" disabled={sending || !newMessage.trim()}>
+              <Button type="submit" size="icon" className="h-9 w-9" disabled={sending || !newMessage.trim()}>
                 <Send className="h-4 w-4" />
               </Button>
             </div>
