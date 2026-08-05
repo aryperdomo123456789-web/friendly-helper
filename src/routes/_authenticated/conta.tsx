@@ -79,7 +79,7 @@ function ContaPage() {
   };
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
+    <div className="mx-auto max-w-xl space-y-6 w-full overflow-x-hidden">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Minha Conta</h1>
         <p className="text-muted-foreground">Atualize seu usuario e sua senha de acesso.</p>
