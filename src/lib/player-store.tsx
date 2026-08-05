@@ -10,6 +10,7 @@ type ServerRow = { id: string; name: string; sort_order: number };
 type SessionValue = {
   loading: boolean;
   isOwner: boolean;
+  authUserId: string | null;
   profile: {
     id: string;
     username: string;
@@ -79,6 +80,7 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
     () => ({
       loading: isLoading,
       isOwner: Boolean(data?.isOwner),
+      authUserId: (data as any)?.authUserId ?? null,
       profile: (data?.profile as SessionValue["profile"]) ?? null,
       servers,
       serverId,

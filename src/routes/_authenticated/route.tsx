@@ -22,14 +22,24 @@ import {
   UserCog,
   Users,
   MessageSquare,
+  Bell,
+  History,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getAppConfig } from "@/lib/config.functions";
+import { DEFAULT_BRAND_IMAGE_URL } from "@/lib/config.functions";
 import { listSupportThreads } from "@/lib/chat.functions";
-import { proxyMediaUrl } from "@/lib/media-url";
+import { getNotifications, markNotificationRead } from "@/lib/notifications.functions";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -63,14 +73,8 @@ function ShellLayout() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const fetchThreads = useServerFn(listSupportThreads);
-  const fetchConfig = useServerFn(getAppConfig);
-
-  const { data: appConfig } = useQuery({
-    queryKey: ["app-config-shell"],
-    queryFn: () => fetchConfig(),
-    staleTime: 5 * 60_000,
-  });
-  const sidebarLogoSrc = appConfig?.logo_small_url || appConfig?.logo_url;
+  const fetchNotifications = useServerFn(getNotifications);
+  const mutationMarkRead = useServerFn(markNotificationRead);
 
   const { data: threads } = useQuery({
     queryKey: ["support-threads-nav"],
@@ -78,6 +82,40 @@ function ShellLayout() {
     enabled: isOwner,
     refetchInterval: 10000,
   });
+
+  const { data: userNotifications } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => fetchNotifications(),
+    refetchInterval: 30000,
+  });
+
+  useEffect(() => {
+    if (!isOwner) return;
+
+    const channel = supabase
+      .channel("support_threads_nav")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "support_threads",
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["support-threads-nav"] });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [isOwner, queryClient]);
+
+  const unreadNotificationsCount = useMemo(
+    () => (userNotifications ?? []).filter((n: any) => !n.is_read).length,
+    [userNotifications],
+  );
 
   const totalUnread = (threads ?? []).reduce((acc: number, t: any) => acc + (t.unread_count_owner || 0), 0);
 
@@ -89,31 +127,27 @@ function ShellLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="relative h-dvh overflow-hidden bg-background text-foreground">
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-sidebar-border bg-sidebar transition-transform lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex h-dvh w-64 flex-col border-r border-sidebar-border bg-sidebar transition-transform lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
         <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
           <div className="grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-primary/10 text-sm font-black text-primary-foreground">
-            {sidebarLogoSrc ? (
-              <img
-                src={proxyMediaUrl(sidebarLogoSrc) ?? sidebarLogoSrc}
-                alt="Logo"
-                className="h-full w-full object-contain p-1"
-              />
-            ) : (
-              <span>W</span>
-            )}
+            <img
+              src={DEFAULT_BRAND_IMAGE_URL}
+              alt="Logo"
+              className="h-full w-full object-contain p-1"
+            />
           </div>
           <span className="text-sm font-bold tracking-[0.18em] text-sidebar-foreground">
             WEBPLAYER
           </span>
         </div>
 
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-3 custom-scrollbar">
           {NAV.map((item) => {
             const isRestricted = !isOwner && (blocked || expired) && item.restricted;
             if (isRestricted) return null;
@@ -124,7 +158,7 @@ function ShellLayout() {
                 to={item.to}
                 onClick={() => setOpen(false)}
                 activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
@@ -136,7 +170,7 @@ function ShellLayout() {
             to="/conta"
             onClick={() => setOpen(false)}
             activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
           >
             <UserCog className="h-4 w-4" />
             Conta
@@ -147,7 +181,7 @@ function ShellLayout() {
                 to="/usuarios"
                 onClick={() => setOpen(false)}
                 activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
               >
                 <Users className="h-4 w-4" />
                 Usuarios
@@ -156,7 +190,7 @@ function ShellLayout() {
                 to="/painel"
                 onClick={() => setOpen(false)}
                 activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent"
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
               >
                 <ShieldCheck className="h-4 w-4" />
                 Painel do Dono
@@ -165,7 +199,7 @@ function ShellLayout() {
                 to="/suporte"
                 onClick={() => setOpen(false)}
                 activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-                className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent"
+                className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
               >
                 <div className="flex items-center gap-3">
                   <MessageSquare className="h-4 w-4" />
@@ -178,7 +212,17 @@ function ShellLayout() {
                 )}
               </Link>
             </>
-          ) : null}
+          ) : (
+            <Link
+              to="/suporte"
+              onClick={() => setOpen(false)}
+            activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+          >
+            <History className="h-4 w-4" />
+            Historico de Suporte
+            </Link>
+          )}
         </nav>
 
 
@@ -213,7 +257,7 @@ function ShellLayout() {
         />
       ) : null}
 
-      <div className="flex flex-col flex-1 lg:pl-64 min-w-0 w-full overflow-x-hidden">
+      <div className="flex h-dvh min-w-0 w-full flex-1 flex-col overflow-hidden lg:pl-64">
         <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur">
           <Button
             variant="ghost"
@@ -238,6 +282,69 @@ function ShellLayout() {
           </div>
 
           <div className="ml-auto flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full border border-border/50 bg-sidebar/40 hover:bg-primary/10 hover:text-primary transition-all">
+                  <Bell className="h-5 w-5" />
+                  {unreadNotificationsCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-black text-destructive-foreground shadow-lg animate-bounce">
+                      {unreadNotificationsCount}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80 bg-sidebar border-sidebar-border p-2 shadow-2xl backdrop-blur-xl">
+                <DropdownMenuLabel className="flex items-center justify-between px-2 py-1.5">
+                  <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">Notificações</span>
+                  {unreadNotificationsCount > 0 && (
+                    <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full font-bold">
+                      {unreadNotificationsCount} NOVAS
+                    </span>
+                  )}
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-sidebar-border opacity-50" />
+                <div className="max-h-[350px] overflow-y-auto py-1 custom-scrollbar">
+                  {userNotifications?.length === 0 ? (
+                    <div className="px-4 py-8 text-center">
+                      <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-sidebar-accent/50 opacity-20">
+                        <Bell className="h-5 w-5" />
+                      </div>
+                      <p className="text-xs font-medium text-muted-foreground">Tudo em dia! Nenhuma notificação por aqui.</p>
+                    </div>
+                  ) : (
+                    userNotifications?.map((n: any) => (
+                      <DropdownMenuItem
+                        key={n.id}
+                        className={cn(
+                          "flex flex-col items-start gap-1 p-3 rounded-xl transition-all mb-1 cursor-default",
+                          !n.is_read ? "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary" : "opacity-60 grayscale hover:grayscale-0 hover:bg-sidebar-accent",
+                        )}
+                        onSelect={async () => {
+                          if (!n.is_read) {
+                            await mutationMarkRead({ data: n.id });
+                            queryClient.invalidateQueries({ queryKey: ["notifications"] });
+                          }
+                        }}
+                      >
+                        <div className="flex w-full items-center justify-between gap-2">
+                          <span className={cn(
+                            "text-xs font-black uppercase tracking-tight",
+                            n.type === "expiration" ? "text-destructive" : "text-primary",
+                          )}>
+                            {n.title}
+                          </span>
+                          <span className="text-[9px] font-bold text-muted-foreground/60">
+                            {new Date(n.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-[11px] leading-relaxed text-sidebar-foreground/80">{n.content}</p>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {servers.length > 0 && location.pathname !== "/painel" && location.pathname !== "/suporte" ? (
               <Select value={serverId ?? ""} onValueChange={setServerId}>
                 <SelectTrigger className="w-[190px] bg-sidebar/50 border-border/50">
@@ -263,7 +370,7 @@ function ShellLayout() {
           </div>
         ) : null}
 
-        <main className="p-4 lg:p-6">
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar">
           {!isOwner && (blocked || expired) && location.pathname !== "/conta" ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="mb-6 rounded-full bg-destructive/10 p-6">

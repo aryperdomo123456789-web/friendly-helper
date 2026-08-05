@@ -42,9 +42,34 @@ const LABEL: Record<Kind, { title: string; list: string; empty: string; search: 
   },
 };
 
-export function Catalog({ kind }: { kind: Kind }) {
+function MarqueeText({
+  text,
+  active,
+  className = "",
+}: {
+  text: string;
+  active?: boolean;
+  className?: string;
+}) {
+  return (
+    <span className={cn("block overflow-hidden whitespace-nowrap", className)}>
+      <span
+        className={cn(
+          "wp-marquee inline-flex items-center gap-8",
+          active ? "wp-marquee-run" : "wp-marquee-run-on-hover",
+        )}
+      >
+        <span>{text}</span>
+        <span aria-hidden="true">{text}</span>
+      </span>
+    </span>
+  );
+}
+
+export function Catalog({ kind, initialSearch = "" }: { kind: Kind; initialSearch?: string }) {
   const { serverId, activeServer, blocked, profile } = usePlayerSession();
   const queryClient = useQueryClient();
+  const deviceId = getDeviceId();
   const fetchCategories = useServerFn(getCategories);
   const fetchStreams = useServerFn(getStreams);
   const fetchPlayback = useServerFn(getPlaybackUrl);
@@ -54,24 +79,54 @@ export function Catalog({ kind }: { kind: Kind }) {
 
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [catTerm, setCatTerm] = useState("");
-  const [term, setTerm] = useState("");
+  const [term, setTerm] = useState(initialSearch);
   const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [playing, setPlaying] = useState<{ url: string; name: string; icon: string | null } | null>(
-    null,
-  );
+  const [playing, setPlaying] = useState<{ id: string; url: string; name: string; icon: string | null } | null>(null);
   const [openSeries, setOpenSeries] = useState<{ id: string; name: string } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const playbackCacheKey = (item: { id: string; ext?: string | null }) => [
+    "playback-url",
+    serverId,
+    kind,
+    item.id,
+    item.ext ?? "",
+    deviceId,
+  ];
+  const playbackQueryFn = (item: { id: string; ext?: string | null; name: string; icon: string | null }) =>
+    () =>
+      fetchPlayback({
+        data: {
+          server_id: serverId!,
+          kind,
+          stream_id: item.id,
+          device_id: deviceId,
+          ...(item.ext ? { ext: item.ext } : {}),
+        },
+      });
+
+  const prefetchPlayback = (item: { id: string; name: string; icon: string | null; ext?: string | null }) => {
+    if (!serverId) return;
+    void queryClient.prefetchQuery({
+      queryKey: playbackCacheKey(item),
+      queryFn: playbackQueryFn(item),
+      staleTime: 24 * 60 * 60 * 1000,
+    });
+  };
 
 
   useEffect(() => {
     setCategoryId(null);
-    setTerm("");
     setCatTerm("");
+    setTerm(initialSearch);
     setPlaying(null);
     setOpenSeries(null);
     // Limpar cache de streams ao trocar de servidor ou tipo para evitar bootstrap duplicado
     queryClient.invalidateQueries({ queryKey: ["streams"] });
-  }, [kind, serverId, queryClient]);
+  }, [kind, serverId, initialSearch, queryClient]);
+
+  useEffect(() => {
+    setTerm(initialSearch);
+  }, [initialSearch]);
 
 
   const categories = useQuery({
@@ -82,7 +137,8 @@ export function Catalog({ kind }: { kind: Kind }) {
     staleTime: 10 * 60_000,
   });
 
-  const activeCategory = categoryId ?? categories.data?.[0]?.category_id ?? null;
+  const searchAll = Boolean(initialSearch.trim());
+  const activeCategory = searchAll ? null : categoryId ?? categories.data?.[0]?.category_id ?? null;
 
   const streams = useQuery({
     queryKey: ["streams", kind, serverId, activeCategory],
@@ -94,7 +150,7 @@ export function Catalog({ kind }: { kind: Kind }) {
           ...(activeCategory ? { category_id: activeCategory } : {}),
         },
       }),
-    enabled: Boolean(serverId && activeCategory),
+    enabled: Boolean(serverId) && (kind === "live" ? Boolean(activeCategory) : true),
     staleTime: 5 * 60_000,
   });
 
@@ -126,16 +182,12 @@ export function Catalog({ kind }: { kind: Kind }) {
   }) => {
     setLoadingId(item.id);
     try {
-      const result = await fetchPlayback({
-        data: {
-          server_id: serverId!,
-          kind,
-          stream_id: item.id,
-          device_id: getDeviceId(),
-          ...(item.ext ? { ext: item.ext } : {}),
-        },
+      const result = await queryClient.fetchQuery({
+        queryKey: playbackCacheKey(item),
+        queryFn: playbackQueryFn(item),
+        staleTime: 24 * 60 * 60 * 1000,
       });
-      setPlaying({ url: result.url, name: item.name, icon: item.icon });
+      setPlaying({ id: item.id, url: result.url, name: item.name, icon: item.icon });
       if (typeof window !== "undefined" && window.innerWidth < 1024) {
         // Comportamento mobile: scroll imediato para o player
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -173,7 +225,7 @@ export function Catalog({ kind }: { kind: Kind }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 min-w-0 w-full overflow-x-hidden pb-10">
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4 overflow-hidden">
       {blocked && (
         <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-destructive/50 bg-destructive/10 p-4 mb-2">
           <div className="flex items-start gap-3">
@@ -198,7 +250,7 @@ export function Catalog({ kind }: { kind: Kind }) {
         </div>
       )}
 
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between px-1">
+      <div className="flex flex-none flex-col gap-1 px-1 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h1 className="truncate text-xl font-bold sm:text-2xl flex items-center gap-2">
             {LABEL[kind].title}
@@ -216,8 +268,8 @@ export function Catalog({ kind }: { kind: Kind }) {
 
 
       {/* Layout do legado: categorias | lista | player sempre na tela */}
-      <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.15fr)] min-w-0">
-        <aside className="flex flex-col rounded-xl border border-border bg-card p-2 min-w-0">
+      <div className="grid flex-1 min-h-0 min-w-0 gap-4 lg:grid-cols-[290px_minmax(0,0.95fr)_minmax(300px,360px)]">
+        <aside className="flex h-full min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-2">
           <p className="px-2 pb-2 text-sm font-semibold">Categorias</p>
           <div className="relative px-1 pb-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -228,7 +280,7 @@ export function Catalog({ kind }: { kind: Kind }) {
               className="h-9 pl-9"
             />
           </div>
-          <div className="wp-scroll max-h-[180px] space-y-1 overflow-y-auto lg:max-h-[62vh]">
+          <div className="wp-scroll flex-1 min-h-0 space-y-1 overflow-y-auto">
             {categories.isLoading ? (
               <div className="flex justify-center p-6">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -247,14 +299,19 @@ export function Catalog({ kind }: { kind: Kind }) {
                     }
                   }}
                   className={cn(
-                    "w-full truncate rounded-lg px-3 py-2 text-left text-sm transition-colors",
+                    "w-full rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                    "group",
                     activeCategory === category.category_id
                       ? "bg-primary/20 font-bold text-primary shadow-sm shadow-primary/10"
 
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
-                  {category.category_name}
+                  <MarqueeText
+                    text={category.category_name}
+                    active={activeCategory === category.category_id}
+                    className="pr-2"
+                  />
                 </button>
               ))
             )}
@@ -266,7 +323,7 @@ export function Catalog({ kind }: { kind: Kind }) {
           </div>
         </aside>
 
-        <section className="flex flex-col rounded-xl border border-border bg-card p-2 min-w-0">
+        <section className="flex h-full min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-2">
           {openSeries ? (
             <>
               <div className="flex items-center gap-2 px-1 pb-2">
@@ -281,7 +338,7 @@ export function Catalog({ kind }: { kind: Kind }) {
                 </Button>
                 <p className="truncate text-sm font-bold uppercase tracking-tight">{openSeries.name}</p>
               </div>
-              <div className="wp-scroll max-h-[62vh] space-y-3 overflow-y-auto px-1 pb-4">
+              <div className="wp-scroll flex-1 min-h-0 space-y-3 overflow-y-auto px-1 pb-4">
 
                 {seriesInfo.isLoading ? (
                   <div className="flex justify-center p-8">
@@ -302,6 +359,18 @@ export function Catalog({ kind }: { kind: Kind }) {
                             key={episode.id}
                             variant="secondary"
                             className="w-full justify-start"
+                            onMouseEnter={() => prefetchPlayback({
+                              id: episode.id,
+                              name: `${openSeries.name} - ${episode.episode_num}. ${episode.title}`,
+                              icon: null,
+                              ext: episode.ext,
+                            })}
+                            onFocus={() => prefetchPlayback({
+                              id: episode.id,
+                              name: `${openSeries.name} - ${episode.episode_num}. ${episode.title}`,
+                              icon: null,
+                              ext: episode.ext,
+                            })}
                             onClick={() =>
                               void play({
                                 id: episode.id,
@@ -339,7 +408,7 @@ export function Catalog({ kind }: { kind: Kind }) {
                   className="h-9 pl-9"
                 />
               </div>
-              <div id="wp-items-area" className="wp-scroll max-h-[400px] overflow-y-auto px-1 lg:max-h-[62vh] pb-4">
+              <div id="wp-items-area" className="wp-scroll flex-1 min-h-0 overflow-y-auto px-1 pb-4">
                 {streams.isLoading ? (
                   <div className="flex justify-center p-16">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -352,19 +421,33 @@ export function Catalog({ kind }: { kind: Kind }) {
                   <div
                     className={cn(
                       "grid gap-2",
-                      kind === "live" ? "grid-cols-2 xl:grid-cols-3" : "grid-cols-2 xl:grid-cols-3",
+                      kind === "live"
+                        ? "grid-cols-2 xl:grid-cols-3"
+                        : "grid-cols-2 xl:grid-cols-4",
                     )}
                   >
-                    {filtered.slice(0, 400).map((item) => (
+                    {filtered.slice(0, 400).map((item) => {
+                      const isActiveItem = kind !== "series" && playing?.id === item.id;
+
+                      return (
                       <button
                         key={`${item.id}-${item.name}`}
                         type="button"
+                        onMouseEnter={() => prefetchPlayback(item)}
+                        onFocus={() => prefetchPlayback(item)}
+                        onTouchStart={() => prefetchPlayback(item)}
                         onClick={() =>
                           kind === "series"
                             ? setOpenSeries({ id: item.id, name: item.name })
                             : void play(item)
                         }
-                        className="group overflow-hidden rounded-xl border border-border bg-secondary/20 text-left transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10"
+                        tabIndex={0}
+                        data-tv-focus
+                        aria-label={item.name}
+                        className={cn(
+                          "group overflow-hidden rounded-xl border border-border bg-secondary/20 text-left transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                          isActiveItem && "border-primary/60 shadow-lg shadow-primary/10",
+                        )}
                       >
                         <div
                           className={cn(
@@ -394,9 +477,16 @@ export function Catalog({ kind }: { kind: Kind }) {
                             <PlayCircle className="absolute inset-0 m-auto h-9 w-9 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
                           )}
                         </div>
-                        <p className="line-clamp-2 px-2 py-2 text-xs font-medium">{item.name}</p>
+                        <div className="px-2 py-2 text-xs font-medium">
+                          <MarqueeText
+                            text={item.name}
+                            active={isActiveItem}
+                            className="line-clamp-2"
+                          />
+                        </div>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -404,7 +494,7 @@ export function Catalog({ kind }: { kind: Kind }) {
           )}
         </section>
 
-        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start lg:min-h-[400px]">
+        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start lg:w-full lg:max-w-[380px] lg:justify-self-end">
           {playing ? (
             <div className="space-y-2">
               <VideoPlayer url={playing.url} poster={playing.icon} title={playing.name} />
@@ -412,7 +502,7 @@ export function Catalog({ kind }: { kind: Kind }) {
               
               {/* EPG / Metadata Area */}
               <PlayerInfo 
-                streamId={loadingId || ""} 
+                streamId={playing.id}
                 kind={kind} 
                 name={playing.name} 
                 fetchEPG={fetchEPG} 

@@ -86,6 +86,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { proxyMediaUrl } from "@/lib/media-url";
+import { copyToClipboard } from "@/lib/clipboard";
 
 
 export const Route = createFileRoute("/_authenticated/painel")({
@@ -132,6 +133,7 @@ function PainelDono() {
   });
 
   const [selectedThread, setSelectedThread] = useState<any>(null);
+  const [copyingLinkId, setCopyingLinkId] = useState<string | null>(null);
 
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -537,6 +539,7 @@ function PainelDono() {
                     <TableHead>Identificador (Slug)</TableHead>
                     <TableHead>Duração</TableHead>
                     <TableHead>Conexões</TableHead>
+                    <TableHead>Bônus</TableHead>
                     <TableHead>URL Pública</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -544,9 +547,9 @@ function PainelDono() {
                 </TableHeader>
                 <TableBody>
                   {testLinks.isLoading ? (
-                    <TableRow><TableCell colSpan={6} className="h-24 text-center">Carregando...</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="h-24 text-center">Carregando...</TableCell></TableRow>
                   ) : (testLinks.data ?? []).length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="h-24 text-center">Nenhum link de teste criado.</TableCell></TableRow>
+                    <TableRow><TableCell colSpan={7} className="h-24 text-center">Nenhum link de teste criado.</TableCell></TableRow>
                   ) : (
                     testLinks.data?.map((link: any) => (
                       <TableRow key={link.id}>
@@ -556,18 +559,33 @@ function PainelDono() {
                         </TableCell>
                         <TableCell>{link.max_connections}</TableCell>
                         <TableCell>
+                          <div className="text-xs leading-5 text-muted-foreground">
+                            <div>
+                              Mensal: <span className="font-semibold text-foreground">{link.bonus_days_monthly ?? 15} dias</span>
+                            </div>
+                            <div>
+                              Trimestral+: <span className="font-semibold text-foreground">{link.bonus_days_quarterly ?? 30} dias</span>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           <div className="flex items-center gap-2">
                             <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded">
                               /teste/{link.slug}
                             </code>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               className="h-6 w-6"
-                              onClick={() => {
+                              type="button"
+                              disabled={copyingLinkId === link.id}
+                              onClick={async () => {
                                 const url = `${window.location.origin}/teste/${link.slug}`;
-                                navigator.clipboard.writeText(url);
-                                toast.success("URL copiada com sucesso!");
+                                setCopyingLinkId(link.id);
+                                const ok = await copyToClipboard(url);
+                                if (ok) toast.success("URL copiada com sucesso!");
+                                else toast.error("Nao foi possivel copiar a URL.");
+                                setCopyingLinkId((current) => (current === link.id ? null : current));
                               }}
                             >
                               <Copy className="h-3.3 w-3.3" />
@@ -631,6 +649,7 @@ function PainelDono() {
                         tmdb_api_key: values['tmdb_api_key'] as string || undefined,
                         epg_xmltv_url: values['epg_xmltv_url'] as string || undefined,
                         theme_mode: values['theme_mode'] as "azul" | "dark" | "light",
+                        telegram_handle: values['telegram_handle'] as string,
                         mp_access_token: values['mp_access_token'] as string,
                         mp_public_key: values['mp_public_key'] as string,
                         mp_enabled: values['mp_enabled'] === 'on',
@@ -822,6 +841,23 @@ function PainelDono() {
                     </p>
                   </div>
 
+                  <div className="border-t pt-4">
+                    <h3 className="text-sm font-semibold mb-3">Rodapé & Telegram</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>@ do Telegram</Label>
+                        <Input
+                          name="telegram_handle"
+                          defaultValue={configQuery.data?.telegram_handle}
+                          placeholder="@MagoPD"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-2">
+                      Esse @ aparece no rodapé público e vira link direto para o Telegram.
+                    </p>
+                  </div>
+
                   <div className="flex justify-end pt-4">
                     <Button type="submit" disabled={loading}>
                       Salvar Alterações
@@ -957,30 +993,59 @@ function PainelDono() {
         <TabsContent value="referencia" className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Links de Indicação / Teste</h2>
-            <Button onClick={() => {
-              const testPlan = plans.data?.find((p: any) => p.name.toLowerCase().includes("teste") || Number(p.price) === 0);
-              setTestLinkModal({ 
-                slug: "", 
-                duration_minutes: testPlan ? (testPlan.duration_unit === 'minutes' ? testPlan.duration_value : testPlan.duration_unit === 'hours' ? testPlan.duration_value * 60 : testPlan.duration_value * 1440) : 360, 
-                max_connections: testPlan?.max_connections ?? 1, 
-                is_active: true,
-                description: ""
-              });
-            }}>
-              <Plus className="mr-2 h-4 w-4" /> Novo Link Público
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const testPlan = plans.data?.find((p: any) => p.name.toLowerCase().includes("teste") || Number(p.price) === 0);
+                  setTestLinkModal({ 
+                    slug: "", 
+                    duration_minutes: testPlan ? (testPlan.duration_unit === 'minutes' ? testPlan.duration_value : testPlan.duration_unit === 'hours' ? testPlan.duration_value * 60 : testPlan.duration_value * 1440) : 360, 
+                    max_connections: testPlan?.max_connections ?? 1, 
+                    is_active: true,
+                    description: "",
+                    owner_only: false,
+                    allow_repeat_device: false,
+                    bonus_days_monthly: 15,
+                    bonus_days_quarterly: 30,
+                  });
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" /> Novo Link Público
+              </Button>
+              <Button
+                onClick={() => {
+                  const testPlan = plans.data?.find((p: any) => p.name.toLowerCase().includes("teste") || Number(p.price) === 0);
+                  setTestLinkModal({ 
+                    slug: "dono-livre", 
+                    duration_minutes: testPlan ? (testPlan.duration_unit === 'minutes' ? testPlan.duration_value : testPlan.duration_unit === 'hours' ? testPlan.duration_value * 60 : testPlan.duration_value * 1440) : 360, 
+                    max_connections: testPlan?.max_connections ?? 1, 
+                    is_active: true,
+                    description: "Link Exclusivo do Dono",
+                    owner_only: true,
+                    allow_repeat_device: true,
+                    bonus_days_monthly: 15,
+                    bonus_days_quarterly: 30,
+                  });
+                }}
+              >
+                <Plus className="mr-2 h-4 w-4" /> Link Exclusivo do Dono
+              </Button>
+            </div>
           </div>
 
           <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Slug / Identificador</TableHead>
-                  <TableHead>Criado Por</TableHead>
-                  <TableHead>Duração</TableHead>
-                  <TableHead>Conexões</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Slug / Identificador</TableHead>
+                    <TableHead>Criado Por</TableHead>
+                    <TableHead>Acesso</TableHead>
+                    <TableHead>Duração</TableHead>
+                    <TableHead>Conexões</TableHead>
+                    <TableHead>Bônus</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -994,8 +1059,30 @@ function PainelDono() {
                         <span className="text-xs text-muted-foreground italic">Sistema / Dono</span>
                       )}
                     </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {link.slug === "dono-livre" ? (
+                          <Badge variant="secondary" className="text-[9px] uppercase font-bold">Exclusivo do Dono</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] uppercase font-bold">Público</Badge>
+                        )}
+                        {link.slug === "dono-livre" ? (
+                          <Badge variant="outline" className="text-[9px] uppercase font-bold border-online/30 text-online">Sem Bloqueio</Badge>
+                        ) : null}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-xs">{link.duration_minutes} min</TableCell>
                     <TableCell className="text-xs">{link.max_connections} conn</TableCell>
+                    <TableCell>
+                      <div className="text-xs leading-5 text-muted-foreground">
+                        <div>
+                          Mensal: <span className="font-semibold text-foreground">{link.bonus_days_monthly ?? 15} dias</span>
+                        </div>
+                        <div>
+                          Trimestral+: <span className="font-semibold text-foreground">{link.bonus_days_quarterly ?? 30} dias</span>
+                        </div>
+                      </div>
+                    </TableCell>
                     <TableCell>
                       <span className={cn("text-[10px] px-2 py-0.5 rounded-full", link.is_active ? "bg-online/10 text-online" : "bg-destructive/10 text-destructive")}>
                         {link.is_active ? "Ativo" : "Inativo"}
@@ -1003,11 +1090,20 @@ function PainelDono() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => {
-                          const url = `${window.location.origin}/teste/${link.slug}`;
-                          navigator.clipboard.writeText(url);
-                          toast.success("Link copiado!");
-                        }}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          type="button"
+                          disabled={copyingLinkId === link.id}
+                          onClick={async () => {
+                            const url = `${window.location.origin}/teste/${link.slug}`;
+                            setCopyingLinkId(link.id);
+                            const ok = await copyToClipboard(url);
+                            if (ok) toast.success("Link copiado!");
+                            else toast.error("Nao foi possivel copiar o link.");
+                            setCopyingLinkId((current) => (current === link.id ? null : current));
+                          }}
+                        >
                           <Copy className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" onClick={() => setTestLinkModal(link)}>
@@ -1274,6 +1370,27 @@ function PainelDono() {
                   placeholder="Ex: Teste Premium com Canais 4K"
                 />
                 <p className="text-[10px] text-muted-foreground">Esta descrição aparecerá na aba Conta do usuário.</p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 rounded-xl border border-border/60 bg-muted/20 p-3">
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!!testLinkModal?.owner_only}
+                    onChange={(e) => setTestLinkModal({ ...testLinkModal, owner_only: e.target.checked })}
+                  />
+                  <span>Exclusivo do Dono</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!!testLinkModal?.allow_repeat_device}
+                    onChange={(e) => setTestLinkModal({ ...testLinkModal, allow_repeat_device: e.target.checked })}
+                  />
+                  <span>Não bloquear o mesmo dispositivo</span>
+                </label>
+                <p className="text-[10px] text-muted-foreground">
+                  Use o modo exclusivo para links privados do dono. O modo sem bloqueio permite criar vários testes no mesmo navegador sem travar o aparelho.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2 relative">

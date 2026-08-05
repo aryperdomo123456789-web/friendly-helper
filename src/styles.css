@@ -135,12 +135,137 @@
 @layer base {
   * {
     border-color: var(--color-border);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  /* Reset para TVs (WebOS/Tizen costumam ter paddings estranhos) */
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden;
+    /* Suaviza rolagem em hardwares limitados */
+    -webkit-overflow-scrolling: touch;
+    /* Fix para fontes pequenas em resoluções 4K simuladas */
+    text-rendering: optimizeLegibility;
   }
 
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    scroll-behavior: smooth;
+    /* Força renderização acelerada por GPU */
+    transform: translateZ(0);
+    backface-visibility: hidden;
   }
+
+  /* TV Navigation Focus Styles - High Contrast & Stability */
+  :focus-visible {
+    outline: 4px solid var(--primary) !important;
+    outline-offset: 4px;
+    /* Escala menor para evitar trepidação em TVs antigas */
+    transform: scale(1.03);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 9999;
+    position: relative;
+    /* Glow mais forte para visibilidade em telas de TV de longe */
+    box-shadow: 0 0 35px var(--primary), 0 0 10px rgba(0,0,0,0.5);
+    background-color: var(--primary) !important;
+    color: var(--primary-foreground) !important;
+  }
+
+  /* Garante que SVGs dentro de foco também mudem de cor */
+  :focus-visible svg {
+    color: var(--primary-foreground) !important;
+  }
+}
+
+/* 📺 TV Optimized Queries */
+@media screen and (min-width: 1280px) {
+  :root {
+    /* Aumenta a base de fonte para TVs (distância do sofá) */
+    font-size: 18px;
+  }
+}
+
+@media screen and (min-width: 1920px) {
+  :root {
+    font-size: 20px;
+  }
+}
+
+/* Fix para navegadores de TV que não suportam flex-gap ou subgrid */
+@supports not (gap: 1rem) {
+  .flex.gap-4 > * + * { margin-left: 1rem; }
+  .grid.gap-4 > * { margin-bottom: 1rem; }
+}
+
+:root {
+  --scrollbar-track: oklch(0.13 0.018 264 / 0.96);
+  --scrollbar-thumb: oklch(0.68 0.16 249 / 0.92);
+  --scrollbar-thumb-hover: oklch(0.78 0.18 249 / 1);
+}
+
+html,
+body,
+* {
+  scrollbar-gutter: stable;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--scrollbar-thumb), oklch(0.76 0.18 249 / 0.98));
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
+@keyframes wp-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.wp-marquee {
+  display: inline-block;
+  min-width: max-content;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.wp-marquee-run {
+  animation: wp-marquee 4.8s linear infinite;
+}
+
+.wp-marquee-run-on-hover {
+  animation: none;
+}
+
+.group:hover .wp-marquee-run-on-hover,
+.group:focus-visible .wp-marquee-run-on-hover {
+  animation: wp-marquee 4.8s linear infinite;
 }
 
 /* ------------------------------------------------------------------
@@ -250,10 +375,35 @@ body {
 }
 
 .wp-scroll::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 .wp-scroll::-webkit-scrollbar-thumb {
-  background: var(--secondary);
+  background: linear-gradient(180deg, var(--scrollbar-thumb), oklch(0.76 0.18 249 / 0.98));
   border-radius: 999px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+.wp-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--scrollbar-thumb), oklch(0.76 0.18 249 / 0.98));
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }

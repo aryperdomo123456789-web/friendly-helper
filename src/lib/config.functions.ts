@@ -5,6 +5,9 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { AppConfigSchema } from "./types";
 import { z } from "zod";
 
+export const DEFAULT_BRAND_IMAGE_URL = "/brand/webplayer-brand.png";
+export const REMOTE_BRAND_IMAGE_URL = "https://i.imgur.com/RrqwMFH.png";
+
 function getRuntimeBaseUrl(): string | null {
   const request = getRequest();
   if (!request) return null;
@@ -28,6 +31,9 @@ function mergeRuntimeConfig(config: unknown) {
   const runtimeDomain = getRuntimeDomain();
   return {
     ...parsed,
+    logo_url: parsed.logo_url || DEFAULT_BRAND_IMAGE_URL,
+    logo_small_url: parsed.logo_small_url || parsed.logo_url || DEFAULT_BRAND_IMAGE_URL,
+    favicon_url: parsed.favicon_url || parsed.logo_url || DEFAULT_BRAND_IMAGE_URL,
     ...(runtimeDomain ? { domain: runtimeDomain } : null),
     ...(runtimeBaseUrl ? { base_url: runtimeBaseUrl } : null),
   };

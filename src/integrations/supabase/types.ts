@@ -313,9 +313,11 @@ export type Database = {
           created_by_id: string | null
           description: string | null
           duration_minutes: number
+          allow_repeat_device: boolean
           id: string
           is_active: boolean
           max_connections: number
+          owner_only: boolean
           slug: string
           updated_at: string
         }
@@ -326,9 +328,11 @@ export type Database = {
           created_by_id?: string | null
           description?: string | null
           duration_minutes?: number
+          allow_repeat_device?: boolean
           id?: string
           is_active?: boolean
           max_connections?: number
+          owner_only?: boolean
           slug: string
           updated_at?: string
         }
@@ -339,9 +343,11 @@ export type Database = {
           created_by_id?: string | null
           description?: string | null
           duration_minutes?: number
+          allow_repeat_device?: boolean
           id?: string
           is_active?: boolean
           max_connections?: number
+          owner_only?: boolean
           slug?: string
           updated_at?: string
         }

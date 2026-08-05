@@ -80,15 +80,18 @@ set server_id = excluded.server_id,
     password = excluded.password,
     dns = excluded.dns;
 
-insert into public.test_links (id, slug, duration_minutes, max_connections, is_active, bonus_days_monthly, bonus_days_quarterly, description, created_at, updated_at)
+insert into public.test_links (id, slug, duration_minutes, max_connections, is_active, owner_only, allow_repeat_device, bonus_days_monthly, bonus_days_quarterly, description, created_at, updated_at)
 values
-  ('c4164ee4-1060-4486-921e-44fa086da188', 'gratis', 360, 1, true, 15, 30, null, timezone('utc'::text, now()), timezone('utc'::text, now())),
-  ('3525830a-4a60-4bf3-8f9a-b567afe87c84', 'test-precision-blqac', 240, 1, true, 15, 30, 'Link de Teste Precisão', timezone('utc'::text, now()), timezone('utc'::text, now()))
+  ('c4164ee4-1060-4486-921e-44fa086da188', 'gratis', 360, 1, true, false, false, 15, 30, null, timezone('utc'::text, now()), timezone('utc'::text, now())),
+  ('d8f1d0e6-9f4c-4d15-a8de-8deabcf7a8c1', 'dono-livre', 360, 1, true, true, true, 15, 30, 'Link Exclusivo do Dono', timezone('utc'::text, now()), timezone('utc'::text, now())),
+  ('3525830a-4a60-4bf3-8f9a-b567afe87c84', 'test-precision-blqac', 240, 1, true, false, false, 15, 30, 'Link de Teste Precisão', timezone('utc'::text, now()), timezone('utc'::text, now()))
 on conflict (id) do update
 set slug = excluded.slug,
     duration_minutes = excluded.duration_minutes,
     max_connections = excluded.max_connections,
     is_active = excluded.is_active,
+    owner_only = excluded.owner_only,
+    allow_repeat_device = excluded.allow_repeat_device,
     bonus_days_monthly = excluded.bonus_days_monthly,
     bonus_days_quarterly = excluded.bonus_days_quarterly,
     description = excluded.description,

@@ -9,11 +9,26 @@ import {
 } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, type ReactNode } from "react";
-import { getAppConfig } from "../lib/config.functions";
-import { proxyMediaUrl } from "../lib/media-url";
+import { DEFAULT_BRAND_IMAGE_URL, getAppConfig } from "../lib/config.functions";
+import { useGlobalRemoteNavigation } from "../lib/remote-navigation";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+
+const LEGACY_CSS_BOOTSTRAP = `
+(function () {
+  try {
+    var ua = navigator.userAgent || "";
+    var isTvBrowser = /(webos|tizen|smarttv|smart-tv|android tv|googletv|hbbtv|firetv|appletv|netcast)/i.test(ua);
+    var needsLegacy = isTvBrowser || !("CSSLayerBlockRule" in window) || !window.CSS || !window.CSS.supports || !window.CSS.supports("color", "oklch(0 0 0)");
+    if (!needsLegacy || document.querySelector('link[data-legacy-css="true"]')) return;
+    var link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = "/api/public/legacy-css?v=20260805";
+    link.setAttribute("data-legacy-css", "true");
+    document.head.appendChild(link);
+  } catch (error) {}
+})();`;
 
 function NotFoundComponent() {
   return (
@@ -89,8 +104,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         { property: "og:title", content: "WebPlayer IPTV" },
         { property: "og:description", content: "O melhor player IPTV multi-servidor." },
         { property: "og:type", content: "website" },
+        { property: "og:image", content: DEFAULT_BRAND_IMAGE_URL },
+        { property: "og:image:secure_url", content: DEFAULT_BRAND_IMAGE_URL },
+        { property: "og:image:alt", content: "WebPlayer IPTV" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:site", content: "@Lovable" },
+        { name: "twitter:image", content: DEFAULT_BRAND_IMAGE_URL },
+        { name: "twitter:image:alt", content: "WebPlayer IPTV" },
         { name: "theme-color", content: "#05070b" },
         { name: "apple-mobile-web-app-capable", content: "yes" },
         { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
@@ -100,7 +120,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           rel: "stylesheet",
           href: appCss,
         },
-        { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+        { rel: "icon", href: DEFAULT_BRAND_IMAGE_URL, type: "image/png" },
         { rel: "manifest", href: "/manifest.webmanifest" },
       ],
     };
@@ -112,9 +132,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
-  return (
+    return (
     <html lang="en">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: LEGACY_CSS_BOOTSTRAP }} />
         <HeadContent />
       </head>
       <body>
@@ -139,18 +160,15 @@ function ThemeApplier() {
     document.documentElement.setAttribute("data-theme", mode);
     document.documentElement.classList.toggle("dark", mode !== "light");
 
-    // Dynamic Icon/Favicon
-    if (config?.favicon_url) {
-      const head = document.getElementsByTagName('head')[0];
-      if (head) {
-        let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
-        if (!link) {
-          link = document.createElement('link');
-          link.rel = 'icon';
-          head.appendChild(link);
-        }
-        link.href = proxyMediaUrl(config.favicon_url) ?? config.favicon_url;
+    const head = document.getElementsByTagName("head")[0];
+    if (head) {
+      let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement("link");
+        link.rel = "icon";
+        head.appendChild(link);
       }
+      link.href = DEFAULT_BRAND_IMAGE_URL;
     }
   }, [config]);
 
@@ -159,6 +177,7 @@ function ThemeApplier() {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  useGlobalRemoteNavigation();
 
   return (
     <QueryClientProvider client={queryClient}>

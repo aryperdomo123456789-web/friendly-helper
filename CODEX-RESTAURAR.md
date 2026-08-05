@@ -16,7 +16,7 @@ Subir e manter o projeto em produção em:
 1. `deploy/sql/01-schema.sql`
 2. `deploy/sql/02-dados-base.sql`
 3. `deploy/seed/users.json`
-4. `deploy/seed-users.mjs`
+4. `deploy/seed/seed-users.mjs`
 5. `npm run build:node`
 6. `pm2 start ecosystem.config.cjs`
 7. `pm2 save`
@@ -62,7 +62,7 @@ Define os usuários que devem existir no backend:
 - acessos por servidor
 - vínculos de indicação
 
-### `deploy/seed-users.mjs`
+### `deploy/seed/seed-users.mjs`
 
 Script de seed idempotente para:
 
@@ -90,14 +90,19 @@ Guia de migração com:
 
 Atalho curto para o guia principal de migração.
 
-## Função nova de notificação
+## Funções novas de notificação
 
-O fluxo de notificação do sistema está integrado em:
+O sistema agora possui dois fluxos de notificação:
 
-- `src/lib/payments.functions.ts`
-- `src/routes/api/public/mercadopago-webhook.ts`
+- **Notificações internas do app**:
+  - `src/lib/notifications.functions.ts`
+  - barra superior com leitura individual de avisos
+  - envio em massa pelo painel do dono
+- **Notificação do Mercado Pago**:
+  - `src/lib/payments.functions.ts`
+  - `src/routes/api/public/mercadopago-webhook.ts`
 
-Ele envia `notification_url` para o Mercado Pago e processa a confirmação no webhook público, mantendo a ativação do plano e os bônus de indicação.
+O fluxo do Mercado Pago envia `notification_url` e processa a confirmação no webhook público, mantendo a ativação do plano e os bônus de indicação.
 
 ## Observações de produção
 

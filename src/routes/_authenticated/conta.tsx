@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { copyToClipboard } from "@/lib/clipboard";
 
 export const Route = createFileRoute("/_authenticated/conta")({
   head: () => ({
@@ -95,24 +96,13 @@ function ContaPage() {
       const result = await mpPreference({ data: { planId } });
       
       if ((result as any).simulate_success) {
-        toast.info("Simulando ativação direta (Modo Teste)...");
-        // Em um sistema real, o webhook faria isso. Para o teste prático, chamamos uma rota ou 
-        // simulamos o sucesso redirecionando para o webhook de teste se tivéssemos um, 
-        // mas aqui vamos apenas informar que para o teste prático, o dono pode ativar manualmente 
-        // ou podemos expor um botão de "Simular Pagamento" no log.
-        // No entanto, para ser fiel ao pedido "pule a parte do mercado pago", 
-        // vamos disparar um alerta que o admin deve aprovar ou vamos processar aqui se for admin.
-        
-        // Vamos apenas informar que o sistema está pronto para o webhook.
-        toast.success("Fluxo de pagamento iniciado! (Ambiente de Teste)");
-        return;
-      }
-
-      if ((result as any).simulate_success) {
-        toast.info("Modo Teste: Simulando ativação sem Mercado Pago...");
+        toast.info("Modo Teste: simulando ativação sem Mercado Pago...");
+        if (!account.data?.userId) {
+          throw new Error("Conta nao carregada para simulacao");
+        }
         await runSimulation({ 
           data: { 
-            userId: account.data!.userId, // Preciso garantir que userId vem no getMyAccount
+            userId: account.data.userId,
             planId 
           } 
         });
@@ -131,13 +121,28 @@ function ContaPage() {
     }
   };
 
-  const referralLink = typeof window !== 'undefined' 
-    ? `${window.location.origin}/teste/gratis?ref=${account.data?.referral_code}` 
+  const referralLink = typeof window !== 'undefined' && account.data?.referral_code
+    ? `${window.location.origin}/teste/gratis?ref=${account.data.referral_code}`
     : '';
 
-  const copyReferral = () => {
-    navigator.clipboard.writeText(referralLink);
-    toast.success("Link de indicação copiado!");
+  const [copyingLink, setCopyingLink] = useState<string | null>(null);
+  const [copyNotice, setCopyNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!copyNotice) return;
+    const timer = window.setTimeout(() => setCopyNotice(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [copyNotice]);
+
+  const copyReferral = async () => {
+    const ok = await copyToClipboard(referralLink);
+    if (ok) {
+      toast.success("Link de indicação copiado!");
+      setCopyNotice("Link de indicação copiado!");
+    } else {
+      toast.error("Nao foi possivel copiar o link.");
+      setCopyNotice("Nao foi possivel copiar o link.");
+    }
   };
 
   if (account.isLoading) {
@@ -150,6 +155,8 @@ function ContaPage() {
 
   const currentPlan = account.data?.plan;
   const isOwner = account.data?.isOwner;
+  const ownerReferralLinks = isOwner ? (account.data?.ownerTestLinks ?? []) : [];
+  const publicReferralLinks = account.data?.testLinks ?? [];
   const availablePlans = (account.data?.availablePlans || []).filter((plan: any) => {
     const isTestPlan = plan.name.toLowerCase().includes("teste") || Number(plan.price) === 0;
     const isMyPlan = currentPlan?.id === plan.id;
@@ -210,34 +217,115 @@ function ContaPage() {
             <CardDescription>Indique amigos e ganhe dias extras ou descontos.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {(account.data?.testLinks ?? []).length === 0 ? (
+            {!account.data?.referral_code ? (
+              <div className="rounded-lg bg-muted/50 p-6 text-center border border-dashed">
+                <p className="text-sm text-muted-foreground uppercase font-bold tracking-widest">
+                  Seu link de indicação será liberado após assinar um plano válido.
+                </p>
+              </div>
+            ) : publicReferralLinks.length === 0 && ownerReferralLinks.length === 0 ? (
               <div className="rounded-lg bg-muted/50 p-6 text-center border border-dashed">
                 <p className="text-sm text-muted-foreground uppercase font-bold tracking-widest">Nenhum link de indicação disponível no momento.</p>
               </div>
             ) : (
-              <div className="grid gap-4">
-                {(account.data?.testLinks ?? []).map((link: any) => {
-                  const fullUrl = `${window.location.origin}/teste/${link.slug}?ref=${account.data?.referral_code}`;
-                  return (
-                    <div key={link.slug} className="space-y-2 p-4 rounded-xl border border-primary/10 bg-primary/5">
-                      <div className="flex items-center justify-between">
-                        <Label className="text-[10px] uppercase font-black tracking-widest text-primary">
-                          {link.description || `Link: ${link.slug}`}
-                        </Label>
-                        <Badge variant="outline" className="text-[9px] uppercase font-bold border-primary/30">Ativo</Badge>
-                      </div>
-                      <div className="flex gap-2">
-                        <Input readOnly value={fullUrl} className="bg-background font-mono text-[10px] h-8" />
-                        <Button size="icon" onClick={() => {
-                          navigator.clipboard.writeText(fullUrl);
-                          toast.success("Link de indicação copiado!");
-                        }} variant="secondary" className="h-8 w-8">
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
+              <div className="grid gap-6">
+                {isOwner && ownerReferralLinks.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-black uppercase tracking-[0.3em] text-primary">Link exclusivo do dono</p>
+                      <Badge variant="secondary" className="text-[9px] uppercase font-bold">Somente Dono</Badge>
                     </div>
-                  );
-                })}
+                    <div className="grid gap-4">
+                      {ownerReferralLinks.map((link: any) => {
+                        const fullUrl = `${window.location.origin}/teste/${link.slug}?ref=${account.data?.referral_code}`;
+                        return (
+                          <div key={link.slug} className="space-y-2 p-4 rounded-xl border border-primary/10 bg-primary/5">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[10px] uppercase font-black tracking-widest text-primary">
+                                {link.description || `Link: ${link.slug}`}
+                              </Label>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-[9px] uppercase font-bold border-primary/30">Ativo</Badge>
+                                <Badge variant="outline" className="text-[9px] uppercase font-bold border-online/30 text-online">Sem Bloqueio</Badge>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <Input readOnly value={fullUrl} className="bg-background font-mono text-[10px] h-8" />
+                              <Button
+                                size="icon"
+                                type="button"
+                                disabled={copyingLink === link.slug}
+                                onClick={async () => {
+                                  setCopyingLink(link.slug);
+                                  const ok = await copyToClipboard(fullUrl);
+                                  if (ok) {
+                                    toast.success("Link de indicação copiado!");
+                                    setCopyNotice("Link de indicação copiado!");
+                                  } else {
+                                    toast.error("Nao foi possivel copiar o link.");
+                                    setCopyNotice("Nao foi possivel copiar o link.");
+                                  }
+                                  setCopyingLink((current) => (current === link.slug ? null : current));
+                                }}
+                                variant="secondary"
+                                className="h-8 w-8"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {publicReferralLinks.length > 0 && (
+                  <div className="space-y-3">
+                    {isOwner && (
+                      <p className="text-xs font-black uppercase tracking-[0.3em] text-primary/80">Links públicos</p>
+                    )}
+                    <div className="grid gap-4">
+                      {publicReferralLinks.map((link: any) => {
+                        const fullUrl = `${window.location.origin}/teste/${link.slug}?ref=${account.data?.referral_code}`;
+                        return (
+                          <div key={link.slug} className="space-y-2 p-4 rounded-xl border border-primary/10 bg-primary/5">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[10px] uppercase font-black tracking-widest text-primary">
+                                {link.description || `Link: ${link.slug}`}
+                              </Label>
+                              <Badge variant="outline" className="text-[9px] uppercase font-bold border-primary/30">Ativo</Badge>
+                            </div>
+                            <div className="flex gap-2">
+                              <Input readOnly value={fullUrl} className="bg-background font-mono text-[10px] h-8" />
+                              <Button
+                                size="icon"
+                                type="button"
+                                disabled={copyingLink === link.slug}
+                                onClick={async () => {
+                                  setCopyingLink(link.slug);
+                                  const ok = await copyToClipboard(fullUrl);
+                                  if (ok) {
+                                    toast.success("Link de indicação copiado!");
+                                    setCopyNotice("Link de indicação copiado!");
+                                  } else {
+                                    toast.error("Nao foi possivel copiar o link.");
+                                    setCopyNotice("Nao foi possivel copiar o link.");
+                                  }
+                                  setCopyingLink((current) => (current === link.slug ? null : current));
+                                }}
+                                variant="secondary"
+                                className="h-8 w-8"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
@@ -249,6 +337,22 @@ function ContaPage() {
           </CardContent>
         </Card>
       </div>
+
+      {copyNotice && (
+        <div className="fixed bottom-6 right-6 z-[80] animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="rounded-2xl border border-primary/30 bg-card/95 px-4 py-3 shadow-2xl backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <div className="grid h-8 w-8 place-items-center rounded-full bg-primary/15 text-primary">
+                <Copy className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-foreground">{copyNotice}</p>
+                <p className="text-[11px] text-muted-foreground">Pronto, o link já está na área de transferência.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Seção de Planos e Upgrade */}
       <section className="space-y-4">

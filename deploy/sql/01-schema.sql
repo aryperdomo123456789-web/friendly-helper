@@ -78,6 +78,9 @@ create table if not exists public.profiles (
   created_by uuid references auth.users(id),
   referral_code text unique,
   referred_by_id uuid references auth.users(id),
+  referral_source_slug text,
+  referral_source_code text,
+  referral_source_url text,
   created_at timestamptz not null default timezone('utc'::text, now())
 );
 
@@ -105,6 +108,8 @@ create table if not exists public.test_links (
   duration_minutes integer not null default 240,
   max_connections integer not null default 1,
   is_active boolean not null default true,
+  owner_only boolean not null default false,
+  allow_repeat_device boolean not null default false,
   bonus_days_monthly integer default 15,
   bonus_days_quarterly integer default 30,
   description text,
@@ -143,6 +148,16 @@ create table if not exists public.support_messages (
   created_at timestamptz not null default timezone('utc'::text, now())
 );
 
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  content text not null,
+  type text not null default 'general',
+  is_read boolean not null default false,
+  created_at timestamptz not null default timezone('utc'::text, now())
+);
+
 create or replace function public.has_role(_user_id uuid, _role public.app_role)
 returns boolean
 language sql
@@ -160,6 +175,8 @@ $$;
 
 create index if not exists user_roles_user_id_idx on public.user_roles(user_id);
 create index if not exists profiles_referred_by_id_idx on public.profiles(referred_by_id);
+create index if not exists profiles_referral_source_slug_idx on public.profiles(referral_source_slug);
+create index if not exists profiles_referral_source_code_idx on public.profiles(referral_source_code);
 create index if not exists profiles_plan_id_idx on public.profiles(plan_id);
 create index if not exists profiles_created_by_idx on public.profiles(created_by);
 create index if not exists iptv_servers_created_by_idx on public.iptv_servers(created_by);
@@ -168,6 +185,10 @@ create index if not exists user_server_access_user_id_idx on public.user_server_
 create index if not exists user_server_access_server_id_idx on public.user_server_access(server_id);
 create index if not exists device_sessions_user_id_idx on public.device_sessions(user_id);
 create index if not exists support_messages_thread_idx on public.support_messages(thread_id, created_at);
+create index if not exists notifications_user_id_idx on public.notifications(user_id);
+create index if not exists notifications_created_at_idx on public.notifications(created_at desc);
+create index if not exists test_links_owner_only_idx on public.test_links(owner_only);
+create index if not exists test_links_allow_repeat_device_idx on public.test_links(allow_repeat_device);
 
 alter table public.app_config enable row level security;
 alter table public.user_roles enable row level security;
@@ -181,6 +202,7 @@ alter table public.test_links enable row level security;
 alter table public.test_device_tracking enable row level security;
 alter table public.support_threads enable row level security;
 alter table public.support_messages enable row level security;
+alter table public.notifications enable row level security;
 
 grant usage on schema public to anon, authenticated, service_role;
 
@@ -220,6 +242,9 @@ grant all on public.support_threads to service_role;
 
 grant select, insert on public.support_messages to authenticated;
 grant all on public.support_messages to service_role;
+
+grant select, update on public.notifications to authenticated;
+grant all on public.notifications to service_role;
 
 revoke all on function public.has_role(uuid, public.app_role) from public;
 revoke all on function public.has_role(uuid, public.app_role) from anon;
@@ -403,6 +428,33 @@ with check (
         or public.has_role(auth.uid(), 'admin'::public.app_role)
       )
   )
+);
+
+drop policy if exists "Users can read own notifications" on public.notifications;
+drop policy if exists "Users can update own notifications" on public.notifications;
+create policy "Users can read own notifications"
+on public.notifications
+for select
+to authenticated
+using (
+  auth.uid() = user_id
+  or public.has_role(auth.uid(), 'owner'::public.app_role)
+  or public.has_role(auth.uid(), 'admin'::public.app_role)
+);
+
+create policy "Users can update own notifications"
+on public.notifications
+for update
+to authenticated
+using (
+  auth.uid() = user_id
+  or public.has_role(auth.uid(), 'owner'::public.app_role)
+  or public.has_role(auth.uid(), 'admin'::public.app_role)
+)
+with check (
+  auth.uid() = user_id
+  or public.has_role(auth.uid(), 'owner'::public.app_role)
+  or public.has_role(auth.uid(), 'admin'::public.app_role)
 );
 
 drop policy if exists "Authenticated can upload chat files" on storage.objects;

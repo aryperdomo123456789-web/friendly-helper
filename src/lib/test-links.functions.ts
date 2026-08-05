@@ -15,9 +15,27 @@ async function assertOwner(supabase: any, userId: string) {
 }
 
 export const checkDeviceBlocked = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => z.object({ fingerprint: z.string() }).parse(input))
+  .inputValidator((input: unknown) =>
+    z.object({
+      fingerprint: z.string(),
+      slug: z.string().min(1),
+    }).parse(input),
+  )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    if (data.slug === "dono-livre") {
+      return { blocked: false };
+    }
+    const { data: link } = await (supabaseAdmin as any)
+      .from("test_links")
+      .select("*")
+      .eq("slug", data.slug)
+      .maybeSingle();
+
+    if (link?.allow_repeat_device) {
+      return { blocked: false };
+    }
+
     const { data: existing } = await (supabaseAdmin as any)
       .from("test_device_tracking")
       .select("id")
@@ -62,6 +80,8 @@ export const saveTestLink = createServerFn({ method: "POST" })
       duration_minutes: z.number().int().min(1),
       max_connections: z.number().int().min(1),
       is_active: z.boolean(),
+      owner_only: z.boolean().default(false),
+      allow_repeat_device: z.boolean().default(false),
       bonus_days_monthly: z.number().int().min(0).default(15),
       bonus_days_quarterly: z.number().int().min(0).default(30),
       description: z.string().optional().or(z.literal("")),
@@ -70,16 +90,26 @@ export const saveTestLink = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const payload = {
+      slug: data.slug,
+      duration_minutes: data.duration_minutes,
+      max_connections: data.max_connections,
+      is_active: data.is_active,
+      bonus_days_monthly: data.bonus_days_monthly,
+      bonus_days_quarterly: data.bonus_days_quarterly,
+      description: data.description,
+      created_by_id: context.userId,
+    };
     if (data.id) {
       const { error } = await (supabaseAdmin as any)
         .from("test_links")
-        .update(data)
+        .update(payload)
         .eq("id", data.id);
       if (error) throw error;
     } else {
       const { error } = await (supabaseAdmin as any)
         .from("test_links")
-        .insert({ ...data, created_by_id: context.userId });
+        .insert(payload);
       if (error) throw error;
     }
     return { ok: true };
@@ -107,6 +137,15 @@ export const createTestUser = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const request = getRequest();
+    const origin = (() => {
+      try {
+        return new URL(request?.url ?? "https://stream.mago-bot.com").origin;
+      } catch {
+        const host = request?.headers.get("x-forwarded-host") || request?.headers.get("host") || "stream.mago-bot.com";
+        const proto = request?.headers.get("x-forwarded-proto") || "https";
+        return `${proto}://${host}`;
+      }
+    })();
     const ip = request?.headers.get("x-forwarded-for") || request?.headers.get("x-real-ip") || null;
 
     // Resolve referred_by if code provided
@@ -120,17 +159,6 @@ export const createTestUser = createServerFn({ method: "POST" })
       if (refUser) referredById = refUser.id;
     }
     
-    // Check if device fingerprint was already used
-    const { data: existingDevice } = await (supabaseAdmin as any)
-      .from("test_device_tracking")
-      .select("id")
-      .eq("fingerprint", data.fingerprint)
-      .maybeSingle();
-
-    if (existingDevice) {
-      throw new Error("Você já gerou um teste grátis neste dispositivo. Para novos acessos, entre em contato com o suporte.");
-    }
-
     // Validate link
     const { data: link, error: linkError } = await (supabaseAdmin as any)
       .from("test_links")
@@ -141,20 +169,33 @@ export const createTestUser = createServerFn({ method: "POST" })
     
     if (linkError || !link) throw new Error("Link de teste inválido ou inativo");
 
-    // Track this device BEFORE creating the user to avoid race conditions/multiple attempts
-    const { error: trackError } = await (supabaseAdmin as any)
-      .from("test_device_tracking")
-      .insert({
-        fingerprint: data.fingerprint,
-        ip_address: ip
-      });
+    if (link.slug !== "dono-livre") {
+      // Check if device fingerprint was already used
+      const { data: existingDevice } = await (supabaseAdmin as any)
+        .from("test_device_tracking")
+        .select("id")
+        .eq("fingerprint", data.fingerprint)
+        .maybeSingle();
 
-    if (trackError) {
-      // If it failed because of duplicate (unique constraint), throw friendly error
-      if (trackError.code === '23505') {
-        throw new Error("Este dispositivo já foi utilizado para gerar um teste.");
+      if (existingDevice) {
+        throw new Error("Você já gerou um teste grátis neste dispositivo. Para novos acessos, entre em contato com o suporte.");
       }
-      throw new Error("Erro ao validar dispositivo. Tente novamente.");
+
+      // Track this device BEFORE creating the user to avoid race conditions/multiple attempts
+      const { error: trackError } = await (supabaseAdmin as any)
+        .from("test_device_tracking")
+        .insert({
+          fingerprint: data.fingerprint,
+          ip_address: ip
+        });
+
+      if (trackError) {
+        // If it failed because of duplicate (unique constraint), throw friendly error
+        if (trackError.code === '23505') {
+          throw new Error("Este dispositivo já foi utilizado para gerar um teste.");
+        }
+        throw new Error("Erro ao validar dispositivo. Tente novamente.");
+      }
     }
 
 
@@ -167,7 +208,13 @@ export const createTestUser = createServerFn({ method: "POST" })
       email: usernameToEmail(username),
       password: password,
       email_confirm: true,
-      user_metadata: { username, test_link_slug: link.slug },
+      user_metadata: {
+        username,
+        account_kind: "test",
+        test_link_slug: link.slug,
+        referral_source_slug: link.slug,
+        referral_source_code: data.referral_code ?? null,
+      },
     });
     if (error || !created.user) throw new Error(error?.message ?? "Falha ao criar teste");
     
@@ -189,7 +236,11 @@ export const createTestUser = createServerFn({ method: "POST" })
       expires_at: expiresAt,
       is_active: true,
       plan_id: testPlan?.id || null,
-      referred_by_id: referredById
+      referral_code: null,
+      referred_by_id: referredById,
+      referral_source_slug: link.slug,
+      referral_source_code: data.referral_code ?? null,
+      referral_source_url: `${origin}/teste/${link.slug}?ref=${data.referral_code ?? ""}`,
     });
 
     await supabaseAdmin.from("user_roles").insert({ user_id: newUserId, role: "user" });

@@ -17,9 +17,18 @@ export function VideoPlayer({ url, poster, title }: Props) {
     if (!video || !url) return;
     let destroyed = false;
     let hls: import("hls.js").default | null = null;
+    const ready = () => setLoading(false);
+    const buffer = () => {
+      if (!destroyed) setLoading(true);
+    };
+    const onError = () => {
+      if (!destroyed) setError("Fluxo indisponivel neste momento.");
+    };
 
     setError(null);
     setLoading(true);
+    video.preload = "auto";
+    video.setAttribute("playsinline", "");
 
     const isHls = url.includes(".m3u8") || url.includes("hls=1");
     const nativeHls = video.canPlayType("application/vnd.apple.mpegurl") !== "";
@@ -34,6 +43,12 @@ export function VideoPlayer({ url, poster, title }: Props) {
           hls = new Hls({
             lowLatencyMode: true,
             enableWorker: true,
+            backBufferLength: 90,
+            maxBufferLength: 30,
+            maxMaxBufferLength: 120,
+            maxBufferHole: 0.5,
+            liveSyncDurationCount: 3,
+            liveMaxLatencyDurationCount: 8,
             manifestLoadingMaxRetry: 15,
             levelLoadingMaxRetry: 15,
             fragLoadingMaxRetry: 25,
@@ -42,18 +57,18 @@ export function VideoPlayer({ url, poster, title }: Props) {
           });
           hls.loadSource(url);
           hls.attachMedia(video!);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            void video!.play().catch(() => undefined);
-          });
+          hls.on(Hls.Events.MANIFEST_PARSED, ready);
+          hls.on(Hls.Events.LEVEL_LOADED, ready);
           hls.on(Hls.Events.ERROR, (_event, data) => {
             console.error("[player] hls", data.type, data.details, data.fatal);
             if (!data.fatal) return;
-            if (recoveries < 3 && data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            if (recoveries < 5 && data.type === Hls.ErrorTypes.MEDIA_ERROR) {
               recoveries += 1;
               hls?.recoverMediaError();
+              setTimeout(() => hls?.startLoad(), 250);
               return;
             }
-            if (recoveries < 3 && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+            if (recoveries < 5 && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
               recoveries += 1;
               hls?.startLoad();
               return;
@@ -65,18 +80,38 @@ export function VideoPlayer({ url, poster, title }: Props) {
                 : "Nao foi possivel iniciar o canal. Tente outro canal ou servidor.",
             );
           });
+          video.addEventListener("canplay", ready);
+          video.addEventListener("playing", ready);
+          video.addEventListener("loadeddata", ready);
+          video.addEventListener("waiting", buffer);
+          video.addEventListener("stalled", buffer);
+          video.addEventListener("error", onError);
           return;
         }
       }
       video!.src = url;
+      video!.load();
       void video!.play().catch(() => undefined);
+      video.addEventListener("canplay", ready);
+      video.addEventListener("playing", ready);
+      video.addEventListener("loadeddata", ready);
+      video.addEventListener("waiting", buffer);
+      video.addEventListener("stalled", buffer);
+      video.addEventListener("error", onError);
     }
 
     void start();
 
     return () => {
       destroyed = true;
+      video.removeEventListener("canplay", ready);
+      video.removeEventListener("playing", ready);
+      video.removeEventListener("loadeddata", ready);
+      video.removeEventListener("waiting", buffer);
+      video.removeEventListener("stalled", buffer);
+      video.removeEventListener("error", onError);
       hls?.destroy();
+      video.pause();
       video.removeAttribute("src");
       video.load();
     };
@@ -89,9 +124,15 @@ export function VideoPlayer({ url, poster, title }: Props) {
         poster={poster ?? undefined}
         controls
         playsInline
+        preload="auto"
+        controlsList="nodownload noplaybackrate noremoteplayback"
+        disablePictureInPicture
         className="h-full w-full"
         onPlaying={() => setLoading(false)}
+        onCanPlay={() => setLoading(false)}
+        onLoadedData={() => setLoading(false)}
         onWaiting={() => setLoading(true)}
+        onStalled={() => setLoading(true)}
         onError={() => setError("Fluxo indisponivel neste momento.")}
       >
         <track kind="captions" />

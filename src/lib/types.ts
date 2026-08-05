@@ -13,6 +13,7 @@ export const AppConfigSchema = z.object({
   logo_small_url: z.string().url().optional().or(z.literal("")),
   favicon_url: z.string().url().optional().or(z.literal("")),
   theme_mode: z.enum(["azul", "dark", "light"]).default("azul"),
+  telegram_handle: z.string().default("@MagoPD"),
   support_auto_reply: z.string().default("Olá! Esta é uma resposta automática. Recebemos sua mensagem e em breve um de nossos atendentes irá te ajudar."),
   support_attendant_name: z.string().default("Suporte WebPlayer"),
   mp_enabled: z.boolean().default(false),
@@ -72,4 +73,7 @@ export interface AccessUser {
   plan_id?: string;
   plan?: SubscriptionPlan;
   referred_by_id?: string;
+  referral_source_slug?: string | null;
+  referral_source_code?: string | null;
+  referral_source_url?: string | null;
 }

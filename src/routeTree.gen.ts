@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as DonoRouteImport } from './routes/dono'
 import { Route as AuthenticatedCanaisRouteImport } from './routes/_authenticated/canais'
 import { Route as AuthenticatedContaRouteImport } from './routes/_authenticated/conta'
 import { Route as AuthenticatedFilmesRouteImport } from './routes/_authenticated/filmes'
@@ -22,6 +23,7 @@ import { Route as AuthenticatedSuporteRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
 import { Route as TesteSlugRouteImport } from './routes/teste.$slug'
 import { Route as ApiPublicImageRouteImport } from './routes/api/public/image'
+import { Route as ApiPublicLegacyCssRouteImport } from './routes/api/public/legacy-css'
 import { Route as ApiPublicMercadopagoWebhookRouteImport } from './routes/api/public/mercadopago-webhook'
 import { Route as ApiPublicStreamRouteImport } from './routes/api/public/stream'
 
@@ -32,6 +34,11 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DonoRoute = DonoRouteImport.update({
+  id: '/dono',
+  path: '/dono',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedCanaisRoute = AuthenticatedCanaisRouteImport.update({
@@ -89,6 +96,11 @@ const ApiPublicImageRoute = ApiPublicImageRouteImport.update({
   path: '/api/public/image',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicLegacyCssRoute = ApiPublicLegacyCssRouteImport.update({
+  id: '/api/public/legacy-css',
+  path: '/api/public/legacy-css',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicMercadopagoWebhookRoute =
   ApiPublicMercadopagoWebhookRouteImport.update({
     id: '/api/public/mercadopago-webhook',
@@ -103,6 +115,7 @@ const ApiPublicStreamRoute = ApiPublicStreamRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dono': typeof DonoRoute
   '/canais': typeof AuthenticatedCanaisRoute
   '/conta': typeof AuthenticatedContaRoute
   '/filmes': typeof AuthenticatedFilmesRoute
@@ -114,11 +127,13 @@ export interface FileRoutesByFullPath {
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/teste/$slug': typeof TesteSlugRoute
   '/api/public/image': typeof ApiPublicImageRoute
+  '/api/public/legacy-css': typeof ApiPublicLegacyCssRoute
   '/api/public/mercadopago-webhook': typeof ApiPublicMercadopagoWebhookRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dono': typeof DonoRoute
   '/canais': typeof AuthenticatedCanaisRoute
   '/conta': typeof AuthenticatedContaRoute
   '/filmes': typeof AuthenticatedFilmesRoute
@@ -130,6 +145,7 @@ export interface FileRoutesByTo {
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/teste/$slug': typeof TesteSlugRoute
   '/api/public/image': typeof ApiPublicImageRoute
+  '/api/public/legacy-css': typeof ApiPublicLegacyCssRoute
   '/api/public/mercadopago-webhook': typeof ApiPublicMercadopagoWebhookRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
 }
@@ -137,6 +153,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/dono': typeof DonoRoute
   '/_authenticated/canais': typeof AuthenticatedCanaisRoute
   '/_authenticated/conta': typeof AuthenticatedContaRoute
   '/_authenticated/filmes': typeof AuthenticatedFilmesRoute
@@ -148,6 +165,7 @@ export interface FileRoutesById {
   '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
   '/teste/$slug': typeof TesteSlugRoute
   '/api/public/image': typeof ApiPublicImageRoute
+  '/api/public/legacy-css': typeof ApiPublicLegacyCssRoute
   '/api/public/mercadopago-webhook': typeof ApiPublicMercadopagoWebhookRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
 }
@@ -155,6 +173,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/dono'
     | '/canais'
     | '/conta'
     | '/filmes'
@@ -166,11 +185,13 @@ export interface FileRouteTypes {
     | '/usuarios'
     | '/teste/$slug'
     | '/api/public/image'
+    | '/api/public/legacy-css'
     | '/api/public/mercadopago-webhook'
     | '/api/public/stream'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/dono'
     | '/canais'
     | '/conta'
     | '/filmes'
@@ -182,12 +203,14 @@ export interface FileRouteTypes {
     | '/usuarios'
     | '/teste/$slug'
     | '/api/public/image'
+    | '/api/public/legacy-css'
     | '/api/public/mercadopago-webhook'
     | '/api/public/stream'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/dono'
     | '/_authenticated/canais'
     | '/_authenticated/conta'
     | '/_authenticated/filmes'
@@ -199,6 +222,7 @@ export interface FileRouteTypes {
     | '/_authenticated/usuarios'
     | '/teste/$slug'
     | '/api/public/image'
+    | '/api/public/legacy-css'
     | '/api/public/mercadopago-webhook'
     | '/api/public/stream'
   fileRoutesById: FileRoutesById
@@ -206,8 +230,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  DonoRoute: typeof DonoRoute
   TesteSlugRoute: typeof TesteSlugRoute
   ApiPublicImageRoute: typeof ApiPublicImageRoute
+  ApiPublicLegacyCssRoute: typeof ApiPublicLegacyCssRoute
   ApiPublicMercadopagoWebhookRoute: typeof ApiPublicMercadopagoWebhookRoute
   ApiPublicStreamRoute: typeof ApiPublicStreamRoute
 }
@@ -226,6 +252,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dono': {
+      id: '/dono'
+      path: '/dono'
+      fullPath: '/dono'
+      preLoaderRoute: typeof DonoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/canais': {
@@ -305,6 +338,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicImageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/legacy-css': {
+      id: '/api/public/legacy-css'
+      path: '/api/public/legacy-css'
+      fullPath: '/api/public/legacy-css'
+      preLoaderRoute: typeof ApiPublicLegacyCssRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/mercadopago-webhook': {
       id: '/api/public/mercadopago-webhook'
       path: '/api/public/mercadopago-webhook'
@@ -352,8 +392,10 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  DonoRoute: DonoRoute,
   TesteSlugRoute: TesteSlugRoute,
   ApiPublicImageRoute: ApiPublicImageRoute,
+  ApiPublicLegacyCssRoute: ApiPublicLegacyCssRoute,
   ApiPublicMercadopagoWebhookRoute: ApiPublicMercadopagoWebhookRoute,
   ApiPublicStreamRoute: ApiPublicStreamRoute,
 }

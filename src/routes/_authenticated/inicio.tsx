@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { TMDBHeroCarousel } from "@/components/home/TMDBHeroCarousel";
+import { sendSupportMessage } from "@/lib/chat.functions";
 
 export const Route = createFileRoute("/_authenticated/inicio")({
   head: () => ({
@@ -34,7 +36,7 @@ const CARDS = [
 ] as const;
 
 function Inicio() {
-  const { profile, activeServer, isOwner, servers } = usePlayerSession();
+  const { profile, activeServer, isOwner, servers, authUserId } = usePlayerSession();
   const search = Route.useSearch() as any;
   const navigate = useNavigate();
   const createPayment = useServerFn(createPaymentPreference);
@@ -74,6 +76,8 @@ function Inicio() {
 
   return (
     <div className="space-y-6 min-w-0 w-full overflow-x-hidden">
+      <TMDBHeroCarousel />
+
       <div className="overflow-hidden rounded-2xl border border-border bg-card p-4 lg:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">WebPlayer</p>
         <h1 className="mt-2 text-3xl font-bold">
@@ -123,7 +127,11 @@ function Inicio() {
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {CARDS.map((card) => (
-          <Link key={card.to} to={card.to}>
+          <Link
+            key={card.to}
+            to={card.to}
+            className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
             <Card className="h-full transition-all hover:-translate-y-0.5 hover:border-primary/60">
               <CardContent className="flex items-center gap-4 p-5">
                 <span className="grid h-11 w-11 place-items-center rounded-xl bg-primary/15 text-primary">
@@ -139,7 +147,7 @@ function Inicio() {
         ))}
       </div>
 
-      {!isOwner && <FloatingChat userId={profile?.id as any} />}
+      {!isOwner && <FloatingChat userId={(profile?.id ?? authUserId) as any} />}
     </div>
   );
 }
@@ -154,6 +162,7 @@ function FloatingChat({ userId }: { userId?: string }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fetchThread = useServerFn(getOrCreateThread);
   const mutationMarkRead = useServerFn(markThreadRead);
+  const mutationSendSupport = useServerFn(sendSupportMessage);
 
   useEffect(() => {
     if (!userId || !isOpen) return;
@@ -232,67 +241,28 @@ function FloatingChat({ userId }: { userId?: string }) {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const messageToSend = newMessage.trim();
-    if (!messageToSend || !thread) return;
+    const formValue = new FormData(e.currentTarget).get("message");
+    const messageToSend = (typeof formValue === "string" ? formValue : newMessage).trim();
+    if (!messageToSend || !userId) return;
 
     setSending(true);
     try {
-      // Check if it's the first message of the day for auto-reply
-      const today = new Date().toISOString().split('T')[0];
-      const hasMessagesToday = messages.some(m => 
-        m.created_at.split('T')[0] === today
-      );
+      const result = await mutationSendSupport({
+        data: { content: messageToSend },
+      });
 
-      const { data, error } = await supabase
-        .from('support_messages')
-        .insert([{
-          thread_id: thread['id'],
-          sender_id: userId || null,
-          content: messageToSend
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      setMessages(prev => [...prev, data]);
-
-      // Handle Auto-Reply logic
-      if (!hasMessagesToday) {
-        // Fetch config for auto-reply message
-        const { data: configData } = await supabase.from('app_config').select('config').maybeSingle();
-        const config = (configData?.config as any) || {};
-        const autoReplyMsg = config.support_auto_reply || "Olá! Esta é uma resposta automática. Recebemos sua mensagem e em breve um de nossos atendentes irá te ajudar.";
-        
-        // Short delay to feel more natural
-        setTimeout(async () => {
-          const { data: autoReplyData } = await supabase
-            .from('support_messages')
-            .insert([{
-              thread_id: thread['id'],
-              sender_id: null, // System/Admin message
-              content: autoReplyMsg
-            }])
-            .select()
-            .single();
-            
-          if (autoReplyData) {
-            setMessages(prev => [...prev, autoReplyData]);
-          }
-        }, 1000);
+      if (result?.thread && !thread) {
+        setThread(result.thread);
+      }
+      if (result?.userMessage) {
+        setMessages((prev) => [...prev, result.userMessage]);
+      }
+      if (result?.autoReply) {
+        setMessages((prev) => [...prev, result.autoReply]);
       }
 
-      await supabase
-        .from('support_threads')
-        .update({ 
-          last_message: messageToSend, 
-          last_message_at: new Date().toISOString(),
-          unread_count_owner: (thread['unread_count_owner'] || 0) + 1
-        })
-        .eq('id', thread['id']);
-      
       setNewMessage("");
       toast.success("Mensagem enviada!");
     } catch (err: any) {
@@ -311,7 +281,7 @@ function FloatingChat({ userId }: { userId?: string }) {
               <MessageSquare className="h-5 w-5" />
               <span className="font-bold">Suporte Direto</span>
             </div>
-            <Button variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/10" onClick={() => setIsOpen(false)}>
+            <Button data-tv-focus variant="ghost" size="icon" className="text-primary-foreground hover:bg-white/10" onClick={() => setIsOpen(false)}>
               <X className="h-5 w-5" />
             </Button>
           </div>
@@ -358,12 +328,15 @@ function FloatingChat({ userId }: { userId?: string }) {
           <form onSubmit={handleSend} className="p-3 border-t bg-card shrink-0">
             <div className="flex gap-2">
               <Input 
+                name="message"
                 placeholder="Diga algo..." 
                 value={newMessage}
                 onChange={e => setNewMessage(e.target.value)}
                 className="bg-muted/50 border-none h-9 text-sm"
+                data-tv-focus
+                enterKeyHint="send"
               />
-              <Button type="submit" size="icon" className="h-9 w-9" disabled={sending || !newMessage.trim()}>
+              <Button data-tv-focus type="submit" size="icon" className="h-9 w-9" disabled={sending || !newMessage.trim()}>
                 <Send className="h-4 w-4" />
               </Button>
             </div>
@@ -372,6 +345,7 @@ function FloatingChat({ userId }: { userId?: string }) {
       )}
 
       <Button 
+        data-tv-focus
         size="lg" 
         className={cn(
           "h-14 w-14 rounded-full shadow-2xl transition-all duration-300 hover:scale-105",

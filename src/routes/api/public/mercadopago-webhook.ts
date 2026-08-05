@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { resolveTestLinkSlug } from "@/lib/referral";
+import { resolveReferralSourceSlug } from "@/lib/referral";
+import { ensureUserReferralCode } from "@/lib/referral-code";
 
 export const Route = createFileRoute('/api/public/mercadopago-webhook')({
   server: {
@@ -40,7 +41,7 @@ export const Route = createFileRoute('/api/public/mercadopago-webhook')({
                 // Get user profile to check referral
                 const { data: userProfile } = await supabaseAdmin
                   .from("profiles")
-                  .select("referred_by_id, display_name")
+                  .select("referred_by_id, display_name, referral_source_slug")
                   .eq("id", userId)
                   .single();
                 const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
@@ -69,12 +70,15 @@ export const Route = createFileRoute('/api/public/mercadopago-webhook')({
                     })
                     .eq("id", userId);
 
+                  await ensureUserReferralCode(supabaseAdmin, userId, plan);
+
                   console.log(`User ${userId} upgraded to plan ${plan.name} until ${newExpiry.toISOString()}`);
 
                   // REFERRAL BONUS LOGIC
                   if (userProfile?.referred_by_id) {
                     let bonusDays = 0;
-                    const linkSlug = resolveTestLinkSlug({
+                    const linkSlug = resolveReferralSourceSlug({
+                      referralSourceSlug: userProfile.referral_source_slug ?? null,
                       testLinkSlug: authUser.user?.user_metadata?.test_link_slug ?? null,
                       displayName: userProfile.display_name,
                     });

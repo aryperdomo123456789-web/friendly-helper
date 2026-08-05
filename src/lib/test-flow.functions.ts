@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { resolveTestLinkSlug } from "./referral";
+import { resolveReferralSourceSlug } from "./referral";
+import { ensureUserReferralCode } from "./referral-code";
 
 export const simulatePaymentSuccess = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -17,7 +18,7 @@ export const simulatePaymentSuccess = createServerFn({ method: "POST" })
     // Buscar perfil para ver indicação
     const { data: userProfile } = await supabaseAdmin
       .from("profiles")
-      .select("referred_by_id, display_name")
+      .select("referred_by_id, display_name, referral_source_slug")
       .eq("id", data.userId)
       .single();
 
@@ -46,10 +47,13 @@ export const simulatePaymentSuccess = createServerFn({ method: "POST" })
       })
       .eq("id", data.userId);
 
+    await ensureUserReferralCode(supabaseAdmin, data.userId, plan);
+
     // Lógica de Bônus (Copiada do Webhook para o Teste Prático)
     if (userProfile?.referred_by_id) {
       let bonusDays = 0;
-      const linkSlug = resolveTestLinkSlug({
+      const linkSlug = resolveReferralSourceSlug({
+        referralSourceSlug: userProfile.referral_source_slug ?? null,
         testLinkSlug: authUser.user?.user_metadata?.test_link_slug ?? null,
         displayName: userProfile.display_name,
       });

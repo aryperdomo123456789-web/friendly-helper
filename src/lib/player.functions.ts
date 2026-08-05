@@ -94,6 +94,7 @@ export const getMySession = createServerFn({ method: "GET" })
     const expired = !isOwner && profile?.expires_at && new Date(profile.expires_at).getTime() < Date.now();
     
     return { 
+      authUserId: context.userId,
       profile, 
       isOwner, 
       servers: servers ?? [],
@@ -312,9 +313,10 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
     const { buildStreamUrl } = await import("./xtream.server");
     const { signStreamUrl } = await import("./stream-proxy.server");
     const direct = buildStreamUrl(credential, data.kind, data.stream_id, data.ext ?? undefined);
+    const playbackTtlSeconds = 24 * 60 * 60;
     // Proxied through our own origin: the panels only serve plain HTTP and the
     // browser refuses mixed content on an HTTPS page.
-    const proxied = await signStreamUrl(direct, { subject: context.userId, ttlSeconds: 6 * 60 * 60 });
+    const proxied = await signStreamUrl(direct, { subject: context.userId, ttlSeconds: playbackTtlSeconds });
     const isHls = direct.endsWith(".m3u8") || direct.includes("m3u8");
     // For live channels, force HLS mode if the URL structure suggests it
     const forceHls = data.kind === "live" && !direct.includes("ext=ts");

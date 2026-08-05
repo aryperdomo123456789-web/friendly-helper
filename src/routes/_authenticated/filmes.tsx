@@ -2,6 +2,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Catalog } from "@/components/player/Catalog";
 
 export const Route = createFileRoute("/_authenticated/filmes")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    q: typeof search.q === "string" ? search.q : "",
+  }),
   head: () => ({
     meta: [
       { title: "Filmes | WebPlayer IPTV" },
@@ -10,5 +13,8 @@ export const Route = createFileRoute("/_authenticated/filmes")({
       { property: "og:description", content: "Filmes on demand multi-servidor." },
     ],
   }),
-  component: () => <Catalog kind="movie" />,
+  component: () => {
+    const { q } = Route.useSearch();
+    return <Catalog kind="movie" initialSearch={q} />;
+  },
 });

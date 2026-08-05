@@ -38,7 +38,7 @@
       "expires_at": "2026-09-04T03:31:42.019Z",
       "is_active": true,
       "plan_name": "Mensal",
-      "referral_code": "12eede78",
+      "referral_code": null,
       "referred_by_username": null,
       "created_by_username": "magodono",
       "server_names": ["METAPLAY", "WOLF TV", "ALPHA PLAY"]
@@ -80,7 +80,7 @@
       "expires_at": "2026-08-20T10:18:04.539Z",
       "is_active": true,
       "plan_name": null,
-      "referral_code": "REF_userA_ppw5k4",
+      "referral_code": null,
       "referred_by_username": "magodono",
       "created_by_username": null,
       "server_names": []
@@ -94,7 +94,7 @@
       "expires_at": "2026-08-05T10:18:05.435Z",
       "is_active": true,
       "plan_name": null,
-      "referral_code": "REF_userB_i3yhks",
+      "referral_code": null,
       "referred_by_username": "userA_ppw5k4",
       "created_by_username": null,
       "server_names": []

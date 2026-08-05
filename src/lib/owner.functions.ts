@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { ensureUserReferralCode, generateUniqueReferralCode, isReferralEligiblePlan } from "./referral-code";
 
 export const SYNTHETIC_EMAIL_DOMAIN = "iptv.local";
 
@@ -244,6 +245,24 @@ export const createAccessUser = createServerFn({ method: "POST" })
       throw profileError;
     }
 
+    if (!data.plan_id) {
+      const ownReferralCode = await generateUniqueReferralCode(supabaseAdmin);
+      const { error: referralError } = await supabaseAdmin
+        .from("profiles")
+        .update({ referral_code: ownReferralCode })
+        .eq("id", newUserId);
+      if (referralError) throw referralError;
+    } else {
+      const { data: plan } = await supabaseAdmin
+        .from("subscription_plans")
+        .select("id, name, price")
+        .eq("id", data.plan_id)
+        .maybeSingle();
+      if (isReferralEligiblePlan(plan)) {
+        await ensureUserReferralCode(supabaseAdmin, newUserId, plan);
+      }
+    }
+
     await supabaseAdmin.from("user_roles").insert({ user_id: newUserId, role: "user" });
     await supabaseAdmin
       .from("user_server_access")
@@ -283,6 +302,19 @@ export const updateAccessUser = createServerFn({ method: "POST" })
       })
       .eq("id", data.id);
     if (error) throw error;
+
+    if (data.plan_id) {
+      const { data: plan } = await supabaseAdmin
+        .from("subscription_plans")
+        .select("id, name, price")
+        .eq("id", data.plan_id)
+        .maybeSingle();
+      if (isReferralEligiblePlan(plan)) {
+        await ensureUserReferralCode(supabaseAdmin, data.id, plan);
+      } else {
+        await supabaseAdmin.from("profiles").update({ referral_code: null }).eq("id", data.id);
+      }
+    }
 
     if (data.password) {
       const { error: passError } = await supabaseAdmin.auth.admin.updateUserById(data.id, {

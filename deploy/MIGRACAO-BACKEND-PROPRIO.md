@@ -48,7 +48,7 @@ Na raiz do projeto:
 ```bash
 export SUPABASE_URL="https://seu-projeto.supabase.co"
 export SUPABASE_SERVICE_ROLE_KEY="sua-service-role-key"
-node deploy/seed-users.mjs
+node deploy/seed/seed-users.mjs
 ```
 
 Se preferir, coloque as variáveis no `.env` da raiz.

@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { generateUniqueReferralCode } from "./referral-code";
 
 export const SYNTHETIC_EMAIL_DOMAIN = "iptv.local";
 
@@ -43,6 +44,7 @@ export const createFirstOwner = createServerFn({ method: "POST" })
       user_metadata: { username: data.username, role: "owner" },
     });
     if (error || !created.user) throw new Error(error?.message ?? "Falha ao criar acesso dono");
+    const ownReferralCode = await generateUniqueReferralCode(supabaseAdmin);
 
     const { error: roleError } = await supabaseAdmin
       .from("user_roles")
@@ -50,6 +52,19 @@ export const createFirstOwner = createServerFn({ method: "POST" })
     if (roleError) {
       await supabaseAdmin.auth.admin.deleteUser(created.user.id);
       throw roleError;
+    }
+
+    const { error: profileError } = await supabaseAdmin.from("profiles").insert({
+      id: created.user.id,
+      username: data.username,
+      display_name: "Dono",
+      max_connections: 10,
+      is_active: true,
+      referral_code: ownReferralCode,
+    });
+    if (profileError) {
+      await supabaseAdmin.auth.admin.deleteUser(created.user.id);
+      throw profileError;
     }
     return { ok: true };
   });

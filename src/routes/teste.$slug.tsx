@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { createTestUser, checkDeviceBlocked } from "@/lib/test-links.functions";
 import { toast } from "sonner";
@@ -27,12 +27,68 @@ import {
 export const Route = createFileRoute("/teste/$slug")({
   head: () => ({
     meta: [
-      { title: "Teste Grátis | WebPlayer IPTV" },
+      { title: "Teste Grátis | MAGO PLAYER PRO" },
       { name: "description", content: "Solicite seu teste grátis e experimente o melhor do IPTV." },
     ],
   }),
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const formData = await request.formData();
+        const slugFromForm = formData.get("slug")?.toString().trim();
+        const fingerprintFromForm = formData.get("fingerprint")?.toString().trim() ?? "";
+        const referralCodeRaw = formData.get("referral_code")?.toString().trim() ?? "";
+        const referralCode = referralCodeRaw.length > 0 ? referralCodeRaw : null;
+
+        const slug =
+          slugFromForm ||
+          new URL(request.url).pathname.split("/").filter(Boolean).at(-1) ||
+          "teste";
+
+        const fingerprint =
+          fingerprintFromForm || deriveServerFingerprint(request, slug, referralCode);
+
+        const result = await createTestUser({
+          data: { slug, fingerprint, referral_code: referralCode },
+        });
+
+        const redirectUrl = new URL(request.url);
+        redirectUrl.searchParams.set("username", result.username);
+        redirectUrl.searchParams.set("password", result.password);
+        redirectUrl.searchParams.set("expiresAt", result.expiresAt);
+        redirectUrl.searchParams.set("generated", "1");
+
+        return new Response(null, {
+          status: 303,
+          headers: {
+            location: redirectUrl.toString(),
+            "cache-control": "no-store, no-cache, must-revalidate, private",
+          },
+        });
+      },
+    },
+  },
   component: TestePublico,
 });
+
+function deriveServerFingerprint(request: Request, slug: string, referralCode: string | null) {
+  const headers = request.headers;
+  const raw = [
+    headers.get("user-agent") ?? "",
+    headers.get("accept-language") ?? "",
+    headers.get("x-forwarded-for") ?? headers.get("x-real-ip") ?? "",
+    headers.get("sec-ch-ua") ?? "",
+    headers.get("sec-ch-ua-platform") ?? "",
+    slug,
+    referralCode ?? "",
+  ].join("|");
+
+  let hash = 0;
+  for (let index = 0; index < raw.length; index += 1) {
+    hash = ((hash << 5) - hash + raw.charCodeAt(index)) | 0;
+  }
+  return Math.abs(hash).toString(16).padStart(8, "0");
+}
 
 function TestePublico() {
   const { slug } = Route.useParams();
@@ -43,23 +99,33 @@ function TestePublico() {
     username: string;
     password: string;
     expiresAt: string;
-  } | null>(null);
+  } | null>(
+    search.username && search.password && search.expiresAt
+      ? {
+          username: String(search.username),
+          password: String(search.password),
+          expiresAt: String(search.expiresAt),
+        }
+      : null,
+  );
   const [copied, setCopied] = useState<string | null>(null);
   const [blocked, setBlocked] = useState(false);
+  const [fingerprint, setFingerprint] = useState("");
 
   const mutationCreateTest = useServerFn(createTestUser);
   const mutationCheckDevice = useServerFn(checkDeviceBlocked);
 
   useEffect(() => {
+    const currentFingerprint = getFingerprint();
+    setFingerprint(currentFingerprint);
+
     const checkStatus = async () => {
-      const fingerprint = getFingerprint();
-      if (fingerprint) {
-        try {
-          const res = await mutationCheckDevice({ data: { fingerprint } });
-          if (res.blocked) setBlocked(true);
-        } catch (e) {
-          console.error("Erro ao validar dispositivo:", e);
-        }
+      if (!currentFingerprint) return;
+      try {
+        const res = await mutationCheckDevice({ data: { fingerprint: currentFingerprint, slug } });
+        if (res.blocked) setBlocked(true);
+      } catch (e) {
+        console.error("Erro ao validar dispositivo:", e);
       }
     };
     checkStatus();
@@ -86,11 +152,15 @@ function TestePublico() {
     return Math.abs(hash).toString(16);
   };
 
-  const handleCreateTest = async () => {
+  const handleCreateTest = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     setLoading(true);
     try {
-      const fingerprint = getFingerprint();
-      const res = await mutationCreateTest({ data: { slug, fingerprint, referral_code: referralCode } });
+      const currentFingerprint = fingerprint || getFingerprint();
+      setFingerprint(currentFingerprint);
+      const res = await mutationCreateTest({
+        data: { slug, fingerprint: currentFingerprint, referral_code: referralCode },
+      });
       setCredentials(res);
       toast.success("Teste gerado com sucesso!");
     } catch (err: any) {
@@ -130,7 +200,7 @@ function TestePublico() {
           </div>
           <div className="text-center space-y-1">
             <h1 className="text-4xl font-black tracking-tighter text-white drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
-              WEBPLAYER <span className="text-primary italic">PRO</span>
+              MAGO PLAYER <span className="text-primary italic">PRO</span>
             </h1>
             <div className="flex items-center justify-center gap-2">
               <div className="h-[1px] w-8 bg-gradient-to-r from-transparent to-primary/50" />
@@ -169,15 +239,19 @@ function TestePublico() {
                 </div>
               </div>
               
-              <div className="relative group">
+              <form className="relative group" method="post" action={`/teste/${slug}`} onSubmit={handleCreateTest}>
+                <input type="hidden" name="slug" value={slug} />
+                <input type="hidden" name="fingerprint" value={fingerprint} />
+                <input type="hidden" name="referral_code" value={referralCode ?? ""} />
                 {!blocked && (
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-blue-600 rounded-2xl blur opacity-30 group-hover:opacity-100 transition duration-500"></div>
+                  <div className="absolute -inset-0.5 pointer-events-none bg-gradient-to-r from-primary to-blue-600 rounded-2xl blur opacity-30 group-hover:opacity-100 transition duration-500"></div>
                 )}
                 <Button 
-                  onClick={handleCreateTest} 
+                  data-tv-focus
+                  type="submit"
                   disabled={loading || blocked}
                   variant={blocked ? "destructive" : "default"}
-                  className={`relative w-full h-16 text-xl font-black rounded-2xl transition-all duration-300 transform active:scale-95 ${!blocked ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_rgba(var(--primary),0.3)]' : ''}`}
+                  className={`relative z-10 w-full h-16 text-xl font-black rounded-2xl transition-all duration-300 transform active:scale-95 ${!blocked ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_rgba(var(--primary),0.3)]' : ''}`}
                 >
                   {loading ? (
                     <div className="flex items-center gap-3">
@@ -186,7 +260,7 @@ function TestePublico() {
                     </div>
                   ) : blocked ? "BLOQUEADO" : "GERAR ACESSO AGORA"}
                 </Button>
-              </div>
+              </form>
 
               {!blocked && (
                 <p className="text-[9px] text-center text-white/30 uppercase tracking-[0.2em] font-bold">
@@ -221,6 +295,8 @@ function TestePublico() {
                       className="pl-12 pr-12 h-14 bg-white/[0.03] border-white/10 font-mono text-xl text-white selection:bg-primary/30"
                     />
                     <Button 
+                      data-tv-focus
+                      type="button"
                       size="icon" 
                       variant="ghost" 
                       className="absolute right-2 top-2 h-10 w-10 text-white/50 hover:text-white hover:bg-white/10"
@@ -243,6 +319,8 @@ function TestePublico() {
                       className="pl-12 pr-12 h-14 bg-white/[0.03] border-white/10 font-mono text-xl text-white selection:bg-primary/30"
                     />
                     <Button 
+                      data-tv-focus
+                      type="button"
                       size="icon" 
                       variant="ghost" 
                       className="absolute right-2 top-2 h-10 w-10 text-white/50 hover:text-white hover:bg-white/10"
@@ -261,11 +339,15 @@ function TestePublico() {
                 </div>
 
                 <div className="pt-6 space-y-4">
-                  <Link to="/" search={{ username: credentials.username, password: credentials.password }}>
-                    <Button className="w-full h-16 font-black text-lg gap-3 rounded-2xl bg-gradient-to-r from-primary to-blue-600 hover:scale-[1.02] transition-transform shadow-[0_0_30px_-5px_rgba(var(--primary),0.5)]">
-                      ACESSAR WEBPLAYER <ExternalLink className="h-5 w-5" />
-                    </Button>
-                  </Link>
+                  <Button
+                    asChild
+                    data-tv-focus
+                    className="w-full h-16 font-black text-lg gap-3 rounded-2xl bg-gradient-to-r from-primary to-blue-600 hover:scale-[1.02] transition-transform shadow-[0_0_30px_-5px_rgba(var(--primary),0.5)]"
+                  >
+                    <Link to="/" search={{ username: credentials.username, password: credentials.password, auto: "1" }}>
+                      ACESSAR MAGO PLAYER PRO <ExternalLink className="h-5 w-5" />
+                    </Link>
+                  </Button>
                   <p className="text-[9px] text-center text-white/30 uppercase tracking-[0.2em] font-black animate-pulse">
                     🚀 REDIRECIONAMENTO COM UM CLIQUE
                   </p>
@@ -277,7 +359,7 @@ function TestePublico() {
         
         <div className="mt-12 text-center pb-8">
           <p className="text-[10px] text-white/20 uppercase tracking-[0.3em] font-bold">
-            &copy; 2026 WEBPLAYER PRO · TECNOLOGIA DE PONTA
+            &copy; 2026 MAGO PLAYER PRO · TECNOLOGIA DE PONTA
           </p>
         </div>
       </div>

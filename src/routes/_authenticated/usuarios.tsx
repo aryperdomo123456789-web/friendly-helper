@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getPlans } from "@/lib/plans.functions";
@@ -91,6 +91,12 @@ function UsuariosPage() {
 
   const [userModal, setUserModal] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "blocked" | "expired" | "online">("all");
+  const [serverFilter, setServerFilter] = useState<string>("all");
+  const [planFilter, setPlanFilter] = useState<string>("all");
+  const [referralFilter, setReferralFilter] = useState<"all" | "direct" | "referred">("all");
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "expiry">("newest");
 
   if (!isOwner) {
     return (
@@ -166,6 +172,46 @@ function UsuariosPage() {
     });
   };
 
+  const filteredUsers = useMemo(() => {
+    const searchTerm = search.trim().toLowerCase();
+    const now = new Date();
+
+    return (users.data ?? [])
+      .filter((user: any) => {
+        const matchesSearch =
+          !searchTerm ||
+          user.username?.toLowerCase().includes(searchTerm) ||
+          user.display_name?.toLowerCase().includes(searchTerm);
+
+        const isExpired = user.expires_at && new Date(user.expires_at) < now;
+        const matchesStatus =
+          statusFilter === "all" ||
+          (statusFilter === "active" && user.is_active && !isExpired) ||
+          (statusFilter === "blocked" && !user.is_active) ||
+          (statusFilter === "expired" && isExpired) ||
+          (statusFilter === "online" && user.online > 0);
+
+        const matchesServer = serverFilter === "all" || (user.server_ids ?? []).includes(serverFilter);
+        const matchesPlan = planFilter === "all" || (planFilter === "" ? !user.plan_id : user.plan_id === planFilter);
+        const matchesReferral =
+          referralFilter === "all" ||
+          (referralFilter === "direct" && !user.referred_by_id) ||
+          (referralFilter === "referred" && !!user.referred_by_id);
+
+        return matchesSearch && matchesStatus && matchesServer && matchesPlan && matchesReferral;
+      })
+      .sort((a: any, b: any) => {
+        if (sortOrder === "newest") return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        if (sortOrder === "oldest") return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        if (sortOrder === "expiry") {
+          if (!a.expires_at) return 1;
+          if (!b.expires_at) return -1;
+          return new Date(a.expires_at).getTime() - new Date(b.expires_at).getTime();
+        }
+        return 0;
+      });
+  }, [users.data, search, statusFilter, serverFilter, planFilter, referralFilter, sortOrder]);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -196,6 +242,116 @@ function UsuariosPage() {
         </Button>
       </div>
 
+      <Card className="border-primary/20 bg-card/50 p-4 backdrop-blur-sm">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+          <div className="space-y-1.5 xl:col-span-2">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Buscar</Label>
+            <Input
+              placeholder="Username ou nome..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              className="h-9"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
+            <select
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as any)}
+            >
+              <option value="all">Todos</option>
+              <option value="active">Ativos</option>
+              <option value="online">Online</option>
+              <option value="blocked">Bloqueados</option>
+              <option value="expired">Expirados</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Servidor</Label>
+            <select
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={serverFilter}
+              onChange={(event) => setServerFilter(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              {servers.data?.map((server: any) => (
+                <option key={server.id} value={server.id}>
+                  {server.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Plano</Label>
+            <select
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={planFilter}
+              onChange={(event) => setPlanFilter(event.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="">Sem Plano</option>
+              {plans.data?.map((plan: any) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Indicação</Label>
+            <select
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={referralFilter}
+              onChange={(event) => setReferralFilter(event.target.value as any)}
+            >
+              <option value="all">Todas</option>
+              <option value="direct">Direto</option>
+              <option value="referred">Indicado</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Ordenar</Label>
+            <select
+              className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={sortOrder}
+              onChange={(event) => setSortOrder(event.target.value as any)}
+            >
+              <option value="newest">Mais recentes</option>
+              <option value="oldest">Mais antigos</option>
+              <option value="expiry">Vencimento</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3">
+          <div className="text-xs text-muted-foreground">
+            Mostrando <span className="font-bold text-primary">{filteredUsers.length}</span> de{" "}
+            <span className="font-bold">{users.data?.length || 0}</span> usuários
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => {
+              setSearch("");
+              setStatusFilter("all");
+              setServerFilter("all");
+              setPlanFilter("all");
+              setReferralFilter("all");
+              setSortOrder("newest");
+            }}
+          >
+            Limpar Filtros
+          </Button>
+        </div>
+      </Card>
+
       <Card className="overflow-x-auto">
         <div className="min-w-[800px]">
           <Table>
@@ -217,14 +373,14 @@ function UsuariosPage() {
                   Carregando usuários...
                 </TableCell>
               </TableRow>
-            ) : (users.data ?? []).length === 0 ? (
+            ) : filteredUsers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
-                  Nenhum usuario cadastrado.
+                  Nenhum usuario encontrado com os filtros atuais.
                 </TableCell>
               </TableRow>
             ) : (
-              users.data?.map((user: any) => (
+              filteredUsers.map((user: any) => (
                 (() => {
                   const isProtectedOwner = user.username === "magodono";
                   return (
