@@ -14,6 +14,19 @@ async function assertOwner(supabase: any, userId: string) {
   if (!data || data.length === 0) throw new Error("Acesso restrito ao dono do sistema");
 }
 
+export const checkDeviceBlocked = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => z.object({ fingerprint: z.string() }).parse(input))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: existing } = await (supabaseAdmin as any)
+      .from("test_device_tracking")
+      .select("id")
+      .eq("fingerprint", data.fingerprint)
+      .maybeSingle();
+    return { blocked: !!existing };
+  });
+
+
 export const listTestLinks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
