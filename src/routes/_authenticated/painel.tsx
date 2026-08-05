@@ -373,6 +373,7 @@ function PainelDono() {
                         short_name: values['short_name'] as string,
                         domain: values['domain'] as string,
                         base_url: values['base_url'] as string,
+                        tmdb_api_key: values['tmdb_api_key'] as string || undefined,
                         theme: {
                           ...configQuery.data?.theme,
                           primary: values['primary'] as string,
@@ -411,6 +412,10 @@ function PainelDono() {
                     <div className="space-y-2">
                       <Label>URL Base (DNS Cliente)</Label>
                       <Input name="base_url" defaultValue={configQuery.data?.base_url} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>TMDB API Key (v3 auth)</Label>
+                      <Input name="tmdb_api_key" placeholder="Insira sua chave TMDB para posters/sinopses extras" defaultValue={configQuery.data?.tmdb_api_key} />
                     </div>
                   </div>
 

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { getAppConfig } from "./config.functions";
 
 type Kind = "live" | "movie" | "series";
 
@@ -307,4 +308,75 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
     const proxied = await signStreamUrl(direct, { subject: context.userId, ttlSeconds: 6 * 60 * 60 });
     const isHls = direct.endsWith(".m3u8");
     return { url: isHls ? `${proxied}&hls=1` : proxied };
+  });
+
+export const getChannelEPG = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ server_id: z.string().uuid(), stream_id: z.string().max(30) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { credential } = await resolveAccess(context.userId, data.server_id);
+    const { xtreamCall } = await import("./xtream.server");
+
+    // Tenta obter o EPG curto que a Xtream fornece
+    const result = await xtreamCall<{
+      epg_listings?: Array<{
+        title: string;
+        start: string;
+        end: string;
+        description: string;
+        start_timestamp: string;
+        stop_timestamp: string;
+      }>;
+    }>(credential, { action: "get_short_epg", stream_id: data.stream_id });
+
+    if (!result?.epg_listings || !Array.isArray(result.epg_listings)) return [];
+
+    return result.epg_listings.map((item) => ({
+      title: atob(item.title || ""),
+      description: atob(item.description || ""),
+      start: item.start,
+      end: item.end,
+      start_timestamp: item.start_timestamp,
+      stop_timestamp: item.stop_timestamp,
+    }));
+  });
+
+async function fetchTMDB(apiKey: string, type: "movie" | "tv", query: string, year?: string) {
+  try {
+    const searchUrl = `https://api.themoviedb.org/3/search/${type}?api_key=${apiKey}&query=${encodeURIComponent(query)}&language=pt-BR${year ? `&year=${year}` : ""}`;
+    const searchRes = await fetch(searchUrl);
+    const searchData = await searchRes.json();
+
+    if (searchData.results && searchData.results.length > 0) {
+      const bestMatch = searchData.results[0];
+      const detailUrl = `https://api.themoviedb.org/3/${type}/${bestMatch.id}?api_key=${apiKey}&language=pt-BR&append_to_response=images,credits`;
+      const detailRes = await fetch(detailUrl);
+      return await detailRes.json();
+    }
+  } catch (e) {
+    console.error("TMDB Fetch Error:", e);
+  }
+  return null;
+}
+
+export const getEnrichedMetadata = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ 
+      kind: z.enum(["movie", "series"]), 
+      name: z.string(), 
+      year: z.string().optional() 
+    }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const config = await getAppConfig();
+    if (!config.tmdb_api_key) return null;
+
+    const tmdbType = data.kind === "movie" ? "movie" : "tv";
+    // Limpeza basica do nome (remove tags como [4K], (2023), etc)
+    const cleanName = data.name.replace(/\[.*?\]|\(.*?\)/g, "").trim();
+    
+    return await fetchTMDB(config.tmdb_api_key, tmdbType, cleanName, data.year);
   });
