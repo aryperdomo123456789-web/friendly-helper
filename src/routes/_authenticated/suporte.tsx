@@ -208,6 +208,9 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
       
       if (updateError) console.error("Erro ao atualizar thread:", updateError);
 
+      if (msgData) {
+        setMessages(prev => [...prev, msgData]);
+      }
       setNewMessage("");
     } catch (err: any) {
       toast.error("Erro ao enviar: " + err.message);
