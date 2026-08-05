@@ -1,8 +1,22 @@
 /**
- * Sistema Inteligente de TMDB e EPG integrado para match de conteúdos variados.
+ * Analise todo o projeto de forma completa antes de realizar qualquer alteração e execute uma refatoração profunda e estruturada em toda a base de código.
  *
- * aguarde o propt
- * vou te enviar outro propt para voce executar olhando o projeto em geral e sempre tenha extremo cuidado com os playr preciso que nos sitema os canasi filmes e series que osuser abrir tenha velocidade fluides e leveza e fique aberto por horas e horas sem interrupções
+ * Seu objetivo é melhorar a qualidade interna do sistema sem alterar funcionalidades ou comportamento visível da aplicação.
+ *
+ * A refatoração deve tornar o código mais limpo, organizado, escalável, padronizado e fácil de manter.
+ *
+ * Realize uma revisão completa de:
+ * - Estrutura de pastas e organização do projeto
+ * - Componentes e sua reutilização
+ * - Hooks customizados, lógica de estado
+ * - Services e camadas de API
+ * - Integração com Supabase, queries
+ * - Fluxos de autenticação, rotas
+ * - Tipagem, lógica duplicada ou redundante
+ * - Funções grandes ou mal divididas
+ * - Acoplamento excessivo entre componentes
+ * - Imports desorganizados
+ * - Regras de negócio misturadas com UI
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
