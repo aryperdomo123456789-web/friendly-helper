@@ -13,6 +13,11 @@ import {
   kickDevices,
   testServerConnection
 } from "@/lib/owner.functions";
+import {
+  listTestLinks,
+  saveTestLink,
+  deleteTestLink
+} from "@/lib/test-links.functions";
 import { getMySession } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
 import { getAppConfig, updateAppConfig } from "@/lib/config.functions";
@@ -70,7 +75,9 @@ import {
   ExternalLink,
   ShieldAlert,
   Calendar,
-  Key
+  Key,
+  Link as LinkIcon,
+  Copy
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -104,6 +111,15 @@ function PainelDono() {
   const mutationTest = useServerFn(testServerConnection);
   const fetchConfig = useServerFn(getAppConfig);
   const mutationSaveConfig = useServerFn(updateAppConfig);
+  const fetchTestLinks = useServerFn(listTestLinks);
+  const mutationSaveTestLink = useServerFn(saveTestLink);
+  const mutationDeleteTestLink = useServerFn(deleteTestLink);
+
+  const testLinks = useQuery({
+    queryKey: ["admin-test-links"],
+    queryFn: () => fetchTestLinks(),
+    enabled: isOwner,
+  });
 
   const configQuery = useQuery({
     queryKey: ["app-config"],
@@ -129,6 +145,7 @@ function PainelDono() {
   const [serverModal, setServerModal] = useState<any>(null);
   const [userModal, setUserModal] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [testLinkModal, setTestLinkModal] = useState<any>(null);
 
   /* ------------------- Handlers Servidores ------------------- */
   const handleSaveServer = async (e: React.FormEvent) => {
@@ -178,6 +195,32 @@ function PainelDono() {
     }
   };
 
+  const handleSaveTestLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await mutationSaveTestLink({ data: testLinkModal });
+      toast.success("Link de teste salvo!");
+      setTestLinkModal(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-test-links"] });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar link");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTestLink = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este link de teste?")) return;
+    try {
+      await mutationDeleteTestLink({ data: { id } });
+      toast.success("Link removido");
+      queryClient.invalidateQueries({ queryKey: ["admin-test-links"] });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
   const handleDeleteUser = async (id: string) => {
     if (!confirm("Tem certeza que deseja remover este acesso? O usuario sera desconectado.")) return;
     try {
@@ -188,6 +231,7 @@ function PainelDono() {
       toast.error(err.message);
     }
   };
+
 
   if (!isOwner) {
     return (
@@ -356,6 +400,92 @@ function PainelDono() {
             ))}
           </div>
         </TabsContent>
+
+        <TabsContent value="testes" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Links de Indicação (Teste Grátis)</h2>
+            <Button onClick={() => setTestLinkModal({ 
+              slug: "", 
+              duration_minutes: 240,
+              max_connections: 1,
+              is_active: true
+            })}>
+              <Plus className="mr-2 h-4 w-4" /> Novo Link
+            </Button>
+          </div>
+
+          <Card className="overflow-x-auto">
+            <div className="min-w-[800px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Identificador (Slug)</TableHead>
+                    <TableHead>Duração</TableHead>
+                    <TableHead>Conexões</TableHead>
+                    <TableHead>URL Pública</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {testLinks.isLoading ? (
+                    <TableRow><TableCell colSpan={6} className="h-24 text-center">Carregando...</TableCell></TableRow>
+                  ) : (testLinks.data ?? []).length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="h-24 text-center">Nenhum link de teste criado.</TableCell></TableRow>
+                  ) : (
+                    testLinks.data?.map((link: any) => (
+                      <TableRow key={link.id}>
+                        <TableCell className="font-medium">{link.slug}</TableCell>
+                        <TableCell>
+                          {Math.floor(link.duration_minutes / 60)}h {link.duration_minutes % 60}m
+                        </TableCell>
+                        <TableCell>{link.max_connections}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded">
+                              /teste/{link.slug}
+                            </code>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6"
+                              onClick={() => {
+                                const url = `${window.location.origin}/teste/${link.slug}`;
+                                navigator.clipboard.writeText(url);
+                                toast.success("URL copiada!");
+                              }}
+                            >
+                              <Copy className="h-3.3 w-3.3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className={cn(
+                            "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                            link.is_active ? "bg-online/10 text-online" : "bg-destructive/10 text-destructive"
+                          )}>
+                            {link.is_active ? "Ativo" : "Inativo"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => setTestLinkModal(link)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteTestLink(link.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        </TabsContent>
+
 
         <TabsContent value="configuracao" className="space-y-4">
           <Card>
@@ -641,6 +771,72 @@ function PainelDono() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Test Link */}
+      <Dialog open={!!testLinkModal} onOpenChange={(open) => !open && setTestLinkModal(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <form onSubmit={handleSaveTestLink}>
+            <DialogHeader>
+              <DialogTitle>{testLinkModal?.id ? "Editar Link" : "Novo Link de Teste"}</DialogTitle>
+              <DialogDescription>
+                Configure o link que será enviado para novos clientes.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="slug">Slug do Link (Ex: promo-4h)</Label>
+                <Input
+                  id="slug"
+                  value={testLinkModal?.slug || ""}
+                  onChange={(e) => setTestLinkModal({ ...testLinkModal, slug: e.target.value })}
+                  placeholder="identificador-unico"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="duration">Duração (minutos)</Label>
+                  <Input
+                    id="duration"
+                    type="number"
+                    value={testLinkModal?.duration_minutes || 240}
+                    onChange={(e) => setTestLinkModal({ ...testLinkModal, duration_minutes: parseInt(e.target.value) })}
+                    min="1"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="conn">Conexões</Label>
+                  <Input
+                    id="conn"
+                    type="number"
+                    value={testLinkModal?.max_connections || 1}
+                    onChange={(e) => setTestLinkModal({ ...testLinkModal, max_connections: parseInt(e.target.value) })}
+                    min="1"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="active-link"
+                  checked={testLinkModal?.is_active ?? true}
+                  onChange={(e) => setTestLinkModal({ ...testLinkModal, is_active: e.target.checked })}
+                  className="rounded border-border bg-sidebar-accent"
+                />
+                <Label htmlFor="active-link">Link Ativo</Label>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Salvando..." : "Salvar Link"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
