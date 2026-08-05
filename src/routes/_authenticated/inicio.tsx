@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { TMDBHeroCarousel } from "@/components/home/TMDBHeroCarousel";
 
 export const Route = createFileRoute("/_authenticated/inicio")({
   head: () => ({
@@ -74,6 +75,9 @@ function Inicio() {
 
   return (
     <div className="space-y-6 min-w-0 w-full overflow-x-hidden">
+      {/* TMDB Hero Carousel */}
+      <TMDBHeroCarousel />
+
       <div className="overflow-hidden rounded-2xl border border-border bg-card p-4 lg:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">WebPlayer</p>
         <h1 className="mt-2 text-3xl font-bold">
