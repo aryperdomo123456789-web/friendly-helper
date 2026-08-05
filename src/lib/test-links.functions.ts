@@ -63,7 +63,7 @@ export const saveTestLink = createServerFn({ method: "POST" })
     } else {
       const { error } = await (supabaseAdmin as any)
         .from("test_links")
-        .insert(data);
+        .insert({ ...data, created_by_id: context.userId });
       if (error) throw error;
     }
     return { ok: true };
@@ -84,13 +84,25 @@ export const createTestUser = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => 
     z.object({ 
       slug: z.string(),
-      fingerprint: z.string()
+      fingerprint: z.string(),
+      referral_code: z.string().nullable().optional()
     }).parse(input)
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const request = getRequest();
     const ip = request?.headers.get("x-forwarded-for") || request?.headers.get("x-real-ip") || null;
+
+    // Resolve referred_by if code provided
+    let referredById = null;
+    if (data.referral_code) {
+      const { data: refUser } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("referral_code", data.referral_code)
+        .maybeSingle();
+      if (refUser) referredById = refUser.id;
+    }
     
     // Check if device fingerprint was already used
     const { data: existingDevice } = await (supabaseAdmin as any)
@@ -161,6 +173,7 @@ export const createTestUser = createServerFn({ method: "POST" })
       expires_at: expiresAt,
       is_active: true,
       plan_id: testPlan?.id || null,
+      referred_by_id: referredById
     });
 
     await supabaseAdmin.from("user_roles").insert({ user_id: newUserId, role: "user" });

@@ -85,7 +85,8 @@ import {
   Send,
   Image as ImageIcon,
   Mic,
-  X
+  X,
+  Share2
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -334,6 +335,9 @@ function PainelDono() {
           <TabsTrigger value="planos" className="gap-2">
             <Key className="h-4 w-4" /> Planos
           </TabsTrigger>
+          <TabsTrigger value="referencia" className="gap-2">
+            <Share2 className="h-4 w-4" /> Indicação
+          </TabsTrigger>
         </TabsList>
 
 
@@ -365,6 +369,7 @@ function PainelDono() {
                 <TableHeader>
                 <TableRow>
                   <TableHead>Usuario</TableHead>
+                   <TableHead>Referência</TableHead>
                   <TableHead>Servidores</TableHead>
                   <TableHead className="text-center">Conexoes</TableHead>
                   <TableHead>Vencimento</TableHead>
@@ -395,6 +400,15 @@ function PainelDono() {
                           )}
                         </div>
                         <div className="text-xs text-muted-foreground">@{user.username}</div>
+                      </TableCell>
+                      <TableCell>
+                        {user.referred_by ? (
+                          <div className="text-xs font-bold text-primary">
+                            @{user.referred_by.username}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Direto</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
@@ -895,6 +909,68 @@ function PainelDono() {
               ))
             )}
           </div>
+        </TabsContent>
+
+        <TabsContent value="referencia" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Links de Indicação / Teste</h2>
+            <Button onClick={() => setTestLinkModal({ slug: "", duration_minutes: 360, max_connections: 1, is_active: true })}>
+              <Plus className="mr-2 h-4 w-4" /> Novo Link Público
+            </Button>
+          </div>
+
+          <Card>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Slug / Identificador</TableHead>
+                  <TableHead>Criado Por</TableHead>
+                  <TableHead>Duração</TableHead>
+                  <TableHead>Conexões</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {testLinks.data?.map((link: any) => (
+                  <TableRow key={link.id}>
+                    <TableCell className="font-mono text-xs">{link.slug}</TableCell>
+                    <TableCell>
+                      {link.profile ? (
+                        <span className="text-xs font-bold text-primary">@{link.profile.username}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Sistema / Dono</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-xs">{link.duration_minutes} min</TableCell>
+                    <TableCell className="text-xs">{link.max_connections} conn</TableCell>
+                    <TableCell>
+                      <span className={cn("text-[10px] px-2 py-0.5 rounded-full", link.is_active ? "bg-online/10 text-online" : "bg-destructive/10 text-destructive")}>
+                        {link.is_active ? "Ativo" : "Inativo"}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="icon" onClick={() => {
+                          const url = `${window.location.origin}/teste/${link.slug}`;
+                          navigator.clipboard.writeText(url);
+                          toast.success("Link copiado!");
+                        }}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => setTestLinkModal(link)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteTestLink(link.id)}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
         </TabsContent>
 
       </Tabs>
