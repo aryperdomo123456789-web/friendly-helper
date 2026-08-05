@@ -38,12 +38,16 @@ const accessUserSchema = z.object({
 });
 
 async function assertOwner(supabase: any, userId: string) {
-  const [owner, admin] = await Promise.all([
-    supabase.rpc("has_role", { _user_id: userId, _role: "owner" }),
-    supabase.rpc("has_role", { _user_id: userId, _role: "admin" }),
-  ]);
-  if (!owner.data && !admin.data) throw new Error("Acesso restrito ao dono do sistema");
+  // Le direto a tabela de papeis (politica permite ler o proprio papel).
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .in("role", ["owner", "admin"]);
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) throw new Error("Acesso restrito ao dono do sistema");
 }
+
 
 /* ------------------------------ Servidores ------------------------------ */
 
