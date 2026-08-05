@@ -167,16 +167,21 @@ function UsuariosPage() {
           </p>
         </div>
         <Button
-          onClick={() =>
+          onClick={() => {
+            const testPlan = users.data?.find((u: any) => u.plan?.name.toLowerCase().includes("teste"))?.plan;
             setUserModal({
               username: "",
               password: "",
               display_name: "",
-              max_connections: 1,
+              max_connections: testPlan?.max_connections ?? 1,
               server_ids: (servers.data ?? []).map((server: any) => server.id),
               is_active: true,
-            })
-          }
+              plan_id: testPlan?.id || null,
+              expires_at: testPlan 
+                ? new Date(Date.now() + testPlan.duration_days * 24 * 60 * 60 * 1000).toISOString()
+                : null
+            });
+          }}
         >
           <Plus className="mr-2 h-4 w-4" /> Criar Usuario
         </Button>
@@ -298,6 +303,38 @@ function UsuariosPage() {
                   placeholder="Ex: Jose da Silva"
                 />
               </div>
+              <div className="grid gap-2">
+                <Label>Plano de Assinatura (Opcional)</Label>
+                <select 
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  value={userModal?.plan_id || ""} 
+                  onChange={(e) => {
+                    const planId = e.target.value || null;
+                    const selectedUser = users.data?.find((u: any) => u.plan_id === planId);
+                    const selectedPlan = selectedUser?.plan;
+                    
+                    const updates: any = { plan_id: planId };
+                    
+                    if (selectedPlan) {
+                      updates.max_connections = selectedPlan.max_connections;
+                      const expiry = new Date();
+                      expiry.setDate(expiry.getDate() + selectedPlan.duration_days);
+                      updates.expires_at = expiry.toISOString();
+                    }
+                    
+                    setUserModal({...userModal, ...updates});
+                  }}
+                >
+                  <option value="">Personalizado (Sem plano)</option>
+                  {Array.from(new Set((users.data ?? []).filter((u: any) => u.plan).map((u: any) => JSON.stringify(u.plan))))
+                    .map(s => JSON.parse(s as string))
+                    .map((plan: any) => (
+                      <option key={plan.id} value={plan.id}>
+                        {plan.name} - R$ {Number(plan.price).toFixed(2)}
+                      </option>
+                    ))}
+                </select>
+              </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label>Usuario</Label>
@@ -318,7 +355,6 @@ function UsuariosPage() {
                     onChange={(e) => setUserModal({ ...userModal, password: e.target.value })}
                     required={!userModal?.id}
                   />
-
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">

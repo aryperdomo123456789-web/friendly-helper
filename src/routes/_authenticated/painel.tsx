@@ -334,15 +334,21 @@ function PainelDono() {
         <TabsContent value="acessos" className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold">Usuarios do Sistema</h2>
-            <Button onClick={() => setUserModal({ 
-              username: "", 
-              password: "", 
-              display_name: "", 
-              max_connections: 1, 
-              server_ids: [],
-              is_active: true,
-              plan_id: null
-            })}>
+            <Button onClick={() => {
+              const testPlan = plans.data?.find((p: any) => p.name.toLowerCase().includes("teste"));
+              setUserModal({ 
+                username: "", 
+                password: "", 
+                display_name: "", 
+                max_connections: testPlan?.max_connections ?? 1, 
+                server_ids: [],
+                is_active: true,
+                plan_id: testPlan?.id || null,
+                expires_at: testPlan 
+                  ? new Date(Date.now() + testPlan.duration_days * 24 * 60 * 60 * 1000).toISOString()
+                  : null
+              });
+            }}>
               <Plus className="mr-2 h-4 w-4" /> Criar Acesso
             </Button>
           </div>
