@@ -98,6 +98,16 @@ function UsuariosPage() {
       toast.error("Selecione pelo menos um servidor");
       return;
     }
+    const pwd = (userModal.password || "").trim();
+    if (!userModal.id && pwd.length < 6) {
+      toast.error("A senha precisa ter no minimo 6 caracteres");
+      return;
+    }
+    if (userModal.id && pwd.length > 0 && pwd.length < 6) {
+      toast.error("A nova senha precisa ter no minimo 6 caracteres");
+      return;
+    }
+
     setLoading(true);
     try {
       if (userModal.id) {
@@ -301,9 +311,12 @@ function UsuariosPage() {
                   <Input
                     type="password"
                     value={userModal?.password || ""}
+                    minLength={6}
+                    placeholder="Minimo 6 caracteres"
                     onChange={(e) => setUserModal({ ...userModal, password: e.target.value })}
                     required={!userModal?.id}
                   />
+
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
