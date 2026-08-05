@@ -213,8 +213,8 @@ function PainelDono() {
             </Button>
           </div>
 
-          <Card>
-            <Table>
+          <Card className="overflow-x-auto">
+            <div className="min-w-[800px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Usuario</TableHead>
@@ -284,7 +284,8 @@ function PainelDono() {
                 )}
               </TableBody>
             </Table>
-          </Card>
+          </div>
+        </Card>
         </TabsContent>
 
         <TabsContent value="servidores" className="space-y-4">
@@ -300,7 +301,7 @@ function PainelDono() {
             </Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {servers.data?.map((server: any) => (
               <Card key={server.id}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -333,7 +334,7 @@ function PainelDono() {
 
       {/* Modal Servidor */}
       <Dialog open={!!serverModal} onOpenChange={(o) => !o && setServerModal(null)}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSaveServer}>
             <DialogHeader>
               <DialogTitle>{serverModal?.id ? "Editar Servidor" : "Novo Servidor"}</DialogTitle>
@@ -401,7 +402,7 @@ function PainelDono() {
 
       {/* Modal Usuario */}
       <Dialog open={!!userModal} onOpenChange={(o) => !o && setUserModal(null)}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSaveUser}>
             <DialogHeader>
               <DialogTitle>{userModal?.id ? "Editar Acesso" : "Novo Acesso"}</DialogTitle>
