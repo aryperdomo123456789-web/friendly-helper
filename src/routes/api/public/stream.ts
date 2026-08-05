@@ -23,13 +23,18 @@ export const Route = createFileRoute("/api/public/stream")({
         // therefore fails intermittently -> retry before giving up.
         const attemptFetch = async (): Promise<Response | null> => {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 20_000);
+          // Increased timeout to 40s for slow panel handshakes
+          const timer = setTimeout(() => controller.abort(), 40_000);
           try {
             return await fetch(target, {
               redirect: "follow",
               signal: controller.signal,
               headers: {
+                // Mimic VLC more closely for better compatibility
                 "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
+                "Accept-Encoding": "identity",
+                "Icy-MetaData": "1",
+                "Connection": "keep-alive",
                 Accept: "*/*",
                 ...(range ? { Range: range } : {}),
               },
