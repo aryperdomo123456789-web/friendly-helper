@@ -73,6 +73,7 @@ export const Route = createFileRoute("/_authenticated/painel")({
 });
 
 function PainelDono() {
+  const { isOwner } = usePlayerSession();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("acessos");
 
@@ -90,12 +91,15 @@ function PainelDono() {
   const servers = useQuery({
     queryKey: ["admin-servers"],
     queryFn: () => fetchServers(),
+    enabled: isOwner,
   });
 
   const users = useQuery({
     queryKey: ["admin-users"],
     queryFn: () => fetchUsers(),
+    enabled: isOwner,
   });
+
 
   // State for modals
   const [serverModal, setServerModal] = useState<any>(null);
