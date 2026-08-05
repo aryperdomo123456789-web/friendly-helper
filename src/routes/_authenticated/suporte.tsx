@@ -137,6 +137,7 @@ function SuportePage() {
             <ChatWindow
               thread={selectedThread}
               onClose={() => setSelectedThread(null)}
+              isOwner={isOwner}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center space-y-4">
