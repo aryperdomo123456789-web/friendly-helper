@@ -18,7 +18,7 @@ async function resolveAccess(userId: string, serverId: string) {
     supabaseAdmin.from("user_roles").select("role").eq("user_id", userId),
   ]);
   const isOwner =
-    !profile || !!roles?.some((r) => r.role === "owner" || r.role === "admin");
+    !profile || !!roles?.some((r: any) => r.role === "owner" || r.role === "admin");
   if (profile && !isOwner) {
     if (!profile.is_active) throw new Error("Acesso desativado. Fale com o suporte.");
     if (profile.expires_at && new Date(profile.expires_at).getTime() < Date.now()) {
@@ -120,7 +120,7 @@ export const heartbeat = createServerFn({ method: "POST" })
       .select("device_id")
       .eq("user_id", context.userId);
 
-    const known = (active ?? []).some((row) => row.device_id === data.device_id);
+    const known = (active ?? []).some((row: any) => row.device_id === data.device_id);
     if (!known && (active ?? []).length >= profile.max_connections) {
       throw new Error(
         `Limite de ${profile.max_connections} conexao(oes) simultanea(s) atingido neste acesso`,
@@ -285,7 +285,7 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
         .from("device_sessions")
         .select("device_id")
         .eq("user_id", context.userId);
-      const known = (active ?? []).some((row) => row.device_id === data.device_id);
+      const known = (active ?? []).some((row: any) => row.device_id === data.device_id);
       if (!known && (active ?? []).length >= profile.max_connections) {
         throw new Error(`Limite de ${profile.max_connections} conexao(oes) simultanea(s) atingido`);
       }

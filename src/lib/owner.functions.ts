@@ -68,7 +68,7 @@ export const listServers = createServerFn({ method: "GET" })
       .order("created_at");
     return (servers ?? []).map((server) => ({
       ...server,
-      credentials: (creds ?? []).filter((credential) => credential.server_id === server.id),
+      credentials: (creds ?? []).filter((credential: any) => credential.server_id === server.id),
     }));
   });
 
@@ -160,10 +160,10 @@ export const listAccessUsers = createServerFn({ method: "GET" })
     return (profiles ?? []).map((profile) => ({
       ...profile,
       server_ids: (access ?? [])
-        .filter((row) => row.user_id === profile.id)
-        .map((row) => row.server_id),
+        .filter((row: any) => row.user_id === profile.id)
+        .map((row: any) => row.server_id),
       online: (devices ?? []).filter(
-        (row) => row.user_id === profile.id && new Date(row.last_seen).getTime() > cutoff,
+        (row: any) => row.user_id === profile.id && new Date(row.last_seen).getTime() > cutoff,
       ).length,
     }));
   });
