@@ -189,7 +189,7 @@ function FloatingChat({ userId }: { userId?: string }) {
             console.log("Nova mensagem recebida via Realtime:", payload.new);
             setMessages(prev => {
               // Evitar duplicatas se o insert local já adicionou
-              if (prev.some(m => m.id === payload.new.id)) return prev;
+              if (prev.some(m => m['id'] === payload.new['id'])) return prev;
               return [...prev, payload.new];
             });
           })
