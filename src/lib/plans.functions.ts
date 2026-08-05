@@ -24,7 +24,7 @@ export const savePlan = createServerFn({ method: "POST" })
       name: z.string(),
       price: z.number(),
       duration_value: z.number(),
-      duration_unit: z.enum(["days", "hours"]),
+      duration_unit: z.enum(["days", "hours", "minutes"]),
       max_connections: z.number(),
     }).parse(input)
   )
@@ -32,9 +32,16 @@ export const savePlan = createServerFn({ method: "POST" })
     const { id, ...data } = input;
 
     // We keep duration_days for DB compatibility if needed, but the UI uses value/unit
+    let duration_days = data.duration_value;
+    if (data.duration_unit === 'hours') {
+      duration_days = Math.ceil(data.duration_value / 24);
+    } else if (data.duration_unit === 'minutes') {
+      duration_days = Math.ceil(data.duration_value / (24 * 60));
+    }
+
     const dbData = {
       ...data,
-      duration_days: data.duration_unit === 'days' ? data.duration_value : Math.ceil(data.duration_value / 24)
+      duration_days
     };
 
     if (id) {
