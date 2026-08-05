@@ -4,6 +4,8 @@ export type XtreamCreds = {
   dns: string;
   username: string;
   password: string;
+  /** DNS alternativos do mesmo servidor, usados como failover. */
+  dnsPool?: string[];
 };
 
 function normalizeDns(dns: string): string {
