@@ -3,7 +3,7 @@ import { Catalog } from "@/components/player/Catalog";
 
 export const Route = createFileRoute("/_authenticated/filmes")({
   validateSearch: (search: Record<string, unknown>) => ({
-    q: (search.q as string) || "",
+    q: (search['q'] as string) || "",
   }),
   head: () => ({
     meta: [
