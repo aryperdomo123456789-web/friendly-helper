@@ -61,6 +61,7 @@ PORT=6873
 O sistema tenta automaticamente todos os DNS cadastrados em `server_credentials` caso o principal falhe (HTTP 404/Timeout). Para garantir fluidez máxima:
 -   O Proxy de Stream utiliza cabeçalhos de VLC e handshake de 60s.
 -   O Player HLS está configurado para 25 retentativas de fragmentos.
+-   **Isolamento de Usuário**: A seleção de servidor é persistida localmente no navegador (`localStorage`), garantindo que a troca de servidor feita por um usuário seja individual e não afete nenhum outro cliente.
 
 ---
 
