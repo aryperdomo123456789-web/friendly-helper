@@ -21,6 +21,7 @@ import { Route as AuthenticatedServidoresRouteImport } from './routes/_authentic
 import { Route as AuthenticatedSuporteRouteImport } from './routes/_authenticated/suporte'
 import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
 import { Route as TesteSlugRouteImport } from './routes/teste.$slug'
+import { Route as ApiPublicImageRouteImport } from './routes/api/public/image'
 import { Route as ApiPublicMercadopagoWebhookRouteImport } from './routes/api/public/mercadopago-webhook'
 import { Route as ApiPublicStreamRouteImport } from './routes/api/public/stream'
 
@@ -83,6 +84,11 @@ const TesteSlugRoute = TesteSlugRouteImport.update({
   path: '/teste/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicImageRoute = ApiPublicImageRouteImport.update({
+  id: '/api/public/image',
+  path: '/api/public/image',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicMercadopagoWebhookRoute =
   ApiPublicMercadopagoWebhookRouteImport.update({
     id: '/api/public/mercadopago-webhook',
@@ -107,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/suporte': typeof AuthenticatedSuporteRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/teste/$slug': typeof TesteSlugRoute
+  '/api/public/image': typeof ApiPublicImageRoute
   '/api/public/mercadopago-webhook': typeof ApiPublicMercadopagoWebhookRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
 }
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/suporte': typeof AuthenticatedSuporteRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
   '/teste/$slug': typeof TesteSlugRoute
+  '/api/public/image': typeof ApiPublicImageRoute
   '/api/public/mercadopago-webhook': typeof ApiPublicMercadopagoWebhookRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
 }
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   '/_authenticated/suporte': typeof AuthenticatedSuporteRoute
   '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
   '/teste/$slug': typeof TesteSlugRoute
+  '/api/public/image': typeof ApiPublicImageRoute
   '/api/public/mercadopago-webhook': typeof ApiPublicMercadopagoWebhookRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
 }
@@ -156,6 +165,7 @@ export interface FileRouteTypes {
     | '/suporte'
     | '/usuarios'
     | '/teste/$slug'
+    | '/api/public/image'
     | '/api/public/mercadopago-webhook'
     | '/api/public/stream'
   fileRoutesByTo: FileRoutesByTo
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/suporte'
     | '/usuarios'
     | '/teste/$slug'
+    | '/api/public/image'
     | '/api/public/mercadopago-webhook'
     | '/api/public/stream'
   id:
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/_authenticated/suporte'
     | '/_authenticated/usuarios'
     | '/teste/$slug'
+    | '/api/public/image'
     | '/api/public/mercadopago-webhook'
     | '/api/public/stream'
   fileRoutesById: FileRoutesById
@@ -195,6 +207,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   TesteSlugRoute: typeof TesteSlugRoute
+  ApiPublicImageRoute: typeof ApiPublicImageRoute
   ApiPublicMercadopagoWebhookRoute: typeof ApiPublicMercadopagoWebhookRoute
   ApiPublicStreamRoute: typeof ApiPublicStreamRoute
 }
@@ -285,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TesteSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/image': {
+      id: '/api/public/image'
+      path: '/api/public/image'
+      fullPath: '/api/public/image'
+      preLoaderRoute: typeof ApiPublicImageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/mercadopago-webhook': {
       id: '/api/public/mercadopago-webhook'
       path: '/api/public/mercadopago-webhook'
@@ -333,6 +353,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   TesteSlugRoute: TesteSlugRoute,
+  ApiPublicImageRoute: ApiPublicImageRoute,
   ApiPublicMercadopagoWebhookRoute: ApiPublicMercadopagoWebhookRoute,
   ApiPublicStreamRoute: ApiPublicStreamRoute,
 }

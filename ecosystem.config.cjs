@@ -4,22 +4,19 @@
 module.exports = {
   apps: [
     {
-      name: "webplayer",
-      script: ".output/server/index.mjs",
+      name: "stream-mago-bot",
+      script: "./start-pm2.sh",
+      interpreter: "bash",
       cwd: __dirname,
-      exec_mode: "cluster",
-      instances: 2, // bump to "max" on bigger VPS; streaming is I/O bound
+      exec_mode: "fork",
+      instances: 1,
       max_memory_restart: "512M",
       autorestart: true,
       watch: false,
       env: {
         NODE_ENV: "production",
         HOST: "127.0.0.1",
-        PORT: 3000,
-        // Everything below must be provided by the server environment
-        // (.env.production loaded by pm2 or aaPanel env vars). NEVER commit values.
-        // SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, SUPABASE_SERVICE_ROLE_KEY,
-        // VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, STREAM_PROXY_SECRET
+        PORT: 6873,
       },
       out_file: "./logs/out.log",
       error_file: "./logs/err.log",

@@ -7,6 +7,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { proxyMediaUrl } from "@/lib/media-url";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,7 +54,13 @@ function ThemeAwareLogo({ className }: { className?: string }) {
   });
 
   if (config?.logo_url) {
-    return <img src={config.logo_url} alt="Logo" className="h-full w-full object-contain" />;
+    return (
+      <img
+        src={proxyMediaUrl(config.logo_url) ?? config.logo_url}
+        alt="Logo"
+        className="h-full w-full object-contain"
+      />
+    );
   }
 
   return <Tv className={className} />;

@@ -1,8 +1,8 @@
 import { z } from "zod";
 
 export const AppConfigSchema = z.object({
-  domain: z.string().default("mago-pd.com"),
-  base_url: z.string().url().default("http://mago-pd.com"),
+  domain: z.string().default("stream.mago-bot.com"),
+  base_url: z.string().url().default("https://stream.mago-bot.com"),
   name: z.string().default("WEBPLAYER"),
   short_name: z.string().default("WebPlayer"),
   description: z.string().default("Webplayer multi-servidor com navegação centralizada."),

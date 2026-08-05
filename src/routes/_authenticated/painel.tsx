@@ -85,6 +85,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { proxyMediaUrl } from "@/lib/media-url";
 
 
 export const Route = createFileRoute("/_authenticated/painel")({
@@ -379,6 +380,9 @@ function PainelDono() {
                   <TableRow><TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground uppercase tracking-widest">Nenhum usuario cadastrado.</TableCell></TableRow>
                 ) : (
                   users.data?.map((user: any) => (
+                    (() => {
+                      const isProtectedOwner = user.username === "magodono";
+                      return (
                     <TableRow key={user.id}>
                       <TableCell>
                         <div className="font-medium flex items-center gap-2">
@@ -447,12 +451,20 @@ function PainelDono() {
                           <Button variant="ghost" size="icon" onClick={() => setUserModal(user)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteUser(user.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {!isProtectedOwner ? (
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteUser(user.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button variant="ghost" size="icon" className="text-muted-foreground/40 cursor-not-allowed" title="O Dono não pode ser apagado" disabled>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
+                      );
+                    })()
                   ))
                 )}
               </TableBody>
@@ -679,14 +691,44 @@ function PainelDono() {
                       <div className="space-y-2">
                         <Label>Logo Principal (URL)</Label>
                         <Input name="logo_url" placeholder="https://exemplo.com/logo.png" defaultValue={configQuery.data?.logo_url} />
+                        {configQuery.data?.logo_url ? (
+                          <div className="rounded-lg border border-border bg-background/60 p-2">
+                            <div className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">Preview</div>
+                            <img
+                              src={proxyMediaUrl(configQuery.data.logo_url) ?? configQuery.data.logo_url}
+                              alt="Preview logo principal"
+                              className="max-h-20 w-auto object-contain"
+                            />
+                          </div>
+                        ) : null}
                       </div>
                       <div className="space-y-2">
                         <Label>Logo Miniatura (URL)</Label>
                         <Input name="logo_small_url" placeholder="https://exemplo.com/logo-small.png" defaultValue={configQuery.data?.logo_small_url} />
+                        {configQuery.data?.logo_small_url ? (
+                          <div className="rounded-lg border border-border bg-background/60 p-2">
+                            <div className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">Preview</div>
+                            <img
+                              src={proxyMediaUrl(configQuery.data.logo_small_url) ?? configQuery.data.logo_small_url}
+                              alt="Preview logo miniatura"
+                              className="max-h-16 w-auto object-contain"
+                            />
+                          </div>
+                        ) : null}
                       </div>
                       <div className="space-y-2">
                         <Label>Favicon / Ícone (URL)</Label>
                         <Input name="favicon_url" placeholder="https://exemplo.com/favicon.ico" defaultValue={configQuery.data?.favicon_url} />
+                        {configQuery.data?.favicon_url ? (
+                          <div className="rounded-lg border border-border bg-background/60 p-2">
+                            <div className="mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">Preview</div>
+                            <img
+                              src={proxyMediaUrl(configQuery.data.favicon_url) ?? configQuery.data.favicon_url}
+                              alt="Preview favicon"
+                              className="max-h-10 w-auto object-contain"
+                            />
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </div>
@@ -1606,4 +1648,3 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
     </div>
   );
 }
-

@@ -50,6 +50,29 @@ async function assertOwner(supabase: any, userId: string) {
   if (!data || data.length === 0) throw new Error("Acesso restrito ao dono do sistema");
 }
 
+async function assertNotOwnerAccount(supabase: any, userId: string) {
+  const [{ data: roleRows, error: roleError }, { data: profile, error: profileError }] = await Promise.all([
+    supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .in("role", ["owner"])
+      .limit(1),
+    supabase
+      .from("profiles")
+      .select("username")
+      .eq("id", userId)
+      .maybeSingle(),
+  ]);
+
+  if (roleError) throw new Error(roleError.message);
+  if (profileError) throw new Error(profileError.message);
+
+  if ((roleRows ?? []).length > 0 || profile?.username === "magodono") {
+    throw new Error("O usuário Dono (@magodono) não pode ser apagado.");
+  }
+}
+
 
 /* ------------------------------ Servidores ------------------------------ */
 
@@ -285,6 +308,7 @@ export const deleteAccessUser = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertNotOwnerAccount(supabaseAdmin, data.id);
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.id);
     if (error) throw error;
     return { ok: true };

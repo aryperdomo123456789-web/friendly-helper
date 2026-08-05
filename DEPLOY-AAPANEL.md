@@ -1,37 +1,18 @@
 # Deploy no aaPanel / VPS Ubuntu 22.04
 
-Este projeto foi construído com TanStack Start e está pronto para produção.
+O passo a passo completo foi movido para:
 
-## Requisitos
-- Node.js 18 ou superior
-- PM2 (npm install -g pm2)
-- Banco de dados Supabase (Lovable Cloud)
+[`deploy/MIGRACAO-BACKEND-PROPRIO.md`](/www/wwwroot/stream.mago-bot.com/deploy/MIGRACAO-BACKEND-PROPRIO.md)
 
-## Passos para Instalação
+Para guardar e restaurar tudo depois, use também:
 
-1. **Clone o repositório** na sua VPS ou aaPanel.
-2. **Instale as dependências**:
-   ```bash
-   npm install
-   ```
-3. **Configure as variáveis de ambiente**:
-   Crie um arquivo `.env` na raiz com as chaves do Supabase.
-4. **Build do projeto**:
-   ```bash
-   npm run build
-   ```
-5. **Inicie com PM2**:
-   ```bash
-   pm2 start ecosystem.config.cjs
-   ```
+[`BACKUP-RESTAURACAO.md`](/www/wwwroot/stream.mago-bot.com/BACKUP-RESTAURACAO.md)
 
-## Configuração do Mercado Pago
-1. Acesse o Painel do Dono -> Configuração Central.
-2. Insira seu **Access Token** e **Public Key**.
-3. No painel do Mercado Pago, configure a URL de Webhook:
-   `https://seu-dominio.com/api/public/mercadopago-webhook`
-4. Marque os eventos de `payment`.
+Use esse guia para:
 
-## Dica Profissional (Nginx no aaPanel)
-Para o streaming funcionar perfeitamente em HTTPS sem erros de mixed content, o proxy reverso já está configurado no código. Apenas certifique-se que o Nginx permite conexões longas (timeouts de 60s+).
-
+- criar o banco Supabase
+- rodar o schema e os dados base
+- executar o seed de usuários
+- subir o app com PM2 na porta `6873`
+- manter o nginx sem afetar outros projetos
+- configurar o webhook do Mercado Pago

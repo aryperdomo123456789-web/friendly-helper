@@ -26,7 +26,9 @@ import {
 import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { getAppConfig } from "@/lib/config.functions";
 import { listSupportThreads } from "@/lib/chat.functions";
+import { proxyMediaUrl } from "@/lib/media-url";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -61,6 +63,14 @@ function ShellLayout() {
   const location = useLocation();
   const queryClient = useQueryClient();
   const fetchThreads = useServerFn(listSupportThreads);
+  const fetchConfig = useServerFn(getAppConfig);
+
+  const { data: appConfig } = useQuery({
+    queryKey: ["app-config-shell"],
+    queryFn: () => fetchConfig(),
+    staleTime: 5 * 60_000,
+  });
+  const sidebarLogoSrc = appConfig?.logo_small_url || appConfig?.logo_url;
 
   const { data: threads } = useQuery({
     queryKey: ["support-threads-nav"],
@@ -87,9 +97,17 @@ function ShellLayout() {
         )}
       >
         <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-sm font-black text-primary-foreground">
-            W
-          </span>
+          <div className="grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-primary/10 text-sm font-black text-primary-foreground">
+            {sidebarLogoSrc ? (
+              <img
+                src={proxyMediaUrl(sidebarLogoSrc) ?? sidebarLogoSrc}
+                alt="Logo"
+                className="h-full w-full object-contain p-1"
+              />
+            ) : (
+              <span>W</span>
+            )}
+          </div>
           <span className="text-sm font-bold tracking-[0.18em] text-sidebar-foreground">
             WEBPLAYER
           </span>

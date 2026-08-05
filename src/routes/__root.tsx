@@ -10,6 +10,7 @@ import {
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, type ReactNode } from "react";
 import { getAppConfig } from "../lib/config.functions";
+import { proxyMediaUrl } from "../lib/media-url";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -148,7 +149,7 @@ function ThemeApplier() {
           link.rel = 'icon';
           head.appendChild(link);
         }
-        link.href = config.favicon_url;
+        link.href = proxyMediaUrl(config.favicon_url) ?? config.favicon_url;
       }
     }
   }, [config]);

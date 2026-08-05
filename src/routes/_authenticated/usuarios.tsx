@@ -225,6 +225,9 @@ function UsuariosPage() {
               </TableRow>
             ) : (
               users.data?.map((user: any) => (
+                (() => {
+                  const isProtectedOwner = user.username === "magodono";
+                  return (
                 <TableRow key={user.id}>
                   <TableCell>
                     <div className="font-medium">{user.display_name || user.username}</div>
@@ -286,17 +289,31 @@ function UsuariosPage() {
                       <Button variant="ghost" size="icon" onClick={() => setUserModal(user)}>
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive"
-                        onClick={() => handleDeleteUser(user.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {!isProtectedOwner ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive"
+                          onClick={() => handleDeleteUser(user.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground/40 cursor-not-allowed"
+                          title="O Dono não pode ser apagado"
+                          disabled
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
+                  );
+                })()
               ))
             )}
           </TableBody>

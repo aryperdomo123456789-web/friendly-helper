@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { resolveTestLinkSlug } from "@/lib/referral";
 
 export const Route = createFileRoute('/api/public/mercadopago-webhook')({
   server: {
@@ -42,6 +43,7 @@ export const Route = createFileRoute('/api/public/mercadopago-webhook')({
                   .select("referred_by_id, display_name")
                   .eq("id", userId)
                   .single();
+                const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
 
                 // Get plan details
                 const { data: plan } = await supabaseAdmin
@@ -72,8 +74,10 @@ export const Route = createFileRoute('/api/public/mercadopago-webhook')({
                   // REFERRAL BONUS LOGIC
                   if (userProfile?.referred_by_id) {
                     let bonusDays = 0;
-                    const linkMatch = userProfile.display_name?.match(/\(([^)]+)\)/);
-                    const linkSlug = linkMatch ? linkMatch[1] : null;
+                    const linkSlug = resolveTestLinkSlug({
+                      testLinkSlug: authUser.user?.user_metadata?.test_link_slug ?? null,
+                      displayName: userProfile.display_name,
+                    });
 
                     if (linkSlug) {
                       const { data: link } = await supabaseAdmin

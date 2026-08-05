@@ -1,8 +1,37 @@
 
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { AppConfigSchema } from "./types";
 import { z } from "zod";
+
+function getRuntimeBaseUrl(): string | null {
+  const request = getRequest();
+  if (!request) return null;
+
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host");
+  if (!host) return null;
+
+  const proto = request.headers.get("x-forwarded-proto") || "https";
+  return `${proto}://${host}`;
+}
+
+function getRuntimeDomain(): string | null {
+  const request = getRequest();
+  const host = request?.headers.get("x-forwarded-host") || request?.headers.get("host");
+  return host ? host.replace(/:\d+$/, "") : null;
+}
+
+function mergeRuntimeConfig(config: unknown) {
+  const parsed = AppConfigSchema.parse(config);
+  const runtimeBaseUrl = getRuntimeBaseUrl();
+  const runtimeDomain = getRuntimeDomain();
+  return {
+    ...parsed,
+    ...(runtimeDomain ? { domain: runtimeDomain } : null),
+    ...(runtimeBaseUrl ? { base_url: runtimeBaseUrl } : null),
+  };
+}
 
 /**
  * Gets the central application configuration from the database.
@@ -30,10 +59,10 @@ export const getAppConfig = createServerFn({ method: "GET" })
         .single() as any);
       
       if (insertError) throw new Error("Erro ao criar configuracoes padrao: " + insertError.message);
-      return newData.config;
+      return mergeRuntimeConfig(newData.config);
     }
 
-    return AppConfigSchema.parse(data.config);
+    return mergeRuntimeConfig(data.config);
   });
 
 /**

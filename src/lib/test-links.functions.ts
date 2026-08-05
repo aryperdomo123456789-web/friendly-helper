@@ -167,7 +167,7 @@ export const createTestUser = createServerFn({ method: "POST" })
       email: usernameToEmail(username),
       password: password,
       email_confirm: true,
-      user_metadata: { username },
+      user_metadata: { username, test_link_slug: link.slug },
     });
     if (error || !created.user) throw new Error(error?.message ?? "Falha ao criar teste");
     
