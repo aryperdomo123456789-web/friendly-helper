@@ -113,7 +113,7 @@ function ShellLayout() {
               </Link>
             );
           })}
-        </nav>
+        
           <Link
             to="/conta"
             onClick={() => setOpen(false)}
@@ -161,6 +161,7 @@ function ShellLayout() {
               </Link>
             </>
           ) : null}
+        </nav>
 
 
         <div className="space-y-3 border-t border-sidebar-border p-4">
