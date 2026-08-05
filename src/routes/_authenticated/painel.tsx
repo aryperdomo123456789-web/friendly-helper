@@ -355,7 +355,7 @@ function PainelDono() {
                 is_active: true,
                 plan_id: testPlan?.id || null,
                 expires_at: testPlan 
-                  ? new Date(Date.now() + testPlan.duration_days * 24 * 60 * 60 * 1000).toISOString()
+                  ? new Date(Date.now() + testPlan.duration_value * (testPlan.duration_unit === 'hours' ? 60 : 24 * 60) * 60 * 1000).toISOString()
                   : null
               });
             }}>
@@ -1294,14 +1294,29 @@ function PainelDono() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="plan-duration">Duração (Dias)</Label>
-                  <Input 
-                    id="plan-duration"
-                    type="number"
-                    value={planModal?.duration_days || 30} 
-                    onChange={e => setPlanModal({...planModal, duration_days: parseInt(e.target.value)})}
-                    required 
-                  />
+                  <Label htmlFor="plan-duration">Duração</Label>
+                  <div className="flex gap-2">
+                    <Input 
+                      id="plan-duration"
+                      type="number"
+                      className="flex-1"
+                      value={planModal?.duration_value || 30} 
+                      onChange={e => setPlanModal({...planModal, duration_value: parseInt(e.target.value)})}
+                      required 
+                    />
+                    <Select 
+                      value={planModal?.duration_unit || "days"} 
+                      onValueChange={val => setPlanModal({...planModal, duration_unit: val})}
+                    >
+                      <SelectTrigger className="w-[110px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="days">Dias</SelectItem>
+                        <SelectItem value="hours">Horas</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
               <div className="grid gap-2">

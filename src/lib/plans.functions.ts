@@ -23,7 +23,8 @@ export const savePlan = createServerFn({ method: "POST" })
       id: z.string().optional(),
       name: z.string(),
       price: z.number(),
-      duration_days: z.number(),
+      duration_value: z.number(),
+      duration_unit: z.enum(["days", "hours"]),
       max_connections: z.number(),
     }).parse(input)
   )
