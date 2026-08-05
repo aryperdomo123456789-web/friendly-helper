@@ -10,9 +10,9 @@ export const AppConfigSchema = z.object({
   tmdb_api_key: z.string().default("56bb2e86749197e89c3dbb878314ea03"),
   epg_xmltv_url: z.string().url().default("http://epgpainel.ddns.net/epg.xml"),
   epg_xmltv_ttl_hours: z.number().default(3),
-  logo_url: z.string().optional(),
-  logo_small_url: z.string().optional(),
-  favicon_url: z.string().optional(),
+  logo_url: z.string().url().optional().or(z.literal("")),
+  logo_small_url: z.string().url().optional().or(z.literal("")),
+  favicon_url: z.string().url().optional().or(z.literal("")),
   theme_mode: z.enum(["azul", "dark", "light"]).default("azul"),
   theme: z.object({
     bg: z.string().default("#05070b"),

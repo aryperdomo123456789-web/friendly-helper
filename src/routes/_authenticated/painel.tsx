@@ -622,7 +622,25 @@ function PainelDono() {
                   </div>
 
                   <div className="border-t pt-4">
-                    <h3 className="text-sm font-semibold mb-3">Temas & Identidade Visual</h3>
+                    <h3 className="text-sm font-semibold mb-3">Identidade Visual (Logos & Icones)</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label>Logo Principal (URL)</Label>
+                        <Input name="logo_url" placeholder="https://exemplo.com/logo.png" defaultValue={configQuery.data?.logo_url} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Logo Miniatura (URL)</Label>
+                        <Input name="logo_small_url" placeholder="https://exemplo.com/logo-small.png" defaultValue={configQuery.data?.logo_small_url} />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Favicon / Ícone (URL)</Label>
+                        <Input name="favicon_url" placeholder="https://exemplo.com/favicon.ico" defaultValue={configQuery.data?.favicon_url} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h3 className="text-sm font-semibold mb-3">Temas & Estilo</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <Label>Tema do Sistema</Label>
