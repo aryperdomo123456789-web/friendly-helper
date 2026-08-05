@@ -43,7 +43,8 @@ export const Route = createFileRoute('/api/public/mercadopago-webhook')({
 
               if (plan) {
                  const newExpiry = new Date();
-                 const msToAdd = plan.duration_value * (plan.duration_unit === 'hours' ? 60 : 24 * 60) * 60 * 1000;
+                 const factor = plan.duration_unit === 'minutes' ? 60 * 1000 : plan.duration_unit === 'hours' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+                 const msToAdd = plan.duration_value * factor;
                  newExpiry.setTime(newExpiry.getTime() + msToAdd);
 
                 // Update user profile

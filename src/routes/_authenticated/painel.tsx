@@ -355,7 +355,7 @@ function PainelDono() {
                 is_active: true,
                 plan_id: testPlan?.id || null,
                 expires_at: testPlan 
-                  ? new Date(Date.now() + testPlan.duration_value * (testPlan.duration_unit === 'hours' ? 60 : 24 * 60) * 60 * 1000).toISOString()
+                  ? new Date(Date.now() + testPlan.duration_value * (testPlan.duration_unit === 'minutes' ? 60 * 1000 : testPlan.duration_unit === 'hours' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000)).toISOString()
                   : null
               });
             }}>
@@ -905,7 +905,7 @@ function PainelDono() {
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" /> {plan.duration_value} {plan.duration_unit === 'hours' ? 'horas' : 'dias'} de acesso
+                      <Calendar className="h-4 w-4" /> {plan.duration_value} {plan.duration_unit === 'minutes' ? 'minutos' : plan.duration_unit === 'hours' ? 'horas' : 'dias'} de acesso
                     </div>
                     <div className="flex items-center gap-2">
                       <Wifi className="h-4 w-4" /> {plan.max_connections} conexão(ões)
@@ -1095,7 +1095,8 @@ function PainelDono() {
                       updates.max_connections = selectedPlan.max_connections;
                       // Calculate expiration if creating or if user wants to reset
                       const expiry = new Date();
-                      const msToAdd = selectedPlan.duration_value * (selectedPlan.duration_unit === 'hours' ? 60 : 24 * 60) * 60 * 1000;
+                      const factor = selectedPlan.duration_unit === 'minutes' ? 60 * 1000 : selectedPlan.duration_unit === 'hours' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+                      const msToAdd = selectedPlan.duration_value * factor;
                       expiry.setTime(expiry.getTime() + msToAdd);
                       updates.expires_at = expiry.toISOString();
                     }
@@ -1316,6 +1317,7 @@ function PainelDono() {
                       <SelectContent>
                         <SelectItem value="days">Dias</SelectItem>
                         <SelectItem value="hours">Horas</SelectItem>
+                        <SelectItem value="minutes">Minutos</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
