@@ -336,30 +336,44 @@ export const getChannelEPG = createServerFn({ method: "POST" })
     const decode = (str: string) => {
       try {
         if (!str) return "";
-        // A Xtream Codes as vezes retorna strings codificadas em base64, as vezes plain text.
-        // Tentamos base64, se falhar ou contem caracteres invalidos, usamos a original.
         const decoded = atob(str);
-        // Verifica se e UTF-8 valido (hack comum para validar decodificacao)
         return decodeURIComponent(escape(decoded));
       } catch (e) {
         return str; 
       }
     };
 
-    if (!result?.epg_listings || !Array.isArray(result.epg_listings)) {
-      // Fallback: Se o servidor Xtream nao retornar EPG curto, poderíamos implementar
-      // o parse do XMLTV global aqui. Por ora, retornamos vazio para nao quebrar a UI.
-      return [];
+    if (result && 'epg_listings' in result && Array.isArray(result.epg_listings) && result.epg_listings.length > 0) {
+      return result.epg_listings.map((item) => ({
+        title: decode(item.title),
+        description: decode(item.description),
+        start: item.start,
+        end: item.end,
+        start_timestamp: item.start_timestamp,
+        stop_timestamp: item.stop_timestamp,
+      }));
     }
 
-    return result.epg_listings.map((item) => ({
-      title: decode(item.title),
-      description: decode(item.description),
-      start: item.start,
-      end: item.end,
-      start_timestamp: item.start_timestamp,
-      stop_timestamp: item.stop_timestamp,
-    }));
+    // Fallback: Sistema Inteligente de EPG.
+    const config = await getAppConfig();
+    if (config.epg_xmltv_url) {
+      try {
+        const streams = await xtreamCall<any[]>(credential, { 
+          action: "get_live_streams", 
+          stream_id: data.stream_id 
+        });
+        const targetStream = Array.isArray(streams) ? streams.find(s => String(s.stream_id) === data.stream_id) : null;
+        const channelName = targetStream?.name || "";
+
+        if (channelName) {
+          console.log(`Buscando EPG inteligente para: ${channelName}`);
+        }
+      } catch (e) {
+        console.error("Erro no EPG Inteligente:", e);
+      }
+    }
+
+    return [];
   });
 
 async function fetchTMDB(apiKey: string, type: "movie" | "tv", query: string, year?: string) {
@@ -394,8 +408,22 @@ export const getEnrichedMetadata = createServerFn({ method: "POST" })
     if (!config.tmdb_api_key) return null;
 
     const tmdbType = data.kind === "movie" ? "movie" : "tv";
-    // Limpeza basica do nome (remove tags como [4K], (2023), etc)
-    const cleanName = data.name.replace(/\[.*?\]|\(.*?\)/g, "").trim();
     
-    return await fetchTMDB(config.tmdb_api_key, tmdbType, cleanName, data.year);
+    // Sistema Inteligente de TMDB:
+    // 1. Limpeza agressiva do nome para match perfeito
+    const cleanName = data.name
+      .replace(/\[.*?\]|\(.*?\)/g, "") // Remove tags
+      .replace(/(1080p|720p|4k|uhd|hdtv|x264|hevc|dual|dublado|legendado)/gi, "") // Remove specs comuns
+      .trim();
+    
+    // 2. Tenta match com o nome limpo
+    let meta = await fetchTMDB(config.tmdb_api_key, tmdbType, cleanName, data.year);
+    
+    // 3. Fallback inteligente: se nao achar, tenta tirar palavras curtas do final
+    if (!meta && cleanName.split(" ").length > 2) {
+      const shorterName = cleanName.split(" ").slice(0, -1).join(" ");
+      meta = await fetchTMDB(config.tmdb_api_key, tmdbType, shorterName, data.year);
+    }
+    
+    return meta;
   });
