@@ -302,25 +302,25 @@ function FloatingChat({ userId }: { userId?: string }) {
               </div>
             ) : (
               messages.map(msg => {
-                const isMe = msg.sender_id === userId;
+                const isMe = msg['sender_id'] === userId;
                 return (
-                  <div key={msg.id} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
+                  <div key={msg['id']} className={cn("flex", isMe ? "justify-end" : "justify-start")}>
                     <div className={cn(
                       "max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm",
                       isMe ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-card border rounded-tl-none"
                     )}>
-                      {msg.file_url ? (
+                      {msg['file_url'] ? (
                         <div className="space-y-1">
-                          {msg.file_type === 'image' ? (
-                            <img src={msg.file_url} alt="Envio" className="max-w-full rounded-lg" />
+                          {msg['file_type'] === 'image' ? (
+                            <img src={msg['file_url']} alt="Envio" className="max-w-full rounded-lg" />
                           ) : (
-                            <a href={msg.file_url} target="_blank" className="flex items-center gap-2 underline text-xs">
+                            <a href={msg['file_url']} target="_blank" className="flex items-center gap-2 underline text-xs">
                               <ImageIcon className="h-3 w-3" /> Ver Arquivo
                             </a>
                           )}
                         </div>
                       ) : (
-                        msg.content
+                        msg['content']
                       )}
                     </div>
                   </div>
