@@ -7,6 +7,7 @@
  *    - `/deploy/seed/`: Script e JSON para restaurar usuários Auth (Dono/Clientes).
  *    - `/deploy/ecosystem.config.cjs`: Configuração PM2 (Porta 6873).
  *    - `/deploy/nginx.conf`: Configuração de Proxy Reverso e SSL.
+ *    - `/deploy/DOCUMENTACAO-ESPECIALISTA.md`: Guia técnico detalhado para produção.
  * 3. NOVO BACKEND: Codex deve rodar os SQLs no novo projeto Supabase e configurar a SERVICE_ROLE_KEY no .env da VPS.
  * 4. DOCUMENTAÇÃO: Veja `CODEX-RESTAURAR.md` na raiz para o passo-a-passo.
  * 5. TV READY: Suporte básico a navegação por controle remoto (setas/enter) ativado globalmente.
