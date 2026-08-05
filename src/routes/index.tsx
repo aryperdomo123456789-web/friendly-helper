@@ -38,11 +38,13 @@ export const Route = createFileRoute("/")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch() as any;
   const [hasSession, setHasSession] = useState(false);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [username, setUsername] = useState(search.username || "");
+  const [password, setPassword] = useState(search.password || "");
   const [loading, setLoading] = useState(false);
   const [isOwnerLogin, setIsOwnerLogin] = useState(false);
+
 
   const runBootstrap = useServerFn(createFirstOwner);
 
