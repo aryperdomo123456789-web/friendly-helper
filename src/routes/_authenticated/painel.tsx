@@ -1215,7 +1215,7 @@ function PainelDono() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="duration">Duração (minutos)</Label>
+                  <Label htmlFor="duration">Duração do Teste (minutos)</Label>
                   <Input
                     id="duration"
                     type="number"
@@ -1224,9 +1224,10 @@ function PainelDono() {
                     min="1"
                     required
                   />
+                  <p className="text-[10px] text-muted-foreground">Tempo que o cliente terá para testar os canais.</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="conn">Conexões</Label>
+                  <Label htmlFor="conn">Limite de Conexões</Label>
                   <Input
                     id="conn"
                     type="number"
@@ -1235,6 +1236,7 @@ function PainelDono() {
                     min="1"
                     required
                   />
+                  <p className="text-[10px] text-muted-foreground">Quantos aparelhos podem logar ao mesmo tempo.</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 py-2">
@@ -1250,7 +1252,7 @@ function PainelDono() {
 
               <div className="space-y-4 pt-4 border-t border-border/50">
                 <h4 className="text-sm font-bold text-primary flex items-center gap-2">
-                  <Share2 className="h-4 w-4" /> Bonificação por Indicação
+                  <Share2 className="h-4 w-4" /> Bonificação (Configuração Global para este Link)
                 </h4>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1276,6 +1278,9 @@ function PainelDono() {
                     <p className="text-[10px] text-muted-foreground">Para planos {" > "} 30 dias.</p>
                   </div>
                 </div>
+                <p className="text-[10px] text-muted-foreground italic">
+                  * Estas regras valem para qualquer usuário que usar este link específico.
+                </p>
               </div>
             </div>
             <DialogFooter>
