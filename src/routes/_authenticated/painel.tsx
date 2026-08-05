@@ -13,6 +13,11 @@ import {
   kickDevices,
   testServerConnection
 } from "@/lib/owner.functions";
+import {
+  listTestLinks,
+  saveTestLink,
+  deleteTestLink
+} from "@/lib/test-links.functions";
 import { getMySession } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
 import { getAppConfig, updateAppConfig } from "@/lib/config.functions";
@@ -70,7 +75,9 @@ import {
   ExternalLink,
   ShieldAlert,
   Calendar,
-  Key
+  Key,
+  Link as LinkIcon,
+  Copy
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -104,6 +111,15 @@ function PainelDono() {
   const mutationTest = useServerFn(testServerConnection);
   const fetchConfig = useServerFn(getAppConfig);
   const mutationSaveConfig = useServerFn(updateAppConfig);
+  const fetchTestLinks = useServerFn(listTestLinks);
+  const mutationSaveTestLink = useServerFn(saveTestLink);
+  const mutationDeleteTestLink = useServerFn(deleteTestLink);
+
+  const testLinks = useQuery({
+    queryKey: ["admin-test-links"],
+    queryFn: () => fetchTestLinks(),
+    enabled: isOwner,
+  });
 
   const configQuery = useQuery({
     queryKey: ["app-config"],
@@ -129,6 +145,7 @@ function PainelDono() {
   const [serverModal, setServerModal] = useState<any>(null);
   const [userModal, setUserModal] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [testLinkModal, setTestLinkModal] = useState<any>(null);
 
   /* ------------------- Handlers Servidores ------------------- */
   const handleSaveServer = async (e: React.FormEvent) => {

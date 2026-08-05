@@ -19,6 +19,7 @@ import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedSeriesRouteImport } from './routes/_authenticated/series'
 import { Route as AuthenticatedServidoresRouteImport } from './routes/_authenticated/servidores'
 import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
+import { Route as TesteSlugRouteImport } from './routes/teste.$slug'
 import { Route as ApiPublicStreamRouteImport } from './routes/api/public/stream'
 
 const IndexRoute = IndexRouteImport.update({
@@ -70,6 +71,11 @@ const AuthenticatedUsuariosRoute = AuthenticatedUsuariosRouteImport.update({
   path: '/usuarios',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const TesteSlugRoute = TesteSlugRouteImport.update({
+  id: '/teste/$slug',
+  path: '/teste/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicStreamRoute = ApiPublicStreamRouteImport.update({
   id: '/api/public/stream',
   path: '/api/public/stream',
@@ -86,6 +92,7 @@ export interface FileRoutesByFullPath {
   '/series': typeof AuthenticatedSeriesRoute
   '/servidores': typeof AuthenticatedServidoresRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
+  '/teste/$slug': typeof TesteSlugRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
 }
 export interface FileRoutesByTo {
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/series': typeof AuthenticatedSeriesRoute
   '/servidores': typeof AuthenticatedServidoresRoute
   '/usuarios': typeof AuthenticatedUsuariosRoute
+  '/teste/$slug': typeof TesteSlugRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
 }
 export interface FileRoutesById {
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/_authenticated/series': typeof AuthenticatedSeriesRoute
   '/_authenticated/servidores': typeof AuthenticatedServidoresRoute
   '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
+  '/teste/$slug': typeof TesteSlugRoute
   '/api/public/stream': typeof ApiPublicStreamRoute
 }
 export interface FileRouteTypes {
@@ -126,6 +135,7 @@ export interface FileRouteTypes {
     | '/series'
     | '/servidores'
     | '/usuarios'
+    | '/teste/$slug'
     | '/api/public/stream'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/series'
     | '/servidores'
     | '/usuarios'
+    | '/teste/$slug'
     | '/api/public/stream'
   id:
     | '__root__'
@@ -151,12 +162,14 @@ export interface FileRouteTypes {
     | '/_authenticated/series'
     | '/_authenticated/servidores'
     | '/_authenticated/usuarios'
+    | '/teste/$slug'
     | '/api/public/stream'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  TesteSlugRoute: typeof TesteSlugRoute
   ApiPublicStreamRoute: typeof ApiPublicStreamRoute
 }
 
@@ -232,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedUsuariosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/teste/$slug': {
+      id: '/teste/$slug'
+      path: '/teste/$slug'
+      fullPath: '/teste/$slug'
+      preLoaderRoute: typeof TesteSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/stream': {
       id: '/api/public/stream'
       path: '/api/public/stream'
@@ -270,6 +290,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  TesteSlugRoute: TesteSlugRoute,
   ApiPublicStreamRoute: ApiPublicStreamRoute,
 }
 export const routeTree = rootRouteImport
