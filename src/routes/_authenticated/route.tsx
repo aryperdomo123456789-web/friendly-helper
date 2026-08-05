@@ -19,7 +19,11 @@ import {
   LogOut,
   AlertTriangle,
   Menu,
+  UserCog,
+  Users,
 } from "lucide-react";
+
+
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -94,17 +98,38 @@ function ShellLayout() {
               {item.label}
             </Link>
           ))}
+          <Link
+            to="/conta"
+            onClick={() => setOpen(false)}
+            activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
+            className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+          >
+            <UserCog className="h-4 w-4" />
+            Conta
+          </Link>
           {isOwner ? (
-            <Link
-              to="/painel"
-              onClick={() => setOpen(false)}
-              activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent"
-            >
-              <ShieldCheck className="h-4 w-4" />
-              Painel do Dono
-            </Link>
+            <>
+              <Link
+                to="/usuarios"
+                onClick={() => setOpen(false)}
+                activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent"
+              >
+                <Users className="h-4 w-4" />
+                Usuarios
+              </Link>
+              <Link
+                to="/painel"
+                onClick={() => setOpen(false)}
+                activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
+                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gold transition-colors hover:bg-sidebar-accent"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Painel do Dono
+              </Link>
+            </>
           ) : null}
+
         </nav>
 
         <div className="space-y-3 border-t border-sidebar-border p-4">

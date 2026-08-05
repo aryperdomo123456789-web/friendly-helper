@@ -12,11 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedCanaisRouteImport } from './routes/_authenticated/canais'
+import { Route as AuthenticatedContaRouteImport } from './routes/_authenticated/conta'
 import { Route as AuthenticatedFilmesRouteImport } from './routes/_authenticated/filmes'
 import { Route as AuthenticatedInicioRouteImport } from './routes/_authenticated/inicio'
 import { Route as AuthenticatedPainelRouteImport } from './routes/_authenticated/painel'
 import { Route as AuthenticatedSeriesRouteImport } from './routes/_authenticated/series'
 import { Route as AuthenticatedServidoresRouteImport } from './routes/_authenticated/servidores'
+import { Route as AuthenticatedUsuariosRouteImport } from './routes/_authenticated/usuarios'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -30,6 +32,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthenticatedCanaisRoute = AuthenticatedCanaisRouteImport.update({
   id: '/canais',
   path: '/canais',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedContaRoute = AuthenticatedContaRouteImport.update({
+  id: '/conta',
+  path: '/conta',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedFilmesRoute = AuthenticatedFilmesRouteImport.update({
@@ -57,65 +64,82 @@ const AuthenticatedServidoresRoute = AuthenticatedServidoresRouteImport.update({
   path: '/servidores',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedUsuariosRoute = AuthenticatedUsuariosRouteImport.update({
+  id: '/usuarios',
+  path: '/usuarios',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/canais': typeof AuthenticatedCanaisRoute
+  '/conta': typeof AuthenticatedContaRoute
   '/filmes': typeof AuthenticatedFilmesRoute
   '/inicio': typeof AuthenticatedInicioRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/series': typeof AuthenticatedSeriesRoute
   '/servidores': typeof AuthenticatedServidoresRoute
+  '/usuarios': typeof AuthenticatedUsuariosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/canais': typeof AuthenticatedCanaisRoute
+  '/conta': typeof AuthenticatedContaRoute
   '/filmes': typeof AuthenticatedFilmesRoute
   '/inicio': typeof AuthenticatedInicioRoute
   '/painel': typeof AuthenticatedPainelRoute
   '/series': typeof AuthenticatedSeriesRoute
   '/servidores': typeof AuthenticatedServidoresRoute
+  '/usuarios': typeof AuthenticatedUsuariosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/canais': typeof AuthenticatedCanaisRoute
+  '/_authenticated/conta': typeof AuthenticatedContaRoute
   '/_authenticated/filmes': typeof AuthenticatedFilmesRoute
   '/_authenticated/inicio': typeof AuthenticatedInicioRoute
   '/_authenticated/painel': typeof AuthenticatedPainelRoute
   '/_authenticated/series': typeof AuthenticatedSeriesRoute
   '/_authenticated/servidores': typeof AuthenticatedServidoresRoute
+  '/_authenticated/usuarios': typeof AuthenticatedUsuariosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/canais'
+    | '/conta'
     | '/filmes'
     | '/inicio'
     | '/painel'
     | '/series'
     | '/servidores'
+    | '/usuarios'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/canais'
+    | '/conta'
     | '/filmes'
     | '/inicio'
     | '/painel'
     | '/series'
     | '/servidores'
+    | '/usuarios'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/_authenticated/canais'
+    | '/_authenticated/conta'
     | '/_authenticated/filmes'
     | '/_authenticated/inicio'
     | '/_authenticated/painel'
     | '/_authenticated/series'
     | '/_authenticated/servidores'
+    | '/_authenticated/usuarios'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -144,6 +168,13 @@ declare module '@tanstack/react-router' {
       path: '/canais'
       fullPath: '/canais'
       preLoaderRoute: typeof AuthenticatedCanaisRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/conta': {
+      id: '/_authenticated/conta'
+      path: '/conta'
+      fullPath: '/conta'
+      preLoaderRoute: typeof AuthenticatedContaRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/filmes': {
@@ -181,25 +212,36 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedServidoresRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/usuarios': {
+      id: '/_authenticated/usuarios'
+      path: '/usuarios'
+      fullPath: '/usuarios'
+      preLoaderRoute: typeof AuthenticatedUsuariosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCanaisRoute: typeof AuthenticatedCanaisRoute
+  AuthenticatedContaRoute: typeof AuthenticatedContaRoute
   AuthenticatedFilmesRoute: typeof AuthenticatedFilmesRoute
   AuthenticatedInicioRoute: typeof AuthenticatedInicioRoute
   AuthenticatedPainelRoute: typeof AuthenticatedPainelRoute
   AuthenticatedSeriesRoute: typeof AuthenticatedSeriesRoute
   AuthenticatedServidoresRoute: typeof AuthenticatedServidoresRoute
+  AuthenticatedUsuariosRoute: typeof AuthenticatedUsuariosRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCanaisRoute: AuthenticatedCanaisRoute,
+  AuthenticatedContaRoute: AuthenticatedContaRoute,
   AuthenticatedFilmesRoute: AuthenticatedFilmesRoute,
   AuthenticatedInicioRoute: AuthenticatedInicioRoute,
   AuthenticatedPainelRoute: AuthenticatedPainelRoute,
   AuthenticatedSeriesRoute: AuthenticatedSeriesRoute,
   AuthenticatedServidoresRoute: AuthenticatedServidoresRoute,
+  AuthenticatedUsuariosRoute: AuthenticatedUsuariosRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
