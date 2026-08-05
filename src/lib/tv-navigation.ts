@@ -44,9 +44,11 @@ export function useTVNavigation() {
 
         // Se nada estiver focado, foca o primeiro
         if (!active || active === document.body) {
-          focusable[0].focus();
+          const first = focusable[0];
+          if (first) first.focus();
           return;
         }
+
 
         const activeRect = active.getBoundingClientRect();
         
