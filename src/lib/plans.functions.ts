@@ -1,7 +1,6 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { supabase } from "@/integrations/supabase/client";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { SubscriptionPlan } from "./types";
 
@@ -19,16 +18,16 @@ export const getPlans = createServerFn({ method: "GET" })
 
 export const savePlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .input(
+  .validator((input: any) => 
     z.object({
       id: z.string().optional(),
       name: z.string(),
       price: z.number(),
       duration_days: z.number(),
       max_connections: z.number(),
-    })
+    }).parse(input)
   )
-  .handler(async ({ input, context }) => {
+  .handler(async ({ data: input, context }) => {
     const { id, ...data } = input;
 
     if (id) {
@@ -49,8 +48,8 @@ export const savePlan = createServerFn({ method: "POST" })
 
 export const deletePlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .input(z.object({ id: z.string() }))
-  .handler(async ({ input, context }) => {
+  .validator((input: any) => z.object({ id: z.string() }).parse(input))
+  .handler(async ({ data: input, context }) => {
     const { error } = await context.supabase
       .from("subscription_plans")
       .delete()
