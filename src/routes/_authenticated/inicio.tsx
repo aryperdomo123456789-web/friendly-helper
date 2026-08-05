@@ -215,24 +215,33 @@ function FloatingChat({ userId }: { userId?: string }) {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !thread) return;
+    const messageToSend = newMessage.trim();
+    if (!messageToSend || !thread) return;
 
     setSending(true);
     try {
-      const { error } = await supabase
+      console.log("Iniciando envio de mensagem...", { threadId: thread.id, userId });
+      
+      const { data, error } = await supabase
         .from('support_messages')
         .insert([{
           thread_id: thread.id,
           sender_id: userId || null,
-          content: newMessage
-        }]);
+          content: messageToSend
+        }])
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro Supabase ao inserir mensagem:", error);
+        throw error;
+      }
+
+      console.log("Mensagem inserida com sucesso:", data);
 
       const { error: updateError } = await supabase
         .from('support_threads')
         .update({ 
-          last_message: newMessage, 
+          last_message: messageToSend, 
           last_message_at: new Date().toISOString(),
           unread_count_owner: (thread.unread_count_owner || 0) + 1
         })
@@ -240,13 +249,13 @@ function FloatingChat({ userId }: { userId?: string }) {
 
       if (updateError) {
         console.error("Erro ao atualizar thread:", updateError);
-        // Don't toast here as the message was already sent
       }
       
       setNewMessage("");
       toast.success("Mensagem enviada!");
     } catch (err: any) {
-      toast.error("Erro: " + err.message);
+      console.error("Falha no envio da mensagem:", err);
+      toast.error("Erro: " + (err.message || "Falha na conexão"));
     } finally {
       setSending(false);
     }
