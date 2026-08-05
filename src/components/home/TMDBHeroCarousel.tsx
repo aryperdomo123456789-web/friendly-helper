@@ -86,14 +86,16 @@ export function TMDBHeroCarousel() {
     try {
       // 1. Encontrar o stream correspondente no servidor ativo
       const kind = item.media_type === "movie" ? "movie" : "series";
+      const query = item.title || item.name || "";
       
       // Como não temos um ID direto do Xtream aqui, precisamos navegar para a busca
       // ou implementar uma busca rápida. Para manter fluidez, vamos redirecionar para a busca
       // do catálogo com o nome já preenchido
       navigate({ 
         to: kind === "movie" ? "/filmes" : "/series",
-        search: { q: item.title || item.name }
-      });
+        search: { q: query }
+      } as any);
+
       
       // No Catalog.tsx, vamos precisar de uma forma de receber esse termo.
       // Por enquanto, o comportamento padrão será levar para a aba correta.
@@ -182,7 +184,7 @@ export function TMDBHeroCarousel() {
                   variant="outline" 
                   size="lg" 
                   className="rounded-full bg-white/10 border-white/20 backdrop-blur-md text-white font-bold px-8 h-12 hover:bg-white/20"
-                  onClick={() => navigate({ to: item.media_type === "movie" ? "/filmes" : "/series" })}
+                  onClick={() => navigate({ to: (item.media_type === "movie" ? "/filmes" : "/series"), search: { q: "" } } as any)}
                 >
                   <Info className="mr-2 h-5 w-5" /> DETALHES
                 </Button>
