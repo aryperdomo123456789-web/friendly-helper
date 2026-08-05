@@ -145,29 +145,36 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let isMounted = true;
     const fetchMessages = async () => {
       const { data } = await (supabase
         .from('support_messages' as any)
         .select('*')
         .eq('thread_id', thread.id)
         .order('created_at', { ascending: true }) as any);
-      if (data) setMessages(data);
+      if (data && isMounted) setMessages(data);
     };
     fetchMessages();
 
     const channel = supabase
-      .channel(`thread:${thread.id}`)
+      .channel(`thread_owner:${thread.id}`)
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
         table: 'support_messages', 
         filter: `thread_id=eq.${thread.id}` 
       }, (payload) => {
-        setMessages(prev => [...prev, payload.new]);
+        if (isMounted) {
+          setMessages(prev => {
+            if (prev.some(m => m['id'] === payload.new['id'])) return prev;
+            return [...prev, payload.new];
+          });
+        }
       })
       .subscribe();
 
     return () => {
+      isMounted = false;
       supabase.removeChannel(channel);
     };
   }, [thread.id]);

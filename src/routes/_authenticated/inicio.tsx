@@ -168,6 +168,7 @@ function FloatingChat({ userId }: { userId?: string }) {
         
         await mutationMarkRead({ data: { threadId: data['id'], isOwner: false } });
 
+        // Carregar mensagens iniciais
         const { data: msgs, error: fetchErr } = await (supabase
           .from('support_messages' as any)
           .select('*')
@@ -177,7 +178,7 @@ function FloatingChat({ userId }: { userId?: string }) {
         if (fetchErr) throw fetchErr;
         if (msgs) setMessages(msgs);
 
-        // Subscrição em tempo real para novas mensagens
+        // Subscrição em tempo real otimizada
         channel = supabase
           .channel(`thread_user:${data['id']}`)
           .on('postgres_changes', { 
@@ -188,12 +189,16 @@ function FloatingChat({ userId }: { userId?: string }) {
           }, (payload) => {
             console.log("Nova mensagem recebida via Realtime:", payload.new);
             setMessages(prev => {
-              // Evitar duplicatas se o insert local já adicionou
+              // Verificação de ID para evitar duplicidade em carga alta
               if (prev.some(m => m['id'] === payload.new['id'])) return prev;
               return [...prev, payload.new];
             });
           })
-          .subscribe();
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              console.log("Canal de chat assinado com sucesso.");
+            }
+          });
       } catch (err) {
         console.error("Erro ao inicializar chat:", err);
         toast.error("Erro ao carregar mensagens");
@@ -203,7 +208,9 @@ function FloatingChat({ userId }: { userId?: string }) {
     init();
 
     return () => {
-      if (channel) supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [userId, isOpen]);
 
