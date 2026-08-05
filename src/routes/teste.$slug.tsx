@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { createTestUser } from "@/lib/test-links.functions";
+import { createTestUser, checkDeviceBlocked } from "@/lib/test-links.functions";
 import { toast } from "sonner";
 import { 
   Card, 
@@ -43,21 +43,66 @@ function TestePublico() {
     expiresAt: string;
   } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false);
 
   const mutationCreateTest = useServerFn(createTestUser);
+  const mutationCheckDevice = useServerFn(checkDeviceBlocked);
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      const fingerprint = getFingerprint();
+      if (fingerprint) {
+        try {
+          const res = await mutationCheckDevice({ data: { fingerprint } });
+          if (res.blocked) setBlocked(true);
+        } catch (e) {
+          console.error("Erro ao validar dispositivo:", e);
+        }
+      }
+    };
+    checkStatus();
+  }, []);
+
+  const getFingerprint = () => {
+    if (typeof window === 'undefined') return '';
+    const data = [
+      navigator.userAgent,
+      screen.width,
+      screen.height,
+      navigator.language,
+      new Date().getTimezoneOffset(),
+      navigator.hardwareConcurrency || 0,
+    ].join("|");
+    
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < data.length; i++) {
+      const char = data.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16);
+  };
 
   const handleCreateTest = async () => {
     setLoading(true);
     try {
-      const res = await mutationCreateTest({ data: { slug } });
+      const fingerprint = getFingerprint();
+      const res = await mutationCreateTest({ data: { slug, fingerprint } });
       setCredentials(res);
       toast.success("Teste gerado com sucesso!");
     } catch (err: any) {
-      toast.error(err.message || "Erro ao gerar teste");
+      console.error("Erro ao gerar teste:", err);
+      const message = err.message || "Erro ao gerar teste";
+      toast.error(message);
+      if (message.toLowerCase().includes("dispositivo") || message.toLowerCase().includes("já gerou")) {
+        setBlocked(true);
+      }
     } finally {
       setLoading(false);
     }
   };
+
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -78,26 +123,31 @@ function TestePublico() {
         </div>
 
         {!credentials ? (
-          <Card className="border-primary/20 bg-card/50 backdrop-blur-xl shadow-2xl">
+          <Card className={`border-primary/20 bg-card/50 backdrop-blur-xl shadow-2xl ${blocked ? 'opacity-75 grayscale' : ''}`}>
             <CardHeader className="text-center">
-              <CardTitle className="text-2xl">Experimente Agora</CardTitle>
+              <CardTitle className="text-2xl">{blocked ? "Acesso Limitado" : "Experimente Agora"}</CardTitle>
               <CardDescription>
-                Clique no botão abaixo para gerar seus dados de acesso temporário.
+                {blocked 
+                  ? "Este dispositivo já atingiu o limite de testes gratuitos." 
+                  : "Clique no botão abaixo para gerar seus dados de acesso temporário."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="p-4 bg-primary/5 rounded-xl border border-primary/10 flex items-start gap-3">
-                <Zap className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+              <div className={`p-4 rounded-xl border flex items-start gap-3 ${blocked ? 'bg-destructive/10 border-destructive/20' : 'bg-primary/5 border-primary/10'}`}>
+                <Zap className={`w-5 h-5 shrink-0 mt-0.5 ${blocked ? 'text-destructive' : 'text-primary'}`} />
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Seu acesso será liberado instantaneamente. Aproveite canais, filmes e séries com qualidade máxima.
+                  {blocked 
+                    ? "Para garantir a qualidade do serviço para todos, limitamos a um teste por aparelho. Caso precise de ajuda, entre em contato com o suporte."
+                    : "Seu acesso será liberado instantaneamente. Aproveite canais, filmes e séries com qualidade máxima."}
                 </p>
               </div>
               <Button 
                 onClick={handleCreateTest} 
-                disabled={loading}
+                disabled={loading || blocked}
+                variant={blocked ? "destructive" : "default"}
                 className="w-full h-14 text-lg font-bold rounded-xl shadow-lg shadow-primary/20"
               >
-                {loading ? "Gerando..." : "GERAR TESTE GRÁTIS"}
+                {loading ? "Gerando..." : blocked ? "LIMITE ATINGIDO" : "GERAR TESTE GRÁTIS"}
               </Button>
             </CardContent>
           </Card>

@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { usernameToEmail } from "./owner.functions";
@@ -12,6 +13,19 @@ async function assertOwner(supabase: any, userId: string) {
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new Error("Acesso restrito ao dono do sistema");
 }
+
+export const checkDeviceBlocked = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) => z.object({ fingerprint: z.string() }).parse(input))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: existing } = await (supabaseAdmin as any)
+      .from("test_device_tracking")
+      .select("id")
+      .eq("fingerprint", data.fingerprint)
+      .maybeSingle();
+    return { blocked: !!existing };
+  });
+
 
 export const listTestLinks = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -67,10 +81,28 @@ export const deleteTestLink = createServerFn({ method: "POST" })
   });
 
 export const createTestUser = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => z.object({ slug: z.string() }).parse(input))
+  .inputValidator((input: unknown) => 
+    z.object({ 
+      slug: z.string(),
+      fingerprint: z.string()
+    }).parse(input)
+  )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const request = getRequest();
+    const ip = request?.headers.get("x-forwarded-for") || request?.headers.get("x-real-ip") || null;
     
+    // Check if device fingerprint was already used
+    const { data: existingDevice } = await (supabaseAdmin as any)
+      .from("test_device_tracking")
+      .select("id")
+      .eq("fingerprint", data.fingerprint)
+      .maybeSingle();
+
+    if (existingDevice) {
+      throw new Error("Você já gerou um teste grátis neste dispositivo. Para novos acessos, entre em contato com o suporte.");
+    }
+
     // Validate link
     const { data: link, error: linkError } = await (supabaseAdmin as any)
       .from("test_links")
@@ -80,6 +112,23 @@ export const createTestUser = createServerFn({ method: "POST" })
       .single();
     
     if (linkError || !link) throw new Error("Link de teste inválido ou inativo");
+
+    // Track this device BEFORE creating the user to avoid race conditions/multiple attempts
+    const { error: trackError } = await (supabaseAdmin as any)
+      .from("test_device_tracking")
+      .insert({
+        fingerprint: data.fingerprint,
+        ip_address: ip
+      });
+
+    if (trackError) {
+      // If it failed because of duplicate (unique constraint), throw friendly error
+      if (trackError.code === '23505') {
+        throw new Error("Este dispositivo já foi utilizado para gerar um teste.");
+      }
+      throw new Error("Erro ao validar dispositivo. Tente novamente.");
+    }
+
 
     const username = `teste_${Math.random().toString(36).substring(2, 8)}`;
     const password = Math.random().toString(36).substring(2, 10);

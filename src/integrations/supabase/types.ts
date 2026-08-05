@@ -272,6 +272,27 @@ export type Database = {
         }
         Relationships: []
       }
+      test_device_tracking: {
+        Row: {
+          created_at: string | null
+          fingerprint: string
+          id: string
+          ip_address: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          fingerprint: string
+          id?: string
+          ip_address?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          fingerprint?: string
+          id?: string
+          ip_address?: string | null
+        }
+        Relationships: []
+      }
       test_links: {
         Row: {
           created_at: string
