@@ -163,8 +163,8 @@ function ShellLayout() {
         />
       ) : null}
 
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur">
+      <div className="flex flex-col flex-1 lg:pl-64 min-w-0 w-full overflow-x-hidden">
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur">
           <Button
             variant="ghost"
             size="icon"

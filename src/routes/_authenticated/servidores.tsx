@@ -21,7 +21,7 @@ function Servidores() {
   const { servers, serverId, setServerId } = usePlayerSession();
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 min-w-0 w-full overflow-x-hidden">
       <div>
         <h1 className="text-2xl font-bold">Servidores</h1>
         <p className="text-sm text-muted-foreground">
