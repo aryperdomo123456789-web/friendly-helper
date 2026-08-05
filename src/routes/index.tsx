@@ -82,16 +82,17 @@ function LoginPage() {
       <div className="absolute -top-[10%] -left-[10%] h-[40%] w-[40%] rounded-full bg-primary/5 blur-[120px]" />
       <div className="absolute -bottom-[10%] -right-[10%] h-[40%] w-[40%] rounded-full bg-primary/10 blur-[120px]" />
 
-      <Card className="z-10 w-full max-w-[400px] border-border/50 bg-card/50 backdrop-blur-xl">
+      <Card className="z-10 w-full max-w-[400px] border-border/40 bg-card/60 backdrop-blur-2xl">
         <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <Tv className="h-8 w-8" />
+          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/15 text-primary shadow-xl shadow-primary/20">
+            <Tv className="h-10 w-10" />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight">WebPlayer IPTV</CardTitle>
-          <CardDescription>
-            {isOwnerLogin ? "Acesso administrativo do sistema" : "Entre com suas credenciais de acesso"}
+          <CardTitle className="text-3xl font-black tracking-tight">WEBPLAYER</CardTitle>
+          <CardDescription className="font-medium text-muted-foreground/80">
+            {isOwnerLogin ? "Painel administrativo do sistema" : "Entre com suas credenciais de acesso"}
           </CardDescription>
         </CardHeader>
+
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
