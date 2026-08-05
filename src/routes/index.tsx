@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Tv, ShieldCheck, Lock, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery } from "@tanstack/react-query";
+import { getAppConfig } from "@/lib/config.functions";
 import { createFirstOwner } from "@/lib/bootstrap.functions";
 
 export const Route = createFileRoute("/")({
@@ -34,6 +36,22 @@ export const Route = createFileRoute("/")({
 });
 
 
+
+
+function ThemeAwareLogo({ className }: { className?: string }) {
+  const fetchConfig = useServerFn(getAppConfig);
+  const { data: config } = useQuery({
+    queryKey: ["app-config-public"],
+    queryFn: () => fetchConfig(),
+    staleTime: 5 * 60_000,
+  });
+
+  if (config?.logo_url) {
+    return <img src={config.logo_url} alt="Logo" className="h-full w-full object-contain" />;
+  }
+
+  return <Tv className={className} />;
+}
 
 
 function LoginPage() {
@@ -115,8 +133,9 @@ function LoginPage() {
 
       <Card className="z-10 w-full max-w-[400px] border-border/40 bg-card/60 backdrop-blur-2xl">
         <CardHeader className="space-y-1 text-center">
-          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/15 text-primary shadow-xl shadow-primary/20">
-            <Tv className="h-10 w-10" />
+          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/15 text-primary shadow-xl shadow-primary/20 overflow-hidden">
+            {/* Logo Dinâmico no Login */}
+            <ThemeAwareLogo className="h-10 w-10" />
           </div>
           <CardTitle className="text-3xl font-black tracking-tight">WEBPLAYER</CardTitle>
           <CardDescription className="font-medium text-muted-foreground/80">
