@@ -307,6 +307,8 @@ export type Database = {
       }
       test_links: {
         Row: {
+          bonus_days_monthly: number | null
+          bonus_days_quarterly: number | null
           created_at: string
           created_by_id: string | null
           duration_minutes: number
@@ -317,6 +319,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          bonus_days_monthly?: number | null
+          bonus_days_quarterly?: number | null
           created_at?: string
           created_by_id?: string | null
           duration_minutes?: number
@@ -327,6 +331,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          bonus_days_monthly?: number | null
+          bonus_days_quarterly?: number | null
           created_at?: string
           created_by_id?: string | null
           duration_minutes?: number
