@@ -311,9 +311,12 @@ function UsuariosPage() {
                   <Input
                     type="password"
                     value={userModal?.password || ""}
+                    minLength={6}
+                    placeholder="Minimo 6 caracteres"
                     onChange={(e) => setUserModal({ ...userModal, password: e.target.value })}
                     required={!userModal?.id}
                   />
+
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
