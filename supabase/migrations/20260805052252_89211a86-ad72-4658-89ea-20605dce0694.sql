@@ -1,0 +1,2 @@
+ALTER TABLE public.subscription_plans DROP CONSTRAINT IF EXISTS subscription_plans_duration_unit_check;
+ALTER TABLE public.subscription_plans ADD CONSTRAINT subscription_plans_duration_unit_check CHECK (duration_unit IN ('days', 'hours', 'minutes'));
