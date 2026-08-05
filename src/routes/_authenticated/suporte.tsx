@@ -166,7 +166,7 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
       }, (payload) => {
         if (isMounted) {
           setMessages(prev => {
-            if (prev.some(m => m.id === payload.new.id)) return prev;
+            if (prev.some(m => m['id'] === payload.new['id'])) return prev;
             return [...prev, payload.new];
           });
         }
