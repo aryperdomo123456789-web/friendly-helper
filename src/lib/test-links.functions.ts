@@ -34,7 +34,7 @@ export const listTestLinks = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await (supabaseAdmin as any)
       .from("test_links")
-      .select("*")
+      .select("*, profile:profiles!created_by_id(username, display_name)")
       .order("created_at", { ascending: false });
     if (error) throw error;
     return data;
