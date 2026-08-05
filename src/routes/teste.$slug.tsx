@@ -36,6 +36,8 @@ export const Route = createFileRoute("/teste/$slug")({
 
 function TestePublico() {
   const { slug } = Route.useParams();
+  const search = Route.useSearch() as any;
+  const referralCode = search.ref || null;
   const [loading, setLoading] = useState(false);
   const [credentials, setCredentials] = useState<{
     username: string;
@@ -88,7 +90,7 @@ function TestePublico() {
     setLoading(true);
     try {
       const fingerprint = getFingerprint();
-      const res = await mutationCreateTest({ data: { slug, fingerprint } });
+      const res = await mutationCreateTest({ data: { slug, fingerprint, referral_code: referralCode } });
       setCredentials(res);
       toast.success("Teste gerado com sucesso!");
     } catch (err: any) {

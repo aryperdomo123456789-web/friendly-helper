@@ -11,7 +11,7 @@ export const getMyAccount = createServerFn({ method: "GET" })
     const [{ data: profile }, { data: roles }] = await Promise.all([
       supabaseAdmin
         .from("profiles")
-        .select("username, display_name, max_connections, expires_at, is_active")
+        .select("username, display_name, max_connections, expires_at, is_active, referral_code, referred_by_id")
         .eq("id", context.userId)
         .maybeSingle(),
       context.supabase
@@ -24,6 +24,8 @@ export const getMyAccount = createServerFn({ method: "GET" })
       username: profile?.username ?? "",
       display_name: profile?.display_name ?? "",
       isOwner: (roles ?? []).length > 0,
+      referral_code: profile?.referral_code ?? null,
+      referred_by_id: profile?.referred_by_id ?? null,
     };
   });
 

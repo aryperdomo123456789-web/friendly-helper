@@ -99,6 +99,8 @@ export type Database = {
           is_active: boolean
           max_connections: number
           plan_id: string | null
+          referral_code: string | null
+          referred_by_id: string | null
           username: string
         }
         Insert: {
@@ -110,6 +112,8 @@ export type Database = {
           is_active?: boolean
           max_connections?: number
           plan_id?: string | null
+          referral_code?: string | null
+          referred_by_id?: string | null
           username: string
         }
         Update: {
@@ -121,6 +125,8 @@ export type Database = {
           is_active?: boolean
           max_connections?: number
           plan_id?: string | null
+          referral_code?: string | null
+          referred_by_id?: string | null
           username?: string
         }
         Relationships: [
@@ -296,6 +302,7 @@ export type Database = {
       test_links: {
         Row: {
           created_at: string
+          created_by_id: string | null
           duration_minutes: number
           id: string
           is_active: boolean
@@ -305,6 +312,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          created_by_id?: string | null
           duration_minutes?: number
           id?: string
           is_active?: boolean
@@ -314,6 +322,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          created_by_id?: string | null
           duration_minutes?: number
           id?: string
           is_active?: boolean

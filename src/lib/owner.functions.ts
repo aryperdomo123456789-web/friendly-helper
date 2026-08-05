@@ -167,7 +167,7 @@ export const listAccessUsers = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: profiles, error } = await supabaseAdmin
       .from("profiles")
-      .select("id, username, display_name, max_connections, expires_at, is_active, created_at, plan_id, plan:subscription_plans(*)")
+      .select("id, username, display_name, max_connections, expires_at, is_active, created_at, plan_id, plan:subscription_plans(*), referred_by:profiles!referred_by_id(username)")
       .order("created_at", { ascending: false });
     if (error) throw error;
     const [{ data: access }, { data: devices }] = await Promise.all([
