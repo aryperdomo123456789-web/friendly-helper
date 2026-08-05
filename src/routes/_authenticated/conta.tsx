@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, UserCog } from "lucide-react";
+import { Loader2, UserCog, Link as LinkIcon, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -78,12 +78,45 @@ function ContaPage() {
     }
   };
 
+  const referralLink = typeof window !== 'undefined' 
+    ? `${window.location.origin}/teste/gratis?ref=${account.data?.referral_code}` 
+    : '';
+
+  const copyReferral = () => {
+    navigator.clipboard.writeText(referralLink);
+    toast.success("Link de indicação copiado!");
+  };
+
   return (
     <div className="mx-auto max-w-xl space-y-6 w-full overflow-x-hidden">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Minha Conta</h1>
-        <p className="text-muted-foreground">Atualize seu usuario e sua senha de acesso.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Minha Conta</h1>
+          <p className="text-muted-foreground">Atualize seu usuario e sua senha de acesso.</p>
+        </div>
       </div>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-lg text-primary">
+            <LinkIcon className="h-5 w-5" /> Seu Link de Indicação
+          </CardTitle>
+          <CardDescription>
+            Compartilhe este link para ganhar benefícios em futuras promoções.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-2">
+          <div className="flex gap-2">
+            <Input readOnly value={referralLink} className="bg-background/50" />
+            <Button size="icon" onClick={copyReferral} title="Copiar Link">
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="mt-2 text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
+            CADA USUÁRIO CRIADO VIA ESTE LINK SERÁ VINCULADO À VOCÊ
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
