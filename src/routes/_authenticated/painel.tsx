@@ -1094,7 +1094,8 @@ function PainelDono() {
                       updates.max_connections = selectedPlan.max_connections;
                       // Calculate expiration if creating or if user wants to reset
                       const expiry = new Date();
-                      expiry.setDate(expiry.getDate() + selectedPlan.duration_days);
+                      const msToAdd = selectedPlan.duration_value * (selectedPlan.duration_unit === 'hours' ? 60 : 24 * 60) * 60 * 1000;
+                      expiry.setTime(expiry.getTime() + msToAdd);
                       updates.expires_at = expiry.toISOString();
                     }
                     
