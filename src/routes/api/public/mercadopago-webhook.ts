@@ -31,8 +31,10 @@ export const Route = createFileRoute('/api/public/mercadopago-webhook')({
             
             const payment = await mpRes.json();
             
-            if (payment.status === 'approved') {
-              const { userId, planId } = JSON.parse(payment.external_reference);
+            if (payment.status === 'approved' && payment.external_reference) {
+              try {
+                const { userId, planId } = JSON.parse(payment.external_reference);
+                if (!userId || !planId) throw new Error("Invalid external_reference data");
               
               // Get user profile to check referral
               const { data: userProfile } = await supabaseAdmin
@@ -121,7 +123,10 @@ export const Route = createFileRoute('/api/public/mercadopago-webhook')({
                     }
                   }
                 }
+              } catch (parseErr) {
+                console.error("Error parsing external_reference:", parseErr);
               }
+            }
             }
           }
 
