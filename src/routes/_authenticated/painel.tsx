@@ -21,6 +21,7 @@ import {
 import { getMySession } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
 import { getAppConfig, updateAppConfig } from "@/lib/config.functions";
+import { getPlans, savePlan, deletePlan } from "@/lib/plans.functions";
 import { AppConfigSchema } from "@/lib/types";
 
 
@@ -114,6 +115,15 @@ function PainelDono() {
   const fetchTestLinks = useServerFn(listTestLinks);
   const mutationSaveTestLink = useServerFn(saveTestLink);
   const mutationDeleteTestLink = useServerFn(deleteTestLink);
+  const fetchPlans = useServerFn(getPlans);
+  const mutationSavePlan = useServerFn(savePlan);
+  const mutationDeletePlan = useServerFn(deletePlan);
+
+  const plans = useQuery({
+    queryKey: ["admin-plans"],
+    queryFn: () => fetchPlans(),
+    enabled: isOwner,
+  });
 
   const testLinks = useQuery({
     queryKey: ["admin-test-links"],
@@ -146,6 +156,7 @@ function PainelDono() {
   const [userModal, setUserModal] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [testLinkModal, setTestLinkModal] = useState<any>(null);
+  const [planModal, setPlanModal] = useState<any>(null);
 
   /* ------------------- Handlers Servidores ------------------- */
   const handleSaveServer = async (e: React.FormEvent) => {
@@ -231,6 +242,35 @@ function PainelDono() {
       toast.error(err.message);
     }
   };
+  
+  /* ------------------- Handlers Planos ------------------- */
+  const handleSavePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await mutationSavePlan({ data: planModal });
+      toast.success("Plano salvo com sucesso!");
+      setPlanModal(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
+      // Re-invalidate users because plans affect them
+      queryClient.invalidateQueries({ queryKey: ["admin-users"] });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar plano");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePlan = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este plano?")) return;
+    try {
+      await mutationDeletePlan({ data: { id } });
+      toast.success("Plano removido");
+      queryClient.invalidateQueries({ queryKey: ["admin-plans"] });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
 
 
   if (!isOwner) {
@@ -263,6 +303,9 @@ function PainelDono() {
           </TabsTrigger>
           <TabsTrigger value="configuracao" className="gap-2">
             <Settings className="h-4 w-4" /> Configuração Central
+          </TabsTrigger>
+          <TabsTrigger value="planos" className="gap-2">
+            <Key className="h-4 w-4" /> Planos
           </TabsTrigger>
         </TabsList>
 

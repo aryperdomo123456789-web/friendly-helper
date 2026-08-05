@@ -35,6 +35,7 @@ const accessUserSchema = z.object({
   expires_at: z.string().datetime().nullable().optional(),
   display_name: z.string().trim().max(120).optional(),
   server_ids: z.array(z.string().uuid()).min(1),
+  plan_id: z.string().uuid().nullable().optional(),
 });
 
 async function assertOwner(supabase: any, userId: string) {
@@ -149,7 +150,7 @@ export const listAccessUsers = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: profiles, error } = await supabaseAdmin
       .from("profiles")
-      .select("id, username, display_name, max_connections, expires_at, is_active, created_at")
+      .select("id, username, display_name, max_connections, expires_at, is_active, created_at, plan_id")
       .order("created_at", { ascending: false });
     if (error) throw error;
     const [{ data: access }, { data: devices }] = await Promise.all([
@@ -190,6 +191,7 @@ export const createAccessUser = createServerFn({ method: "POST" })
       display_name: data.display_name ?? data.username,
       max_connections: data.max_connections,
       expires_at: data.expires_at ?? null,
+      plan_id: data.plan_id ?? null,
       created_by: context.userId,
     });
     if (profileError) {
@@ -217,6 +219,7 @@ export const updateAccessUser = createServerFn({ method: "POST" })
         is_active: z.boolean(),
         display_name: z.string().trim().max(120).optional(),
         server_ids: z.array(z.string().uuid()).min(1),
+        plan_id: z.string().uuid().nullable().optional(),
       })
       .parse(input),
   )
@@ -231,6 +234,7 @@ export const updateAccessUser = createServerFn({ method: "POST" })
         expires_at: data.expires_at ?? null,
         is_active: data.is_active,
         display_name: data.display_name ?? null,
+        plan_id: data.plan_id ?? null,
       })
       .eq("id", data.id);
     if (error) throw error;
