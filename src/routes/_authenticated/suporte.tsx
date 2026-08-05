@@ -157,6 +157,8 @@ function SuportePage() {
 }
 
 function ChatWindow({ thread, onClose, isOwner }: { thread: any, onClose: () => void, isOwner: boolean }) {
+  const queryClient = useQueryClient();
+
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -312,8 +314,30 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any, onClose: () => 
             </div>
           </div>
         </div>
-        {isOwner && <Button variant="ghost" size="icon" onClick={onClose} className="hover:bg-destructive/10 hover:text-destructive"><X className="h-4 w-4" /></Button>}
+        <div className="flex items-center gap-2">
+          {isOwner && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="h-8 text-[10px] font-bold uppercase tracking-wider border-destructive/30 text-destructive hover:bg-destructive/10"
+              onClick={async () => {
+                if(confirm("Deseja encerrar este atendimento?")) {
+                  const { closeThread } = await import("@/lib/chat.functions");
+                  const closeFn = useServerFn(closeThread);
+                  await closeFn({ data: { threadId: thread.id } });
+                  toast.success("Atendimento encerrado");
+                  onClose();
+                  queryClient.invalidateQueries({ queryKey: ["support-threads"] });
+                }
+              }}
+            >
+              Encerrar Chat
+            </Button>
+          )}
+          {isOwner && <Button variant="ghost" size="icon" onClick={onClose} className="hover:bg-destructive/10 hover:text-destructive"><X className="h-4 w-4" /></Button>}
+        </div>
       </div>
+
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
         {messages.map((msg) => {
