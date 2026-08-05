@@ -54,10 +54,7 @@ export const Route = createFileRoute("/api/public/stream")({
 
         if (!upstream) {
           if (expectsHls) return unavailableHlsResponse();
-          return new Response("Servidor de midia nao respondeu", {
-            status: 504,
-            headers: baseSecurityHeaders(),
-          });
+          return unavailableMediaResponse();
         }
 
 
@@ -74,10 +71,8 @@ export const Route = createFileRoute("/api/public/stream")({
             await upstream.body?.cancel().catch(() => undefined);
             return unavailableHlsResponse();
           }
-          return new Response("Canal indisponivel no servidor", {
-            status: upstream.status === 404 ? 404 : 502,
-            headers: baseSecurityHeaders(),
-          });
+          await upstream.body?.cancel().catch(() => undefined);
+          return unavailableMediaResponse();
         }
 
         if (
@@ -137,4 +132,13 @@ function unavailableHlsResponse(): Response {
     "",
   ].join("\n");
   return new Response(playlist, { status: 200, headers });
+}
+
+function unavailableMediaResponse(): Response {
+  const headers = baseSecurityHeaders();
+  headers.set("x-stream-status", "unavailable");
+  // 204 is a successful route response with no media payload. The video element
+  // reports its normal playback error without the hosting layer replacing the
+  // whole application with an HTTP 502 error boundary.
+  return new Response(null, { status: 204, headers });
 }
