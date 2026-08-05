@@ -18,7 +18,7 @@ export const listTestLinks = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await supabaseAdmin
+    const { data, error } = await (supabaseAdmin as any)
       .from("test_links")
       .select("*")
       .order("created_at", { ascending: false });
@@ -41,13 +41,13 @@ export const saveTestLink = createServerFn({ method: "POST" })
     await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (data.id) {
-      const { error } = await supabaseAdmin
+      const { error } = await (supabaseAdmin as any)
         .from("test_links")
         .update(data)
         .eq("id", data.id);
       if (error) throw error;
     } else {
-      const { error } = await supabaseAdmin
+      const { error } = await (supabaseAdmin as any)
         .from("test_links")
         .insert(data);
       if (error) throw error;
@@ -61,7 +61,7 @@ export const deleteTestLink = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { error } = await supabaseAdmin.from("test_links").delete().eq("id", data.id);
+    const { error } = await (supabaseAdmin as any).from("test_links").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });
@@ -72,7 +72,7 @@ export const createTestUser = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     
     // Validate link
-    const { data: link, error: linkError } = await supabaseAdmin
+    const { data: link, error: linkError } = await (supabaseAdmin as any)
       .from("test_links")
       .select("*")
       .eq("slug", data.slug)
@@ -108,8 +108,6 @@ export const createTestUser = createServerFn({ method: "POST" })
 
     await supabaseAdmin.from("user_roles").insert({ user_id: newUserId, role: "user" });
 
-    // Link to all active servers by default for tests? 
-    // Or we could add a field to test_links for specific servers.
     // For now, let's give access to all active servers.
     const { data: servers } = await supabaseAdmin.from("iptv_servers").select("id").eq("is_active", true);
     if (servers && servers.length > 0) {
