@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { getPlans } from "@/lib/plans.functions";
 import {
   listServers,
   listAccessUsers,
@@ -65,6 +66,7 @@ function UsuariosPage() {
 
   const fetchServers = useServerFn(listServers);
   const fetchUsers = useServerFn(listAccessUsers);
+  const fetchPlans = useServerFn(getPlans);
   const mutationCreateUser = useServerFn(createAccessUser);
   const mutationUpdateUser = useServerFn(updateAccessUser);
   const mutationDeleteUser = useServerFn(deleteAccessUser);
@@ -78,6 +80,11 @@ function UsuariosPage() {
   const users = useQuery({
     queryKey: ["admin-users"],
     queryFn: () => fetchUsers(),
+    enabled: isOwner,
+  });
+  const plans = useQuery({
+    queryKey: ["admin-plans"],
+    queryFn: () => fetchPlans(),
     enabled: isOwner,
   });
 
@@ -168,7 +175,7 @@ function UsuariosPage() {
         </div>
         <Button
           onClick={() => {
-            const testPlan = users.data?.find((u: any) => u.plan?.name.toLowerCase().includes("teste"))?.plan;
+            const testPlan = plans.data?.find((p: any) => p.name.toLowerCase().includes("teste"));
             setUserModal({
               username: "",
               password: "",
@@ -310,8 +317,7 @@ function UsuariosPage() {
                   value={userModal?.plan_id || ""} 
                   onChange={(e) => {
                     const planId = e.target.value || null;
-                    const selectedUser = users.data?.find((u: any) => u.plan_id === planId);
-                    const selectedPlan = selectedUser?.plan;
+                    const selectedPlan = plans.data?.find((p: any) => p.id === planId);
                     
                     const updates: any = { plan_id: planId };
                     
@@ -326,13 +332,11 @@ function UsuariosPage() {
                   }}
                 >
                   <option value="">Personalizado (Sem plano)</option>
-                  {Array.from(new Set((users.data ?? []).filter((u: any) => u.plan).map((u: any) => JSON.stringify(u.plan))))
-                    .map(s => JSON.parse(s as string))
-                    .map((plan: any) => (
-                      <option key={plan.id} value={plan.id}>
-                        {plan.name} - R$ {Number(plan.price).toFixed(2)}
-                      </option>
-                    ))}
+                  {(plans.data ?? []).map((plan: any) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name} - R$ {Number(plan.price).toFixed(2)}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
