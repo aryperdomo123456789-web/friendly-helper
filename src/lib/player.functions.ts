@@ -109,7 +109,7 @@ export const heartbeat = createServerFn({ method: "POST" })
       throw new Error("Acesso expirado");
     }
 
-    const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
     await supabaseAdmin
       .from("device_sessions")
       .delete()
@@ -276,7 +276,7 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
       .maybeSingle();
 
     if (profile) {
-      const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
       await supabaseAdmin
         .from("device_sessions")
         .delete()
