@@ -55,7 +55,7 @@ function Shell() {
 }
 
 function ShellLayout() {
-  const { profile, isOwner, servers, serverId, setServerId, blocked } = usePlayerSession();
+  const { profile, isOwner, servers, serverId, setServerId, blocked, expired } = usePlayerSession();
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const location = useLocation();
@@ -95,9 +95,8 @@ function ShellLayout() {
           </span>
         </div>
 
-        <nav className="flex-1 space-y-1 p-3">
           {NAV.map((item) => {
-            const isRestricted = !isOwner && blocked && item.restricted;
+            const isRestricted = !isOwner && (blocked || expired) && item.restricted;
             if (isRestricted) return null;
             
             return (
@@ -237,7 +236,7 @@ function ShellLayout() {
           </div>
         </header>
 
-        {blocked ? (
+        {blocked && !expired ? (
           <div className="flex items-start gap-3 border-b border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <span>{blocked}</span>
@@ -245,7 +244,7 @@ function ShellLayout() {
         ) : null}
 
         <main className="p-4 lg:p-6">
-          {!isOwner && blocked && location.pathname !== "/conta" ? (
+          {!isOwner && (blocked || expired) && location.pathname !== "/conta" ? (
             <div className="flex flex-col items-center justify-center py-20 text-center">
               <div className="mb-6 rounded-full bg-destructive/10 p-6">
                 <AlertTriangle className="h-16 w-16 text-destructive" />
