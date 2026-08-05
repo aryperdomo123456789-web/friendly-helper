@@ -46,8 +46,10 @@ export const createPaymentPreference = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const config = await getAppConfig() as any;
     
+    // MODO TESTE: Se não houver token, permite ativação direta para teste de bonificação
     if (!config.mp_access_token || !config.mp_enabled) {
-      throw new Error("Pagamento via Mercado Pago não está configurado ou ativo.");
+      console.log("Modo Teste: Simulando pagamento aprovado para teste de fluxo.");
+      return { simulate_success: true, planId: data.planId };
     }
 
     const { data: plan, error: planError } = await supabaseAdmin

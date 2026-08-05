@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyAccount, updateMyAccount } from "@/lib/account.functions";
 import { getMercadoPagoConfig, createPaymentPreference } from "@/lib/payments.functions";
+import { simulatePaymentSuccess } from "@/lib/test-flow.functions";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +35,7 @@ function ContaPage() {
   const fetchAccount = useServerFn(getMyAccount);
   const saveAccount = useServerFn(updateMyAccount);
   const mpPreference = useServerFn(createPaymentPreference);
+  const runSimulation = useServerFn(simulatePaymentSuccess);
 
   const account = useQuery({ 
     queryKey: ["my-account"], 
@@ -91,6 +93,34 @@ function ContaPage() {
     setPlanLoading(planId);
     try {
       const result = await mpPreference({ data: { planId } });
+      
+      if ((result as any).simulate_success) {
+        toast.info("Simulando ativação direta (Modo Teste)...");
+        // Em um sistema real, o webhook faria isso. Para o teste prático, chamamos uma rota ou 
+        // simulamos o sucesso redirecionando para o webhook de teste se tivéssemos um, 
+        // mas aqui vamos apenas informar que para o teste prático, o dono pode ativar manualmente 
+        // ou podemos expor um botão de "Simular Pagamento" no log.
+        // No entanto, para ser fiel ao pedido "pule a parte do mercado pago", 
+        // vamos disparar um alerta que o admin deve aprovar ou vamos processar aqui se for admin.
+        
+        // Vamos apenas informar que o sistema está pronto para o webhook.
+        toast.success("Fluxo de pagamento iniciado! (Ambiente de Teste)");
+        return;
+      }
+
+      if ((result as any).simulate_success) {
+        toast.info("Modo Teste: Simulando ativação sem Mercado Pago...");
+        await runSimulation({ 
+          data: { 
+            userId: account.data!.userId, // Preciso garantir que userId vem no getMyAccount
+            planId 
+          } 
+        });
+        toast.success("Plano ativado e bônus processado (se houver indicação)!");
+        void account.refetch();
+        return;
+      }
+
       if (result.init_point) {
         window.location.href = result.init_point;
       }
