@@ -223,7 +223,7 @@ function FloatingChat({ userId }: { userId?: string }) {
         .from('support_messages')
         .insert([{
           thread_id: thread.id,
-          sender_id: userId,
+          sender_id: userId || null,
           content: newMessage
         }]);
 
