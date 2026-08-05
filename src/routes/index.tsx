@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { usePlayerSession } from "@/lib/player-store";
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,19 +37,28 @@ export const Route = createFileRoute("/")({
 
 function LoginPage() {
   const navigate = useNavigate();
-  const { profile, isOwner } = usePlayerSession();
+  const [hasSession, setHasSession] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [isOwnerLogin, setIsOwnerLogin] = useState(false);
-  
+
   const runBootstrap = useServerFn(createFirstOwner);
 
   useEffect(() => {
-    if (profile) {
-      navigate({ to: "/inicio", replace: true });
-    }
-  }, [profile, navigate]);
+    let active = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!active) return;
+      if (data.session) {
+        setHasSession(true);
+        navigate({ to: "/inicio", replace: true });
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,7 +101,7 @@ function LoginPage() {
 
 
   // O loading agora e gerido pelo contexto do router/shell, mas podemos adicionar um local se quiser
-  if (profile) return null;
+  if (hasSession) return null;
 
 
   return (
