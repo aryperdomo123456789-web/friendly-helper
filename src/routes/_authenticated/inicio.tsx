@@ -139,7 +139,7 @@ function Inicio() {
         ))}
       </div>
 
-      {!isOwner && <FloatingChat userId={profile?.id} />}
+      {!isOwner && <FloatingChat userId={profile?.id as any} />}
     </div>
   );
 }

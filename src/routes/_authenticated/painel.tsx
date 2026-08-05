@@ -1225,25 +1225,25 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
     if (!session) return;
 
     try {
-      const { error } = await supabase
-        .from('support_messages')
+      const { error } = await (supabase
+        .from('support_messages' as any)
         .insert([{
           thread_id: thread.id,
           sender_id: session.user.id,
           content: newMessage
-        }]);
+        }]) as any);
 
       if (error) throw error;
 
       // Update thread last message
-      await supabase
-        .from('support_threads')
+      await (supabase
+        .from('support_threads' as any)
         .update({ 
           last_message: newMessage, 
           last_message_at: new Date().toISOString(),
           unread_count_user: (thread.unread_count_user || 0) + 1
-        })
-        .eq('id', thread.id);
+        } as any)
+        .eq('id', thread.id) as any);
 
       setNewMessage("");
     } catch (err: any) {
