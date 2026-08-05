@@ -974,6 +974,70 @@ function PainelDono() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Plano */}
+      <Dialog open={!!planModal} onOpenChange={(o) => !o && setPlanModal(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <form onSubmit={handleSavePlan}>
+            <DialogHeader>
+              <DialogTitle>{planModal?.id ? "Editar Plano" : "Novo Plano"}</DialogTitle>
+              <DialogDescription>
+                Configure os detalhes do plano de assinatura.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="plan-name">Nome do Plano</Label>
+                <Input 
+                  id="plan-name"
+                  value={planModal?.name || ""} 
+                  onChange={e => setPlanModal({...planModal, name: e.target.value})}
+                  placeholder="Ex: Plano Mensal"
+                  required 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="plan-price">Valor (R$)</Label>
+                  <Input 
+                    id="plan-price"
+                    type="number"
+                    step="0.01"
+                    value={planModal?.price || 0} 
+                    onChange={e => setPlanModal({...planModal, price: parseFloat(e.target.value)})}
+                    required 
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="plan-duration">Duração (Dias)</Label>
+                  <Input 
+                    id="plan-duration"
+                    type="number"
+                    value={planModal?.duration_days || 30} 
+                    onChange={e => setPlanModal({...planModal, duration_days: parseInt(e.target.value)})}
+                    required 
+                  />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="plan-conn">Máximo de Conexões</Label>
+                <Input 
+                  id="plan-conn"
+                  type="number"
+                  min="1"
+                  value={planModal?.max_connections || 1} 
+                  onChange={e => setPlanModal({...planModal, max_connections: parseInt(e.target.value)})}
+                  required 
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setPlanModal(null)}>Cancelar</Button>
+              <Button type="submit" disabled={loading}>Salvar Plano</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
