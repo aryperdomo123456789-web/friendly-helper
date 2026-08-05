@@ -57,11 +57,12 @@ PORT=6873
 
 ---
 
-## 📡 4. DNS Failover & Performance
+## 📡 4. DNS Failover, Performance & Hero Carousel
 O sistema tenta automaticamente todos os DNS cadastrados em `server_credentials` caso o principal falhe (HTTP 404/Timeout). Para garantir fluidez máxima:
 -   O Proxy de Stream utiliza cabeçalhos de VLC e handshake de 60s.
 -   O Player HLS está configurado para 25 retentativas de fragmentos.
 -   **Isolamento de Usuário**: A seleção de servidor é persistida localmente no navegador (`localStorage`), garantindo que a troca de servidor feita por um usuário seja individual e não afete nenhum outro cliente.
+-   **Carrossel TMDB & Busca Inteligente**: O componente `TMDBHeroCarousel` busca tendências mundiais e o botão "ASSISTIR AGORA" navega para `/filmes` ou `/series` enviando o título do conteúdo como parâmetro de busca (`q`). O catálogo, por sua vez, detecta esse parâmetro e realiza uma filtragem automática no servidor IPTV selecionado, garantindo uma transição fluida do marketing (TMDB) para a reprodução real.
 
 ---
 
