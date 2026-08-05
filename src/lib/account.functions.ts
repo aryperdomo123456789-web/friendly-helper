@@ -8,21 +8,25 @@ export const getMyAccount = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [{ data: profile }, owner, admin] = await Promise.all([
+    const [{ data: profile }, { data: roles }] = await Promise.all([
       supabaseAdmin
         .from("profiles")
         .select("username, display_name, max_connections, expires_at, is_active")
         .eq("id", context.userId)
         .maybeSingle(),
-      context.supabase.rpc("has_role", { _user_id: context.userId, _role: "owner" }),
-      context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" }),
+      context.supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", context.userId)
+        .in("role", ["owner", "admin"]),
     ]);
     return {
       username: profile?.username ?? "",
       display_name: profile?.display_name ?? "",
-      isOwner: Boolean(owner.data || admin.data),
+      isOwner: (roles ?? []).length > 0,
     };
   });
+
 
 export const updateMyAccount = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
