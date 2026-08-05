@@ -134,13 +134,12 @@ function ThemeApplier() {
   });
 
   useEffect(() => {
-    if (!config) return;
-    const mode = config.theme_mode ?? "azul";
+    const mode = config?.theme_mode ?? "azul";
     document.documentElement.setAttribute("data-theme", mode);
     document.documentElement.classList.toggle("dark", mode !== "light");
 
     // Dynamic Icon/Favicon
-    if (config.favicon_url) {
+    if (config?.favicon_url) {
       let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
       if (!link) {
         link = document.createElement('link');
