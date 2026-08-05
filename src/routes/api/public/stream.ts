@@ -23,15 +23,15 @@ export const Route = createFileRoute("/api/public/stream")({
         // therefore fails intermittently -> retry before giving up.
         const attemptFetch = async (): Promise<Response | null> => {
           const controller = new AbortController();
-          // Increased timeout to 40s for slow panel handshakes
-          const timer = setTimeout(() => controller.abort(), 40_000);
+          // Increased timeout to 60s for slow panel handshakes or complex redirects
+          const timer = setTimeout(() => controller.abort(), 60_000);
           try {
             return await fetch(target, {
               redirect: "follow",
               signal: controller.signal,
               headers: {
                 // Mimic VLC more closely for better compatibility
-                "User-Agent": "VLC/3.0.20 LibVLC/3.0.20",
+                "User-Agent": "VLC/3.0.21 LibVLC/3.0.21",
                 "Accept-Encoding": "identity",
                 "Icy-MetaData": "1",
                 "Connection": "keep-alive",
@@ -57,7 +57,7 @@ export const Route = createFileRoute("/api/public/stream")({
             if (location) {
                // Follow the redirect manually once
                const redirectRes = await fetch(location, {
-                 headers: { "User-Agent": "VLC/3.0.20 LibVLC/3.0.20", "Accept": "*/*" }
+                 headers: { "User-Agent": "VLC/3.0.21 LibVLC/3.0.21", "Accept": "*/*" }
                });
                if (redirectRes.ok || redirectRes.status === 206) {
                  upstream = redirectRes;

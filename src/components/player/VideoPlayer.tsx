@@ -37,8 +37,8 @@ export function VideoPlayer({ url, poster, title }: Props) {
             manifestLoadingMaxRetry: 10,
             levelLoadingMaxRetry: 10,
             fragLoadingMaxRetry: 20,
-            fragLoadingTimeOut: 40000,
-            manifestLoadingTimeOut: 40000,
+            fragLoadingTimeOut: 60000,
+            manifestLoadingTimeOut: 60000,
           });
           hls.loadSource(url);
           hls.attachMedia(video!);
