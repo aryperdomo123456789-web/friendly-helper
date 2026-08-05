@@ -1269,9 +1269,11 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
 
       if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
+      const { data: signed, error: signErr } = await supabase.storage
         .from('chat-files-v2')
-        .getPublicUrl(filePath);
+        .createSignedUrl(filePath, 60 * 60 * 24 * 365);
+      if (signErr) throw signErr;
+      const publicUrl = signed.signedUrl;
 
       const fileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'file';
 
