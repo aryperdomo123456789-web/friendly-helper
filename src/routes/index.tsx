@@ -95,14 +95,14 @@ function LoginPage() {
 
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Usuario</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="username" className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 ml-1">Usuario</Label>
               <div className="relative">
-                <User className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
+                <User className="absolute top-3 left-3 h-4 w-4 text-primary/60" />
                 <Input
                   id="username"
-                  placeholder="Seu usuario"
-                  className="pl-10"
+                  placeholder="Nome de usuario"
+                  className="pl-10 h-12 bg-background/40 border-border/40 focus:border-primary/50 transition-all"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={loading}
@@ -110,15 +110,15 @@ function LoginPage() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha</Label>
+            <div className="space-y-1.5">
+              <Label htmlFor="password" className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60 ml-1">Senha</Label>
               <div className="relative">
-                <Lock className="absolute top-3 left-3 h-4 w-4 text-muted-foreground" />
+                <Lock className="absolute top-3 left-3 h-4 w-4 text-primary/60" />
                 <Input
                   id="password"
                   type="password"
                   placeholder="••••••••"
-                  className="pl-10"
+                  className="pl-10 h-12 bg-background/40 border-border/40 focus:border-primary/50 transition-all"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
@@ -127,16 +127,17 @@ function LoginPage() {
               </div>
             </div>
             
-            <Button type="submit" className="w-full font-semibold" disabled={loading}>
+            <Button type="submit" className="w-full h-12 text-base font-bold shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all" disabled={loading}>
               {loading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
                   Verificando...
                 </>
               ) : (
-                "Entrar no Player"
+                "Entrar agora"
               )}
             </Button>
+
 
             <div className="relative py-2">
               <div className="absolute inset-0 flex items-center">
