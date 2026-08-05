@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { createTestUser } from "@/lib/test-links.functions";
+import { createTestUser, checkDeviceBlocked } from "@/lib/test-links.functions";
 import { toast } from "sonner";
 import { 
   Card, 
