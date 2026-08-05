@@ -14,16 +14,133 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      iptv_servers: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          id: string
+          name: string
+          url: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          name: string
+          url: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          name?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      iptv_subscriptions: {
+        Row: {
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          max_connections: number
+          server_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          max_connections?: number
+          server_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          max_connections?: number
+          server_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "iptv_subscriptions_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "iptv_servers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      server_credentials: {
+        Row: {
+          created_at: string | null
+          dns: string
+          id: string
+          password: string
+          server_id: string
+          username: string
+        }
+        Insert: {
+          created_at?: string | null
+          dns: string
+          id?: string
+          password: string
+          server_id: string
+          username: string
+        }
+        Update: {
+          created_at?: string | null
+          dns?: string
+          id?: string
+          password?: string
+          server_id?: string
+          username?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "server_credentials_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "iptv_servers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "owner" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +267,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "owner", "user"],
+    },
   },
 } as const
