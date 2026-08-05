@@ -56,7 +56,12 @@ export function VideoPlayer({ url, poster, title }: Props) {
               hls?.startLoad();
               return;
             }
-            setError("Nao foi possivel iniciar o canal. Tente outro canal ou servidor.");
+            const code = (data.response as { code?: number } | undefined)?.code;
+            setError(
+              code === 404 || code === 502
+                ? "Canal indisponivel no servidor agora (fora do ar ou limite de conexoes em uso)."
+                : "Nao foi possivel iniciar o canal. Tente outro canal ou servidor.",
+            );
           });
           return;
         }
