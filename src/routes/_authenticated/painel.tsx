@@ -1185,11 +1185,11 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
   useEffect(() => {
     // Initial fetch
     const fetchMessages = async () => {
-      const { data } = await supabase
-        .from('support_messages')
+      const { data } = await (supabase
+        .from('support_messages' as any)
         .select('*')
         .eq('thread_id', thread.id)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true }) as any);
       if (data) setMessages(data);
     };
     fetchMessages();
@@ -1276,13 +1276,13 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
       const fileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'file';
 
       const { data: { session } } = await supabase.auth.getSession();
-      await supabase.from('support_messages').insert([{
+      await (supabase.from('support_messages' as any).insert([{
         thread_id: thread.id,
         sender_id: session?.user.id,
         file_url: publicUrl,
         file_type: fileType,
         content: `Enviou um ${fileType}`
-      }]);
+      }]) as any);
 
       toast.success("Arquivo enviado!");
     } catch (err: any) {
