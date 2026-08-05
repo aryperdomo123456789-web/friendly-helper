@@ -304,7 +304,7 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
     const direct = buildStreamUrl(credential, data.kind, data.stream_id, data.ext ?? undefined);
     // Proxied through our own origin: the panels only serve plain HTTP and the
     // browser refuses mixed content on an HTTPS page.
-    const proxied = await signStreamUrl(direct);
+    const proxied = await signStreamUrl(direct, { subject: context.userId, ttlSeconds: 6 * 60 * 60 });
     const isHls = direct.endsWith(".m3u8");
     return { url: isHls ? `${proxied}&hls=1` : proxied };
   });
