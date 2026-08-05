@@ -14,64 +14,95 @@ export type Database = {
   }
   public: {
     Tables: {
+      device_sessions: {
+        Row: {
+          created_at: string
+          device_id: string
+          id: string
+          last_seen: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_id: string
+          id?: string
+          last_seen?: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_id?: string
+          id?: string
+          last_seen?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       iptv_servers: {
         Row: {
           created_at: string | null
           created_by: string | null
           id: string
+          is_active: boolean
           name: string
+          sort_order: number
           url: string
         }
         Insert: {
           created_at?: string | null
           created_by?: string | null
           id?: string
+          is_active?: boolean
           name: string
+          sort_order?: number
           url: string
         }
         Update: {
           created_at?: string | null
           created_by?: string | null
           id?: string
+          is_active?: boolean
           name?: string
+          sort_order?: number
           url?: string
         }
         Relationships: []
       }
-      iptv_subscriptions: {
+      profiles: {
         Row: {
-          created_at: string | null
+          created_at: string
+          created_by: string | null
+          display_name: string | null
           expires_at: string | null
           id: string
+          is_active: boolean
           max_connections: number
-          server_id: string
-          user_id: string
+          username: string
         }
         Insert: {
-          created_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          display_name?: string | null
           expires_at?: string | null
-          id?: string
+          id: string
+          is_active?: boolean
           max_connections?: number
-          server_id: string
-          user_id: string
+          username: string
         }
         Update: {
-          created_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          display_name?: string | null
           expires_at?: string | null
           id?: string
+          is_active?: boolean
           max_connections?: number
-          server_id?: string
-          user_id?: string
+          username?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "iptv_subscriptions_server_id_fkey"
-            columns: ["server_id"]
-            isOneToOne: false
-            referencedRelation: "iptv_servers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       server_credentials: {
         Row: {
@@ -125,6 +156,35 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      user_server_access: {
+        Row: {
+          created_at: string
+          id: string
+          server_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          server_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          server_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_server_access_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: false
+            referencedRelation: "iptv_servers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
