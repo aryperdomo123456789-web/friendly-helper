@@ -31,16 +31,22 @@ export const savePlan = createServerFn({ method: "POST" })
   .handler(async ({ data: input, context }) => {
     const { id, ...data } = input;
 
+    // We keep duration_days for DB compatibility if needed, but the UI uses value/unit
+    const dbData = {
+      ...data,
+      duration_days: data.duration_unit === 'days' ? data.duration_value : Math.ceil(data.duration_value / 24)
+    };
+
     if (id) {
       const { error } = await context.supabase
         .from("subscription_plans")
-        .update(data)
+        .update(dbData)
         .eq("id", id);
       if (error) throw error;
     } else {
       const { error } = await context.supabase
         .from("subscription_plans")
-        .insert(data);
+        .insert(dbData);
       if (error) throw error;
     }
 
