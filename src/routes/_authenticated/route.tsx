@@ -148,7 +148,7 @@ function ShellLayout() {
           </Button>
           <div className="ml-auto flex items-center gap-3">
             {servers.length > 0 ? (
-              <Select value={serverId ?? undefined} onValueChange={setServerId}>
+              <Select value={serverId ?? ""} onValueChange={setServerId}>
                 <SelectTrigger className="w-[190px]">
                   <SelectValue placeholder="Servidor" />
                 </SelectTrigger>

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedCanaisRouteImport } from './routes/_authenticated/canais'
+import { Route as AuthenticatedFilmesRouteImport } from './routes/_authenticated/filmes'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -27,27 +28,40 @@ const AuthenticatedCanaisRoute = AuthenticatedCanaisRouteImport.update({
   path: '/canais',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedFilmesRoute = AuthenticatedFilmesRouteImport.update({
+  id: '/filmes',
+  path: '/filmes',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/canais': typeof AuthenticatedCanaisRoute
+  '/filmes': typeof AuthenticatedFilmesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/canais': typeof AuthenticatedCanaisRoute
+  '/filmes': typeof AuthenticatedFilmesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/_authenticated/canais': typeof AuthenticatedCanaisRoute
+  '/_authenticated/filmes': typeof AuthenticatedFilmesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/canais'
+  fullPaths: '/' | '/canais' | '/filmes'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/canais'
-  id: '__root__' | '/' | '/_authenticated' | '/_authenticated/canais'
+  to: '/' | '/canais' | '/filmes'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/_authenticated/canais'
+    | '/_authenticated/filmes'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -78,15 +92,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCanaisRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/filmes': {
+      id: '/_authenticated/filmes'
+      path: '/filmes'
+      fullPath: '/filmes'
+      preLoaderRoute: typeof AuthenticatedFilmesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedCanaisRoute: typeof AuthenticatedCanaisRoute
+  AuthenticatedFilmesRoute: typeof AuthenticatedFilmesRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCanaisRoute: AuthenticatedCanaisRoute,
+  AuthenticatedFilmesRoute: AuthenticatedFilmesRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
