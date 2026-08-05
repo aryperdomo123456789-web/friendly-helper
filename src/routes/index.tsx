@@ -73,7 +73,9 @@ function ThemeAwareLogo({ className }: { className?: string }) {
 
 
 function LoginPage() {
+  useTVNavigation();
   const navigate = useNavigate();
+
   const search = Route.useSearch() as any;
   const [hasSession, setHasSession] = useState(false);
   const [username, setUsername] = useState(search.username || "");

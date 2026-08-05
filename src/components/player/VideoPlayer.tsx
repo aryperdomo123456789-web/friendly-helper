@@ -34,12 +34,19 @@ export function VideoPlayer({ url, poster, title }: Props) {
           hls = new Hls({
             lowLatencyMode: true,
             enableWorker: true,
+            backBufferLength: 60, // Aumenta estabilidade em TVs
+            maxBufferLength: 30,
+            maxMaxBufferLength: 600,
             manifestLoadingMaxRetry: 15,
             levelLoadingMaxRetry: 15,
             fragLoadingMaxRetry: 25,
             fragLoadingTimeOut: 60000,
             manifestLoadingTimeOut: 60000,
+            xhrSetup: (xhr) => {
+              xhr.withCredentials = false; // Necessário para alguns servidores IPTV
+            }
           });
+
           hls.loadSource(url);
           hls.attachMedia(video!);
           hls.on(Hls.Events.MANIFEST_PARSED, () => {

@@ -137,9 +137,12 @@
     border-color: var(--color-border);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Legacy prefix for older TV browsers */
+    -webkit-box-sizing: border-box;
+    box-sizing: border-box;
   }
 
-  /* Reset para TVs (WebOS/Tizen costumam ter paddings estranhos) */
+  /* Reset e Compatibilidade Universal (Smart TV / Mobile / Desktop) */
   html, body {
     margin: 0;
     padding: 0;
@@ -153,43 +156,56 @@
     -webkit-overflow-scrolling: touch;
     /* Fix para fontes pequenas em resoluções 4K simuladas */
     text-rendering: optimizeLegibility;
+    /* Previne "elastic scroll" no Safari/Mobile em containers fixos */
+    overscroll-behavior-y: none;
   }
 
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     scroll-behavior: smooth;
-    /* Força renderização acelerada por GPU */
-    transform: translateZ(0);
+    /* Força renderização acelerada por GPU (Crucial para TVs) */
+    transform: translate3d(0, 0, 0);
+    -webkit-transform: translate3d(0, 0, 0);
     backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    perspective: 1000px;
+    -webkit-perspective: 1000px;
   }
 
-  /* TV Navigation Focus Styles - High Contrast & Stability */
+  /* Melhora a legibilidade de inputs em Mobile */
+  input, select, textarea {
+    font-size: 16px !important; /* Previne auto-zoom no iOS */
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  /* TV Navigation Focus Styles - High Visibility Glow */
   :focus-visible {
     outline: 4px solid var(--primary) !important;
-    outline-offset: 4px;
-    /* Escala menor para evitar trepidação em TVs antigas */
-    transform: scale(1.03);
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    outline-offset: 2px;
+    transform: scale(1.02) !important;
+    transition: transform 0.2s ease-out, box-shadow 0.2s ease-out;
     z-index: 9999;
     position: relative;
-    /* Glow mais forte para visibilidade em telas de TV de longe */
-    box-shadow: 0 0 35px var(--primary), 0 0 10px rgba(0,0,0,0.5);
+    box-shadow: 0 0 25px var(--primary), 0 0 60px var(--primary), 0 0 10px rgba(0,0,0,0.8);
     background-color: var(--primary) !important;
     color: var(--primary-foreground) !important;
   }
 
-  /* Garante que SVGs dentro de foco também mudem de cor */
-  :focus-visible svg {
-    color: var(--primary-foreground) !important;
+  /* Compatibilidade para navegadores que não suportam gap em flex */
+  .flex-gap-fallback {
+    margin: -0.5rem;
+  }
+  .flex-gap-fallback > * {
+    margin: 0.5rem;
   }
 }
 
-/* 📺 TV Optimized Queries */
+/* 📺 TV & Large Screen Optimizations */
 @media screen and (min-width: 1280px) {
   :root {
-    /* Aumenta a base de fonte para TVs (distância do sofá) */
-    font-size: 18px;
+    font-size: 18px; /* Aumenta interface para sofá */
   }
 }
 
@@ -199,11 +215,14 @@
   }
 }
 
-/* Fix para navegadores de TV que não suportam flex-gap ou subgrid */
-@supports not (gap: 1rem) {
-  .flex.gap-4 > * + * { margin-left: 1rem; }
-  .grid.gap-4 > * { margin-bottom: 1rem; }
+/* Mobile Adjustments */
+@media screen and (max-width: 640px) {
+  :focus-visible {
+    transform: none !important; /* No scaling on mobile touch to avoid jitter */
+    box-shadow: none !important;
+  }
 }
+
 
 
 /* ------------------------------------------------------------------
