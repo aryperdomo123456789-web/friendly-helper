@@ -60,7 +60,7 @@ export const createPaymentPreference = createServerFn({ method: "POST" })
 
     const { data: profile } = await supabaseAdmin
       .from("profiles")
-      .select("username, email")
+      .select("username")
       .eq("id", context.userId)
       .single();
 
@@ -83,7 +83,7 @@ export const createPaymentPreference = createServerFn({ method: "POST" })
           }
         ],
         payer: {
-          email: profile?.email || `${profile?.username}@iptv.local`,
+          email: `${profile?.username}@iptv.local`,
         },
         external_reference: JSON.stringify({ userId: context.userId, planId: plan.id }),
         back_urls: {
