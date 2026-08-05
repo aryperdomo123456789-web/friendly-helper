@@ -95,6 +95,7 @@ function ShellLayout() {
           </span>
         </div>
 
+        <nav className="flex-1 space-y-1 p-3">
           {NAV.map((item) => {
             const isRestricted = !isOwner && (blocked || expired) && item.restricted;
             if (isRestricted) return null;
