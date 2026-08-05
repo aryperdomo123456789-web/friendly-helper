@@ -73,3 +73,30 @@ export interface AccessUser {
   plan?: SubscriptionPlan;
   referred_by_id?: string;
 }
+
+export interface SupportThread {
+  id: string;
+  user_id: string;
+  protocol?: string;
+  last_message?: string;
+  last_message_at: string;
+  unread_count_owner: number;
+  unread_count_user: number;
+  status: 'open' | 'closed';
+  created_at: string;
+  updated_at: string;
+  profile?: {
+    username: string;
+    display_name?: string;
+  };
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  content: string;
+  type: 'info' | 'warning' | 'success' | 'expiration' | 'mass';
+  is_read: boolean;
+  created_at: string;
+}

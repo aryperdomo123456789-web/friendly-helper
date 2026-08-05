@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlayerSession } from "@/lib/player-store";
-import { listSupportThreads, markThreadRead } from "@/lib/chat.functions";
+import { listSupportThreads, markThreadRead, getOrCreateThread } from "@/lib/chat.functions";
 import {
   Card,
   CardHeader,
@@ -32,10 +32,11 @@ export const Route = createFileRoute("/_authenticated/suporte")({
 });
 
 function SuportePage() {
-  const { isOwner } = usePlayerSession();
+  const { isOwner, profile } = usePlayerSession();
   const queryClient = useQueryClient();
   const fetchThreads = useServerFn(listSupportThreads);
   const mutationMarkRead = useServerFn(markThreadRead);
+  const fetchOrCreateThread = useServerFn(getOrCreateThread);
 
   const threads = useQuery({
     queryKey: ["support-threads"],
@@ -44,12 +45,27 @@ function SuportePage() {
     refetchInterval: 10000,
   });
 
+  const userThreadQuery = useQuery({
+    queryKey: ["support-thread-user", profile?.id],
+    queryFn: () => fetchOrCreateThread({ data: { userId: profile!.id } }),
+    enabled: !!profile?.id && !isOwner,
+  });
+
   const [selectedThread, setSelectedThread] = useState<any>(null);
 
-  if (!isOwner) {
+  useEffect(() => {
+    if (!isOwner && userThreadQuery.data) {
+      setSelectedThread(userThreadQuery.data);
+    }
+  }, [userThreadQuery.data, isOwner]);
+
+  if (!profile && !isOwner) {
     return (
-      <div className="rounded-xl border border-border bg-card p-10 text-center">
-        <h1 className="text-xl font-bold">Acesso restrito</h1>
+      <div className="flex h-[70vh] items-center justify-center text-center">
+        <div className="space-y-4">
+          <MessageSquare className="mx-auto h-16 w-16 opacity-10" />
+          <h1 className="text-xl font-bold">Carregando perfil...</h1>
+        </div>
       </div>
     );
   }
@@ -58,8 +74,8 @@ function SuportePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Suporte ao Vivo</h1>
-          <p className="text-muted-foreground">Responda seus clientes em tempo real.</p>
+          <h1 className="text-3xl font-bold tracking-tight">{isOwner ? "Suporte ao Vivo" : "Histórico de Suporte"}</h1>
+          <p className="text-muted-foreground">{isOwner ? "Responda seus clientes em tempo real." : "Consulte suas conversas e tire dúvidas."}</p>
         </div>
         <div className="flex items-center gap-2 bg-online/10 text-online px-3 py-1 rounded-full text-xs font-bold animate-pulse">
           <span className="h-2 w-2 rounded-full bg-online" />
@@ -67,58 +83,61 @@ function SuportePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-[75vh]">
+      <div className={cn("grid gap-6 h-[75vh]", isOwner ? "grid-cols-1 md:grid-cols-12" : "grid-cols-1")}>
         {/* Threads List */}
-        <Card className="md:col-span-4 flex flex-col overflow-hidden bg-sidebar/30 border-sidebar-border">
-          <CardHeader className="py-4 border-b border-sidebar-border">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" /> Conversas
-            </CardTitle>
-          </CardHeader>
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {threads.isLoading ? (
-              <div className="p-4 text-center">Carregando...</div>
-            ) : (threads.data ?? []).length === 0 ? (
-              <div className="p-4 text-center text-muted-foreground text-sm italic">Nenhuma conversa ativa.</div>
-            ) : (
-              threads.data?.map((thread: any) => (
-                <button
-                  key={thread.id}
-                  onClick={() => {
-                    setSelectedThread(thread);
-                    mutationMarkRead({ data: { threadId: thread.id, isOwner: true } });
-                    queryClient.invalidateQueries({ queryKey: ["support-threads-nav"] });
-                  }}
-                  className={cn(
-                    "w-full p-4 text-left hover:bg-primary/10 border-b border-sidebar-border transition-all flex items-center justify-between group",
-                    selectedThread?.id === thread.id && "bg-primary/20 border-l-4 border-l-primary"
-                  )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold truncate text-sm group-hover:text-primary transition-colors">
-                      {thread.profile?.display_name || thread.profile?.username || "Usuário"}
+        {isOwner && (
+          <Card className="md:col-span-4 flex flex-col overflow-hidden bg-sidebar/30 border-sidebar-border">
+            <CardHeader className="py-4 border-b border-sidebar-border">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" /> Conversas
+              </CardTitle>
+            </CardHeader>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {threads.isLoading ? (
+                <div className="p-4 text-center">Carregando...</div>
+              ) : (threads.data ?? []).length === 0 ? (
+                <div className="p-4 text-center text-muted-foreground text-sm italic">Nenhuma conversa ativa.</div>
+              ) : (
+                threads.data?.map((thread: any) => (
+                  <button
+                    key={thread.id}
+                    onClick={() => {
+                      setSelectedThread(thread);
+                      mutationMarkRead({ data: { threadId: thread.id, isOwner: true } });
+                      queryClient.invalidateQueries({ queryKey: ["support-threads-nav"] });
+                    }}
+                    className={cn(
+                      "w-full p-4 text-left hover:bg-primary/10 border-b border-sidebar-border transition-all flex items-center justify-between group",
+                      selectedThread?.id === thread.id && "bg-primary/20 border-l-4 border-l-primary"
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold truncate text-sm group-hover:text-primary transition-colors">
+                        {thread.profile?.display_name || thread.profile?.username || "Usuário"}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground truncate opacity-70">
+                        {thread.last_message || "Iniciou uma conversa"}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-muted-foreground truncate opacity-70">
-                      {thread.last_message || "Iniciou uma conversa"}
-                    </div>
-                  </div>
-                  {thread.unread_count_owner > 0 && (
-                    <span className="ml-2 bg-destructive text-destructive-foreground text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg animate-bounce">
-                      {thread.unread_count_owner}
-                    </span>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
-        </Card>
+                    {thread.unread_count_owner > 0 && (
+                      <span className="ml-2 bg-destructive text-destructive-foreground text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg animate-bounce">
+                        {thread.unread_count_owner}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </Card>
+        )}
 
         {/* Chat Window */}
-        <Card className="md:col-span-8 flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20">
+        <Card className={cn("flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20", isOwner ? "md:col-span-8" : "w-full")}>
           {selectedThread ? (
             <ChatWindow
               thread={selectedThread}
               onClose={() => setSelectedThread(null)}
+              isOwner={isOwner}
             />
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center space-y-4">
@@ -137,7 +156,7 @@ function SuportePage() {
   );
 }
 
-function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
+function ChatWindow({ thread, onClose, isOwner }: { thread: any, onClose: () => void, isOwner: boolean }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -277,16 +296,23 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
       <div className="p-4 border-b border-sidebar-border flex items-center justify-between bg-sidebar/40 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary font-black shadow-inner">
-            {(thread.profile?.display_name || thread.profile?.username || "?")[0].toUpperCase()}
+            {(thread.profile?.display_name || thread.profile?.username || "S")[0].toUpperCase()}
           </div>
           <div>
-            <div className="font-bold text-sm tracking-tight">{thread.profile?.display_name || thread.profile?.username}</div>
+            <div className="font-bold text-sm tracking-tight flex items-center gap-2">
+              {thread.profile?.display_name || thread.profile?.username || "Suporte Central"}
+              {thread.protocol && (
+                <span className="text-[10px] bg-sidebar-accent px-1.5 py-0.5 rounded text-muted-foreground font-mono">
+                  #{thread.protocol}
+                </span>
+              )}
+            </div>
             <div className="text-[10px] text-online font-bold flex items-center gap-1.5 uppercase">
-              <span className="h-2 w-2 rounded-full bg-online animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" /> Online
+              <span className="h-2 w-2 rounded-full bg-online animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" /> Atendimento Online
             </div>
           </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose} className="hover:bg-destructive/10 hover:text-destructive"><X className="h-4 w-4" /></Button>
+        {isOwner && <Button variant="ghost" size="icon" onClick={onClose} className="hover:bg-destructive/10 hover:text-destructive"><X className="h-4 w-4" /></Button>}
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">

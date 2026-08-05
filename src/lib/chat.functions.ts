@@ -36,10 +36,15 @@ export const getOrCreateThread = createServerFn({ method: "POST" })
 
     if (existing) return existing;
 
+    // Generate protocol: SUPPORT-YYYYMMDD-XXXX
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const random = Math.floor(1000 + Math.random() * 9000);
+    const protocol = `SUP-${date}-${random}`;
+
     // Create new
     const { data, error } = await (supabaseAdmin
       .from('support_threads' as any)
-      .insert([{ user_id: userId }])
+      .insert([{ user_id: userId, protocol }])
       .select()
       .single() as any);
 

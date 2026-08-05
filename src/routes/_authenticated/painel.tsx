@@ -55,6 +55,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Table,
@@ -65,8 +66,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { 
-  Plus, 
-  Settings, 
+  Plus,
+  Loader2,
+  Settings,
   Users, 
   Server, 
   Trash2, 
@@ -81,9 +83,11 @@ import {
   Share2,
   X,
   Send,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Bell
 } from "lucide-react";
 import { toast } from "sonner";
+import { sendMassNotification } from "@/lib/notifications.functions";
 import { cn } from "@/lib/utils";
 
 
@@ -113,6 +117,11 @@ function PainelDono() {
   const mutationKick = useServerFn(kickDevices);
   const mutationTest = useServerFn(testServerConnection);
   const fetchConfig = useServerFn(getAppConfig);
+  const mutationMassNotif = useServerFn(sendMassNotification);
+  const [notifTitle, setNotifTitle] = useState("");
+  const [notifContent, setNotifContent] = useState("");
+  const [sendingNotif, setSendingNotif] = useState(false);
+  const [showNotifDialog, setShowNotifDialog] = useState(false);
   const mutationSaveConfig = useServerFn(updateAppConfig);
   const fetchTestLinks = useServerFn(listTestLinks);
   const mutationSaveTestLink = useServerFn(saveTestLink);
@@ -305,9 +314,75 @@ function PainelDono() {
   return (
 
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Painel do Dono</h1>
-        <p className="text-muted-foreground">Gerencie sua estrutura multi-servidor e seus clientes.</p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Painel do Dono</h1>
+          <p className="text-muted-foreground">Gerencie sua estrutura multi-servidor e seus clientes.</p>
+        </div>
+        <Dialog open={showNotifDialog} onOpenChange={setShowNotifDialog}>
+          <DialogTrigger asChild>
+            <Button className="bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 font-bold gap-2">
+              <Bell className="h-4 w-4" /> Enviar Mensagem em Massa
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-sidebar border-sidebar-border">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-bold flex items-center gap-2">
+                <Bell className="text-primary h-5 w-5" /> Notificação Global
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-widest opacity-60">Título da Mensagem</Label>
+                <Input 
+                  placeholder="Ex: Manutenção Programada" 
+                  value={notifTitle}
+                  onChange={e => setNotifTitle(e.target.value)}
+                  className="bg-background/40"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-widest opacity-60">Conteúdo</Label>
+                <textarea 
+                  placeholder="Descreva a mensagem que todos os usuários receberão..."
+                  value={notifContent}
+                  onChange={e => setNotifContent(e.target.value)}
+                  className="w-full min-h-[120px] rounded-xl bg-background/40 border border-border p-3 text-sm focus:ring-primary"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button 
+                variant="ghost" 
+                onClick={() => setShowNotifDialog(false)}
+                className="font-bold"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                disabled={sendingNotif || !notifTitle || !notifContent}
+                onClick={async () => {
+                  setSendingNotif(true);
+                  try {
+                    const res = await mutationMassNotif({ data: { title: notifTitle, content: notifContent } });
+                    toast.success(`Notificação enviada para ${res.count} usuários!`);
+                    setShowNotifDialog(false);
+                    setNotifTitle("");
+                    setNotifContent("");
+                  } catch (err: any) {
+                    toast.error("Erro ao enviar: " + err.message);
+                  } finally {
+                    setSendingNotif(false);
+                  }
+                }}
+                className="font-bold gap-2"
+              >
+                {sendingNotif ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Disparar Notificação
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
