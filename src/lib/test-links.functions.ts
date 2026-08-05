@@ -73,9 +73,9 @@ export const createTestUser = createServerFn({ method: "POST" })
       fingerprint: z.string()
     }).parse(input)
   )
-  .handler(async ({ data, request }) => {
+  .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip");
+    const ip = context.request.headers.get("x-forwarded-for") || context.request.headers.get("x-real-ip");
     
     // Check if device fingerprint was already used
     const { data: existingDevice } = await (supabaseAdmin as any)
