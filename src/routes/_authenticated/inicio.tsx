@@ -158,41 +158,53 @@ function FloatingChat({ userId }: { userId?: string }) {
   useEffect(() => {
     if (!userId || !isOpen) return;
 
+    let channel: any;
+
     const init = async () => {
-      const data = await fetchThread({ data: { userId } });
-      setThread(data);
-      setUnread(0);
       try {
-        await mutationMarkRead({ data: { threadId: data.id, isOwner: false } });
-      } catch (e) {
-        console.error("Erro ao marcar como lido:", e);
+        const data = await fetchThread({ data: { userId } });
+        setThread(data);
+        setUnread(0);
+        
+        await mutationMarkRead({ data: { threadId: data['id'], isOwner: false } });
+
+        const { data: msgs, error: fetchErr } = await (supabase
+          .from('support_messages' as any)
+          .select('*')
+          .eq('thread_id', data['id'])
+          .order('created_at', { ascending: true }) as any);
+        
+        if (fetchErr) throw fetchErr;
+        if (msgs) setMessages(msgs);
+
+        // Subscrição em tempo real para novas mensagens
+        channel = supabase
+          .channel(`thread_user:${data['id']}`)
+          .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'support_messages', 
+            filter: `thread_id=eq.${data['id']}` 
+          }, (payload) => {
+            console.log("Nova mensagem recebida via Realtime:", payload.new);
+            setMessages(prev => {
+              // Evitar duplicatas se o insert local já adicionou
+              if (prev.some(m => m['id'] === payload.new['id'])) return prev;
+              return [...prev, payload.new];
+            });
+          })
+          .subscribe();
+      } catch (err) {
+        console.error("Erro ao inicializar chat:", err);
+        toast.error("Erro ao carregar mensagens");
       }
-
-      const { data: msgs } = await (supabase
-        .from('support_messages' as any)
-        .select('*')
-        .eq('thread_id', data.id)
-        .order('created_at', { ascending: true }) as any);
-      if (msgs) setMessages(msgs);
-
-      // Subscribe
-      const channel = supabase
-        .channel(`thread_user:${data.id}`)
-        .on('postgres_changes', { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'support_messages', 
-          filter: `thread_id=eq.${data.id}` 
-        }, (payload) => {
-          setMessages(prev => [...prev, payload.new]);
-        })
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
-      };
     };
+    
     init();
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [userId, isOpen]);
 
   // Handle unread indicator when closed
@@ -215,38 +227,47 @@ function FloatingChat({ userId }: { userId?: string }) {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !thread) return;
+    const messageToSend = newMessage.trim();
+    if (!messageToSend || !thread) return;
 
     setSending(true);
     try {
-      const { error } = await supabase
+      console.log("Iniciando envio de mensagem...", { threadId: thread['id'], userId });
+      
+      const { data, error } = await supabase
         .from('support_messages')
         .insert([{
-          thread_id: thread.id,
+          thread_id: thread['id'],
           sender_id: userId || null,
-          content: newMessage
-        }]);
+          content: messageToSend
+        }])
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro Supabase ao inserir mensagem:", error);
+        throw error;
+      }
+
+      console.log("Mensagem inserida com sucesso:", data);
 
       const { error: updateError } = await supabase
         .from('support_threads')
         .update({ 
-          last_message: newMessage, 
+          last_message: messageToSend, 
           last_message_at: new Date().toISOString(),
-          unread_count_owner: (thread.unread_count_owner || 0) + 1
+          unread_count_owner: (thread['unread_count_owner'] || 0) + 1
         })
-        .eq('id', thread.id);
+        .eq('id', thread['id']);
 
       if (updateError) {
         console.error("Erro ao atualizar thread:", updateError);
-        // Don't toast here as the message was already sent
       }
       
       setNewMessage("");
       toast.success("Mensagem enviada!");
     } catch (err: any) {
-      toast.error("Erro: " + err.message);
+      console.error("Falha no envio da mensagem:", err);
+      toast.error("Erro: " + (err.message || "Falha na conexão"));
     } finally {
       setSending(false);
     }
