@@ -1,9 +1,4 @@
 import { createFileRoute, Outlet, redirect, Link, useRouter, useLocation } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { listSupportThreads } from "@/lib/chat.functions";
-import { MessageSquare, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { PlayerSessionProvider, usePlayerSession } from "@/lib/player-store";
 import { Button } from "@/components/ui/button";
@@ -26,11 +21,12 @@ import {
   Menu,
   UserCog,
   Users,
+  MessageSquare,
 } from "lucide-react";
-
-
-import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { listSupportThreads } from "@/lib/chat.functions";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -74,8 +70,6 @@ function ShellLayout() {
   });
 
   const totalUnread = (threads ?? []).reduce((acc: number, t: any) => acc + (t.unread_count_owner || 0), 0);
-
-
 
   const signOut = async () => {
     await queryClient.cancelQueries();
@@ -212,10 +206,15 @@ function ShellLayout() {
                 <ShieldCheck className="h-5 w-5" /> Configurações do Sistema
               </span>
             )}
+            {location.pathname === "/suporte" && (
+              <span className="flex items-center gap-2 text-primary font-bold">
+                <MessageSquare className="h-5 w-5" /> Chat de Atendimento
+              </span>
+            )}
           </div>
 
           <div className="ml-auto flex items-center gap-3">
-            {servers.length > 0 && location.pathname !== "/painel" ? (
+            {servers.length > 0 && location.pathname !== "/painel" && location.pathname !== "/suporte" ? (
               <Select value={serverId ?? ""} onValueChange={setServerId}>
                 <SelectTrigger className="w-[190px] bg-sidebar/50 border-border/50">
                   <SelectValue placeholder="Servidor" />
