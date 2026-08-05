@@ -269,6 +269,11 @@ function FloatingChat({ userId }: { userId?: string }) {
       
       setNewMessage("");
       toast.success("Mensagem enviada!");
+      
+      // Forçar atualização do scroll
+      setTimeout(() => {
+        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 100);
     } catch (err: any) {
       console.error("Falha no envio da mensagem:", err);
       toast.error("Erro: " + (err.message || "Falha na conexão"));
