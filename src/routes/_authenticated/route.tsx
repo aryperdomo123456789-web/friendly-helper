@@ -2,6 +2,8 @@ import { createFileRoute, Outlet, redirect, Link, useRouter, useLocation } from 
 import { supabase } from "@/integrations/supabase/client";
 import { PlayerSessionProvider, usePlayerSession } from "@/lib/player-store";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -9,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import {
   Home,
   Film,
@@ -149,7 +152,7 @@ function SupportBubble() {
     }
   }, [messages, isOpen]);
 
-  const handleSend = async (e: React.FormEvent) => {
+  const handleSend = async (e: any) => {
     e.preventDefault();
     if (!newMessage.trim() || !thread) return;
 
