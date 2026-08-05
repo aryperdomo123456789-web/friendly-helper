@@ -195,6 +195,32 @@ function PainelDono() {
     }
   };
 
+  const handleSaveTestLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await mutationSaveTestLink({ data: testLinkModal });
+      toast.success("Link de teste salvo!");
+      setTestLinkModal(null);
+      queryClient.invalidateQueries({ queryKey: ["admin-test-links"] });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar link");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteTestLink = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este link de teste?")) return;
+    try {
+      await mutationDeleteTestLink({ data: { id } });
+      toast.success("Link removido");
+      queryClient.invalidateQueries({ queryKey: ["admin-test-links"] });
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
   const handleDeleteUser = async (id: string) => {
     if (!confirm("Tem certeza que deseja remover este acesso? O usuario sera desconectado.")) return;
     try {
@@ -205,6 +231,7 @@ function PainelDono() {
       toast.error(err.message);
     }
   };
+
 
   if (!isOwner) {
     return (
@@ -373,6 +400,92 @@ function PainelDono() {
             ))}
           </div>
         </TabsContent>
+
+        <TabsContent value="testes" className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Links de Indicação (Teste Grátis)</h2>
+            <Button onClick={() => setTestLinkModal({ 
+              slug: "", 
+              duration_minutes: 240,
+              max_connections: 1,
+              is_active: true
+            })}>
+              <Plus className="mr-2 h-4 w-4" /> Novo Link
+            </Button>
+          </div>
+
+          <Card className="overflow-x-auto">
+            <div className="min-w-[800px]">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Identificador (Slug)</TableHead>
+                    <TableHead>Duração</TableHead>
+                    <TableHead>Conexões</TableHead>
+                    <TableHead>URL Pública</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {testLinks.isLoading ? (
+                    <TableRow><TableCell colSpan={6} className="h-24 text-center">Carregando...</TableCell></TableRow>
+                  ) : (testLinks.data ?? []).length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="h-24 text-center">Nenhum link de teste criado.</TableCell></TableRow>
+                  ) : (
+                    testLinks.data?.map((link: any) => (
+                      <TableRow key={link.id}>
+                        <TableCell className="font-medium">{link.slug}</TableCell>
+                        <TableCell>
+                          {Math.floor(link.duration_minutes / 60)}h {link.duration_minutes % 60}m
+                        </TableCell>
+                        <TableCell>{link.max_connections}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <code className="text-[10px] bg-muted px-1.5 py-0.5 rounded">
+                              /teste/{link.slug}
+                            </code>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-6 w-6"
+                              onClick={() => {
+                                const url = `${window.location.origin}/teste/${link.slug}`;
+                                navigator.clipboard.writeText(url);
+                                toast.success("URL copiada!");
+                              }}
+                            >
+                              <Copy className="h-3.3 w-3.3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <span className={cn(
+                            "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                            link.is_active ? "bg-online/10 text-online" : "bg-destructive/10 text-destructive"
+                          )}>
+                            {link.is_active ? "Ativo" : "Inativo"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="ghost" size="icon" onClick={() => setTestLinkModal(link)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteTestLink(link.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+        </TabsContent>
+
 
         <TabsContent value="configuracao" className="space-y-4">
           <Card>
