@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   getCategories,
@@ -12,9 +12,10 @@ import { getDeviceId } from "@/lib/device";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { VideoPlayer } from "./VideoPlayer";
-import { ChevronLeft, Loader2, PlayCircle, Search, Tv } from "lucide-react";
+import { ChevronLeft, Loader2, PlayCircle, Search, Tv, Info, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
 
 type Kind = "live" | "movie" | "series";
 
@@ -40,7 +41,8 @@ const LABEL: Record<Kind, { title: string; list: string; empty: string; search: 
 };
 
 export function Catalog({ kind }: { kind: Kind }) {
-  const { serverId, activeServer } = usePlayerSession();
+  const { serverId, activeServer, blocked, profile } = usePlayerSession();
+  const queryClient = useQueryClient();
   const fetchCategories = useServerFn(getCategories);
   const fetchStreams = useServerFn(getStreams);
   const fetchPlayback = useServerFn(getPlaybackUrl);
@@ -54,6 +56,8 @@ export function Catalog({ kind }: { kind: Kind }) {
     null,
   );
   const [openSeries, setOpenSeries] = useState<{ id: string; name: string } | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
     setCategoryId(null);
@@ -61,7 +65,10 @@ export function Catalog({ kind }: { kind: Kind }) {
     setCatTerm("");
     setPlaying(null);
     setOpenSeries(null);
-  }, [kind, serverId]);
+    // Limpar cache de streams ao trocar de servidor ou tipo para evitar bootstrap duplicado
+    queryClient.invalidateQueries({ queryKey: ["streams"] });
+  }, [kind, serverId, queryClient]);
+
 
   const categories = useQuery({
     queryKey: ["categories", kind, serverId],
@@ -125,11 +132,29 @@ export function Catalog({ kind }: { kind: Kind }) {
       });
       setPlaying({ url: result.url, name: item.name, icon: item.icon });
       if (typeof window !== "undefined" && window.innerWidth < 1024) {
-        document.getElementById("wp-player-area")?.scrollIntoView({ behavior: "smooth" });
+        // Comportamento mobile: scroll imediato para o player
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        const playerArea = document.getElementById("wp-player-area");
+        if (playerArea) {
+          playerArea.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
       }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Nao foi possivel abrir o conteudo");
+    } catch (error: any) {
+      const msg = error.message || "";
+      if (msg.includes("Limite") || msg.includes("simultanea")) {
+        toast.error(
+          <div className="flex flex-col gap-1">
+            <span className="font-bold">Acesso em uso!</span>
+            <span>{msg}</span>
+            <span className="text-[10px] opacity-80 italic">Sugestao: Faca logout em outros dispositivos ou fale com o suporte para aumentar seu limite.</span>
+          </div>,
+          { duration: 6000 }
+        );
+      } else {
+        toast.error(msg || "Nao foi possivel abrir o conteudo");
+      }
     } finally {
+
       setLoadingId(null);
     }
   };
@@ -143,15 +168,47 @@ export function Catalog({ kind }: { kind: Kind }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 min-w-0 w-full overflow-x-hidden">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-4 min-w-0 w-full overflow-x-hidden pb-10">
+      {blocked && (
+        <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-destructive/50 bg-destructive/10 p-4 mb-2">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-1">
+              <p className="text-sm font-bold text-destructive">Conexão bloqueada</p>
+              <p className="text-xs text-destructive/80 leading-relaxed">
+                {blocked}. Se voce esta tentando conectar em um novo dispositivo, certifique-se de ter encerrado a sessao nos outros.
+              </p>
+              <div className="pt-1">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-7 text-[10px] border-destructive/30 hover:bg-destructive/20 text-destructive"
+                  onClick={() => window.location.href = "/conta"}
+                >
+                  Ver Planos / Suporte
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between px-1">
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-bold sm:text-2xl">{LABEL[kind].title}</h1>
-          <p className="truncate text-xs sm:text-sm text-muted-foreground">
-            Servidor ativo: <span className="text-primary">{activeServer?.name ?? "-"}</span>
+          <h1 className="truncate text-xl font-bold sm:text-2xl flex items-center gap-2">
+            {LABEL[kind].title}
+            {profile && profile.max_connections > 1 && (
+              <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full font-normal">
+                {profile.max_connections} Telas
+              </span>
+            )}
+          </h1>
+          <p className="truncate text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">
+            Servidor: <span className="text-primary font-bold">{activeServer?.name ?? "-"}</span>
           </p>
         </div>
       </div>
+
 
       {/* Layout do legado: categorias | lista | player sempre na tela */}
       <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1.15fr)] min-w-0">
@@ -176,11 +233,19 @@ export function Catalog({ kind }: { kind: Kind }) {
                 <button
                   key={category.category_id}
                   type="button"
-                  onClick={() => setCategoryId(category.category_id)}
+                  onClick={() => {
+                    setCategoryId(category.category_id);
+                    // No mobile, apos selecionar categoria, dar um pequeno scroll para a lista de itens
+                    if (window.innerWidth < 1024) {
+                      const listArea = document.getElementById("wp-items-area");
+                      if (listArea) listArea.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }
+                  }}
                   className={cn(
                     "w-full truncate rounded-lg px-3 py-2 text-left text-sm transition-colors",
                     activeCategory === category.category_id
-                      ? "bg-primary/15 font-semibold text-primary"
+                      ? "bg-primary/20 font-bold text-primary shadow-sm shadow-primary/10"
+
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
@@ -209,9 +274,10 @@ export function Catalog({ kind }: { kind: Kind }) {
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <p className="truncate text-sm font-semibold">{openSeries.name}</p>
+                <p className="truncate text-sm font-bold uppercase tracking-tight">{openSeries.name}</p>
               </div>
-              <div className="wp-scroll max-h-[62vh] space-y-3 overflow-y-auto px-1">
+              <div className="wp-scroll max-h-[62vh] space-y-3 overflow-y-auto px-1 pb-4">
+
                 {seriesInfo.isLoading ? (
                   <div className="flex justify-center p-8">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -268,7 +334,7 @@ export function Catalog({ kind }: { kind: Kind }) {
                   className="h-9 pl-9"
                 />
               </div>
-              <div className="wp-scroll max-h-[300px] overflow-y-auto px-1 lg:max-h-[62vh]">
+              <div id="wp-items-area" className="wp-scroll max-h-[400px] overflow-y-auto px-1 lg:max-h-[62vh] pb-4">
                 {streams.isLoading ? (
                   <div className="flex justify-center p-16">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -333,7 +399,7 @@ export function Catalog({ kind }: { kind: Kind }) {
           )}
         </section>
 
-        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start">
+        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start lg:min-h-[400px]">
           {playing ? (
             <div className="space-y-2">
               <VideoPlayer url={playing.url} poster={playing.icon} title={playing.name} />
