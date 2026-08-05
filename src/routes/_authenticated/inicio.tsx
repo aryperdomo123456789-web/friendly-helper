@@ -239,8 +239,12 @@ function FloatingChat({ userId }: { userId?: string }) {
 
     setSending(true);
     try {
-      console.log("Iniciando envio de mensagem...", { threadId: thread['id'], userId });
-      
+      // Check if it's the first message of the day for auto-reply
+      const today = new Date().toISOString().split('T')[0];
+      const hasMessagesToday = messages.some(m => 
+        m.created_at.split('T')[0] === today
+      );
+
       const { data, error } = await supabase
         .from('support_messages')
         .insert([{
@@ -251,17 +255,36 @@ function FloatingChat({ userId }: { userId?: string }) {
         .select()
         .single();
 
-      if (error) {
-        console.error("Erro Supabase ao inserir mensagem:", error);
-        throw error;
-      }
-
-      console.log("Mensagem inserida com sucesso:", data);
+      if (error) throw error;
       
-      // Adicionar localmente para feedback imediato
       setMessages(prev => [...prev, data]);
 
-      const { error: updateError } = await supabase
+      // Handle Auto-Reply logic
+      if (!hasMessagesToday) {
+        // Fetch config for auto-reply message
+        const { data: configData } = await supabase.from('app_config').select('config').maybeSingle();
+        const config = (configData?.config as any) || {};
+        const autoReplyMsg = config.support_auto_reply || "Olá! Esta é uma resposta automática. Recebemos sua mensagem e em breve um de nossos atendentes irá te ajudar.";
+        
+        // Short delay to feel more natural
+        setTimeout(async () => {
+          const { data: autoReplyData } = await supabase
+            .from('support_messages')
+            .insert([{
+              thread_id: thread['id'],
+              sender_id: null, // System/Admin message
+              content: autoReplyMsg
+            }])
+            .select()
+            .single();
+            
+          if (autoReplyData) {
+            setMessages(prev => [...prev, autoReplyData]);
+          }
+        }, 1000);
+      }
+
+      await supabase
         .from('support_threads')
         .update({ 
           last_message: messageToSend, 
@@ -269,20 +292,10 @@ function FloatingChat({ userId }: { userId?: string }) {
           unread_count_owner: (thread['unread_count_owner'] || 0) + 1
         })
         .eq('id', thread['id']);
-
-      if (updateError) {
-        console.error("Erro ao atualizar thread:", updateError);
-      }
       
       setNewMessage("");
       toast.success("Mensagem enviada!");
-      
-      // Forçar atualização do scroll
-      setTimeout(() => {
-        scrollRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 100);
     } catch (err: any) {
-      console.error("Falha no envio da mensagem:", err);
       toast.error("Erro: " + (err.message || "Falha na conexão"));
     } finally {
       setSending(false);

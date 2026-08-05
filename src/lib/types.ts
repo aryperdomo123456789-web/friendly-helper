@@ -14,6 +14,8 @@ export const AppConfigSchema = z.object({
   logo_small_url: z.string().url().optional().or(z.literal("")),
   favicon_url: z.string().url().optional().or(z.literal("")),
   theme_mode: z.enum(["azul", "dark", "light"]).default("azul"),
+  support_auto_reply: z.string().default("Olá! Esta é uma resposta automática. Recebemos sua mensagem e em breve um de nossos atendentes irá te ajudar."),
+  support_attendant_name: z.string().default("Suporte WebPlayer"),
   theme: z.object({
     bg: z.string().default("#05070b"),
     surface: z.string().default("#0f171e"),

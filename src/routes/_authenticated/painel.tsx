@@ -323,7 +323,13 @@ function PainelDono() {
             <Server className="h-4 w-4" /> Servidores
           </TabsTrigger>
           <TabsTrigger value="configuracao" className="gap-2">
-            <Settings className="h-4 w-4" /> Configuração Central
+            <Settings className="h-4 w-4" /> Central
+          </TabsTrigger>
+          <TabsTrigger value="suporte" className="gap-2">
+            <MessageSquare className="h-4 w-4" /> Suporte 
+            {threads.data?.some((t: any) => t.unread_count_owner > 0) && (
+              <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+            )}
           </TabsTrigger>
           <TabsTrigger value="planos" className="gap-2">
             <Key className="h-4 w-4" /> Planos
@@ -729,6 +735,31 @@ function PainelDono() {
                       URL de Webhook para configurar no Mercado Pago: <code className="bg-muted px-1 rounded">{configQuery.data?.base_url}/api/public/mercadopago-webhook</code>
                     </p>
                   </div>
+                  
+                  <div className="border-t pt-4">
+                    <h3 className="text-sm font-semibold mb-3">Configuração de Suporte</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Nome do Atendente</Label>
+                        <Input 
+                          name="support_attendant_name" 
+                          defaultValue={configQuery.data?.support_attendant_name} 
+                          placeholder="Ex: Suporte Mago" 
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Mensagem de Resposta Automática</Label>
+                        <Input 
+                          name="support_auto_reply" 
+                          defaultValue={configQuery.data?.support_auto_reply} 
+                          placeholder="Olá! Recebemos sua mensagem..." 
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-2">
+                      * A resposta automática é enviada apenas na primeira mensagem do dia de cada cliente.
+                    </p>
+                  </div>
 
                   <div className="flex justify-end pt-4">
                     <Button type="submit" disabled={loading}>
@@ -739,6 +770,73 @@ function PainelDono() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="suporte" className="h-[70vh]">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 h-full">
+            <Card className="md:col-span-4 flex flex-col overflow-hidden bg-sidebar/30 border-sidebar-border">
+              <CardHeader className="py-4 border-b border-sidebar-border">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5" /> Conversas
+                </CardTitle>
+              </CardHeader>
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                {threads.isLoading ? (
+                  <div className="p-4 text-center">Carregando...</div>
+                ) : (threads.data ?? []).length === 0 ? (
+                  <div className="p-4 text-center text-muted-foreground text-sm italic">Nenhuma conversa ativa.</div>
+                ) : (
+                  threads.data?.map((thread: any) => (
+                    <button
+                      key={thread.id}
+                      onClick={async () => {
+                        setSelectedThread(thread);
+                        await mutationMarkRead({ data: { threadId: thread.id, isOwner: true } });
+                        queryClient.invalidateQueries({ queryKey: ["support-threads"] });
+                      }}
+                      className={cn(
+                        "w-full p-4 text-left hover:bg-primary/10 border-b border-sidebar-border transition-all flex items-center justify-between group",
+                        selectedThread?.id === thread.id && "bg-primary/20 border-l-4 border-l-primary"
+                      )}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold truncate text-sm group-hover:text-primary transition-colors">
+                          {thread.profile?.display_name || thread.profile?.username || "Usuário"}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground truncate opacity-70">
+                          {thread.last_message || "Iniciou uma conversa"}
+                        </div>
+                      </div>
+                      {thread.unread_count_owner > 0 && (
+                        <span className="ml-2 bg-destructive text-destructive-foreground text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg">
+                          {thread.unread_count_owner}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </Card>
+
+            <Card className="md:col-span-8 flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20">
+              {selectedThread ? (
+                <ChatWindow 
+                  thread={selectedThread} 
+                  onClose={() => setSelectedThread(null)}
+                />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center space-y-4">
+                  <div className="h-20 w-20 rounded-full bg-sidebar-accent/50 flex items-center justify-center">
+                    <MessageSquare className="h-10 w-10 opacity-20" />
+                  </div>
+                  <div>
+                    <p className="font-bold text-lg">Central de Atendimento</p>
+                    <p className="text-sm opacity-60">Selecione um cliente para iniciar o suporte.</p>
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="planos" className="space-y-4">
@@ -1193,12 +1291,17 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
     if (!session) return;
 
     try {
+      // Get attendant name from config
+      const { data: configData } = await supabase.from('app_config').select('config').maybeSingle();
+      const config = (configData?.config as any) || {};
+      const attendantName = config.support_attendant_name || "Suporte";
+
       const { error } = await (supabase
         .from('support_messages' as any)
         .insert([{
           thread_id: thread.id,
           sender_id: session.user.id,
-          content: newMessage
+          content: `${attendantName}: ${newMessage}`
         }]) as any);
 
       if (error) throw error;

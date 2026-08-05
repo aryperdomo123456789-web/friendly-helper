@@ -192,12 +192,17 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
     if (!session) return;
 
     try {
+      // Get attendant name from config
+      const { data: configData } = await supabase.from('app_config').select('config').maybeSingle();
+      const config = (configData?.config as any) || {};
+      const attendantName = config.support_attendant_name || "Suporte";
+
       const { data: msgData, error } = await supabase
         .from('support_messages')
         .insert([{
           thread_id: thread.id,
           sender_id: session.user.id,
-          content: newMessage
+          content: `${attendantName}: ${newMessage}`
         }])
         .select()
         .single();
