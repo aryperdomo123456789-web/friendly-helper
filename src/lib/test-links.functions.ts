@@ -34,10 +34,23 @@ export const listTestLinks = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await (supabaseAdmin as any)
       .from("test_links")
-      .select("*, profile:profiles!created_by_id(username, display_name)")
+      .select("*")
       .order("created_at", { ascending: false });
     if (error) throw error;
-    return data;
+    const creatorIds = [...new Set((data ?? []).map((l: any) => l.created_by_id).filter(Boolean))];
+    let profileMap = new Map<string, any>();
+    if (creatorIds.length) {
+      const { data: profiles } = await (supabaseAdmin as any)
+        .from("profiles")
+        .select("id, username, display_name")
+        .in("id", creatorIds);
+      profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+    }
+    return (data ?? []).map((link: any) => ({
+      ...link,
+      profile: link.created_by_id ? profileMap.get(link.created_by_id) ?? null : null,
+    }));
+
   });
 
 export const saveTestLink = createServerFn({ method: "POST" })
