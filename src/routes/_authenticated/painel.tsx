@@ -213,10 +213,10 @@ function PainelDono() {
     try {
       if (userModal.id) {
         await mutationUpdateUser({ data: userModal });
-        toast.success("Acesso atualizado");
+        toast.success("Acesso atualizado com sucesso!");
       } else {
         await mutationCreateUser({ data: userModal });
-        toast.success("Novo acesso criado!");
+        toast.success("Novo acesso criado com sucesso!");
       }
       setUserModal(null);
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
@@ -232,7 +232,7 @@ function PainelDono() {
     setLoading(true);
     try {
       await mutationSaveTestLink({ data: testLinkModal });
-      toast.success("Link de teste salvo!");
+      toast.success("Link de teste salvo com sucesso!");
       setTestLinkModal(null);
       queryClient.invalidateQueries({ queryKey: ["admin-test-links"] });
     } catch (err: any) {
@@ -619,7 +619,7 @@ function PainelDono() {
                       };
 
                       await mutationSaveConfig({ data: newConfig });
-                      toast.success("Configurações salvas!");
+                      toast.success("Configurações salvas com sucesso!");
                       configQuery.refetch();
                     } catch (err: any) {
                       toast.error("Erro ao salvar: " + err.message);
