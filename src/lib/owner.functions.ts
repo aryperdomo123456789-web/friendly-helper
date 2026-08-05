@@ -167,16 +167,20 @@ export const listAccessUsers = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: profiles, error } = await supabaseAdmin
       .from("profiles")
-      .select("id, username, display_name, max_connections, expires_at, is_active, created_at, plan_id, plan:subscription_plans(*), referred_by:profiles!referred_by_id(username)")
+      .select("id, username, display_name, max_connections, expires_at, is_active, created_at, plan_id, referred_by_id, plan:subscription_plans(*)")
       .order("created_at", { ascending: false });
     if (error) throw error;
     const [{ data: access }, { data: devices }] = await Promise.all([
       supabaseAdmin.from("user_server_access").select("user_id, server_id"),
       supabaseAdmin.from("device_sessions").select("user_id, device_id, last_seen"),
     ]);
+    const nameById = new Map((profiles ?? []).map((p: any) => [p.id, p.username]));
     const cutoff = Date.now() - 3 * 60 * 1000;
-    return (profiles ?? []).map((profile) => ({
+    return (profiles ?? []).map((profile: any) => ({
       ...profile,
+      referred_by: profile.referred_by_id
+        ? { username: nameById.get(profile.referred_by_id) ?? null }
+        : null,
       server_ids: (access ?? [])
         .filter((row: any) => row.user_id === profile.id)
         .map((row: any) => row.server_id),
@@ -184,6 +188,7 @@ export const listAccessUsers = createServerFn({ method: "GET" })
         (row: any) => row.user_id === profile.id && new Date(row.last_seen).getTime() > cutoff,
       ).length,
     }));
+
   });
 
 export const createAccessUser = createServerFn({ method: "POST" })
