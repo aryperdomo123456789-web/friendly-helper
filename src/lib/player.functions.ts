@@ -87,7 +87,14 @@ export const getMySession = createServerFn({ method: "GET" })
     }
 
     const { data: servers } = await serverQuery;
-    return { profile, isOwner, servers: servers ?? [] };
+    const expired = !isOwner && profile?.expires_at && new Date(profile.expires_at).getTime() < Date.now();
+    
+    return { 
+      profile, 
+      isOwner, 
+      servers: servers ?? [],
+      expired: Boolean(expired)
+    };
   });
 
 export const heartbeat = createServerFn({ method: "POST" })
