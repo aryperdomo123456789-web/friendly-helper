@@ -771,6 +771,72 @@ function PainelDono() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Test Link */}
+      <Dialog open={!!testLinkModal} onOpenChange={(open) => !open && setTestLinkModal(null)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <form onSubmit={handleSaveTestLink}>
+            <DialogHeader>
+              <DialogTitle>{testLinkModal?.id ? "Editar Link" : "Novo Link de Teste"}</DialogTitle>
+              <DialogDescription>
+                Configure o link que será enviado para novos clientes.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="slug">Slug do Link (Ex: promo-4h)</Label>
+                <Input
+                  id="slug"
+                  value={testLinkModal?.slug || ""}
+                  onChange={(e) => setTestLinkModal({ ...testLinkModal, slug: e.target.value })}
+                  placeholder="identificador-unico"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="duration">Duração (minutos)</Label>
+                  <Input
+                    id="duration"
+                    type="number"
+                    value={testLinkModal?.duration_minutes || 240}
+                    onChange={(e) => setTestLinkModal({ ...testLinkModal, duration_minutes: parseInt(e.target.value) })}
+                    min="1"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="conn">Conexões</Label>
+                  <Input
+                    id="conn"
+                    type="number"
+                    value={testLinkModal?.max_connections || 1}
+                    onChange={(e) => setTestLinkModal({ ...testLinkModal, max_connections: parseInt(e.target.value) })}
+                    min="1"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="active-link"
+                  checked={testLinkModal?.is_active ?? true}
+                  onChange={(e) => setTestLinkModal({ ...testLinkModal, is_active: e.target.checked })}
+                  className="rounded border-border bg-sidebar-accent"
+                />
+                <Label htmlFor="active-link">Link Ativo</Label>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={loading}>
+                {loading ? "Salvando..." : "Salvar Link"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+
