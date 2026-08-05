@@ -13,6 +13,8 @@ import {
   kickDevices,
   testServerConnection
 } from "@/lib/owner.functions";
+import { usePlayerSession } from "@/lib/player-store";
+
 import { 
   Card, 
   CardContent, 
@@ -73,6 +75,7 @@ export const Route = createFileRoute("/_authenticated/painel")({
 });
 
 function PainelDono() {
+  const { isOwner } = usePlayerSession();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("acessos");
 
@@ -90,12 +93,15 @@ function PainelDono() {
   const servers = useQuery({
     queryKey: ["admin-servers"],
     queryFn: () => fetchServers(),
+    enabled: isOwner,
   });
 
   const users = useQuery({
     queryKey: ["admin-users"],
     queryFn: () => fetchUsers(),
+    enabled: isOwner,
   });
+
 
   // State for modals
   const [serverModal, setServerModal] = useState<any>(null);
@@ -161,7 +167,20 @@ function PainelDono() {
     }
   };
 
+  if (!isOwner) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-10 text-center">
+        <ShieldAlert className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+        <h1 className="text-xl font-bold">Acesso restrito</h1>
+        <p className="text-sm text-muted-foreground">
+          Somente o dono do sistema pode cadastrar, editar ou excluir servidores.
+        </p>
+      </div>
+    );
+  }
+
   return (
+
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Painel do Dono</h1>
