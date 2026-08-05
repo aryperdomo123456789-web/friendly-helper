@@ -1,5 +1,5 @@
 /**
- * tudo que temos aqui no local mande pro git hub user dono os user criados os planos tudo que aj temos aqui ja amnda pra la para la no aapanel ja ter um fluxo
+ * prepare tudo aqui para ir pro aapanel tudo ir os user que aj tem os srvidores os planso tudo tudo mesmo o banco as tabelas tudo
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
