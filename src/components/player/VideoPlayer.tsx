@@ -34,9 +34,11 @@ export function VideoPlayer({ url, poster, title }: Props) {
           hls = new Hls({
             lowLatencyMode: true,
             enableWorker: true,
-            manifestLoadingMaxRetry: 4,
-            levelLoadingMaxRetry: 4,
-            fragLoadingMaxRetry: 6,
+            manifestLoadingMaxRetry: 10,
+            levelLoadingMaxRetry: 10,
+            fragLoadingMaxRetry: 20,
+            fragLoadingTimeOut: 40000,
+            manifestLoadingTimeOut: 40000,
           });
           hls.loadSource(url);
           hls.attachMedia(video!);
