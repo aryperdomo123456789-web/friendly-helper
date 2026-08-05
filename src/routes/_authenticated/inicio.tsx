@@ -241,7 +241,8 @@ function FloatingChat({ userId }: { userId?: string }) {
           sender_id: userId || null,
           content: messageToSend
         }])
-        .select();
+        .select()
+        .single();
 
       if (error) {
         console.error("Erro Supabase ao inserir mensagem:", error);
@@ -249,6 +250,9 @@ function FloatingChat({ userId }: { userId?: string }) {
       }
 
       console.log("Mensagem inserida com sucesso:", data);
+      
+      // Adicionar localmente para feedback imediato
+      setMessages(prev => [...prev, data]);
 
       const { error: updateError } = await supabase
         .from('support_threads')
