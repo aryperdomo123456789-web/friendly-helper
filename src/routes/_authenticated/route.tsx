@@ -113,6 +113,7 @@ function ShellLayout() {
               </Link>
             );
           })}
+        </nav>
           <Link
             to="/conta"
             onClick={() => setOpen(false)}
