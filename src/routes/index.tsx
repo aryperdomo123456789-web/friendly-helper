@@ -10,15 +10,15 @@
  *    - `/deploy/DOCUMENTACAO-ESPECIALISTA.md`: Guia técnico detalhado para produção.
  * 3. NOVO BACKEND: Codex deve rodar os SQLs no novo projeto Supabase e configurar a SERVICE_ROLE_KEY no .env da VPS.
  * 4. DOCUMENTAÇÃO: Veja `CODEX-RESTAURAR.md` na raiz para o passo-a-passo.
- * 5. TV READY: Suporte total a navegação por controle remoto (D-Pad) e otimização CSS para navegadores WebOS (LG), Tizen (Samsung) e Android TV.
- * 6. MULTI-SERVIDOR: O sistema garante que cada usuário tenha sua própria seleção de servidor independente via localStorage (`wp_server_id`), sem interferir na escolha de outros usuários.
- * 7. CARROSSEL TMDB: Componente de tendências integrado via API TMDB com lógica de redirecionamento inteligente para busca automática de conteúdos nos servidores IPTV ativos.
- * 8. SUPORTE GLOBAL: Bolha de suporte persistente integrada globalmente para usuários finais, garantindo atendimento em tempo real em todas as telas com histórico vinculado ao protocolo.
-
+ * 5. TV READY & UNIVERSAL: Sistema otimizado para TODAS as Smart TVs (WebOS, Tizen, Android TV), Mobile e Desktop.
+ * 6. NAVEGAÇÃO ESPACIAL: Motor de foco D-Pad (Controle Remoto) implementado via `useTVNavigation` em todo o app.
+ * 7. COMPATIBILIDADE: Resets de CSS, prefixos legacy e buffers de vídeo resilientes para hardwares limitados.
+ * 8. MULTI-SERVIDOR & TMDB: Lógica de isolamento individual e carrossel de tendências com busca inteligente.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useTVNavigation } from "@/lib/tv-navigation";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -73,6 +73,7 @@ function ThemeAwareLogo({ className }: { className?: string }) {
 
 
 function LoginPage() {
+  useTVNavigation();
   const navigate = useNavigate();
   const search = Route.useSearch() as any;
   const [hasSession, setHasSession] = useState(false);

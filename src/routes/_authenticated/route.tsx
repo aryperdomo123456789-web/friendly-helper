@@ -1,6 +1,8 @@
 import { createFileRoute, Outlet, redirect, Link, useRouter, useLocation } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { PlayerSessionProvider, usePlayerSession } from "@/lib/player-store";
+import { useTVNavigation } from "@/lib/tv-navigation";
+
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -74,7 +76,9 @@ function Shell() {
 }
 
 function ShellLayout() {
+  useTVNavigation();
   return (
+
     <div className="min-h-screen bg-background text-foreground">
       <ShellLayoutInner />
       <SupportBubble />
