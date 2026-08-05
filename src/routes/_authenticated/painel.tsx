@@ -14,6 +14,7 @@ import {
   kickDevices,
   testServerConnection
 } from "@/lib/owner.functions";
+import { Badge } from "@/components/ui/badge";
 import {
   listTestLinks,
   saveTestLink,

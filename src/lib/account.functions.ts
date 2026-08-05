@@ -25,6 +25,11 @@ export const getMyAccount = createServerFn({ method: "GET" })
         .order("price", { ascending: true }),
     ]);
 
+    const { data: testLinks } = await (supabaseAdmin as any)
+      .from("test_links")
+      .select("slug, description")
+      .eq("is_active", true);
+
     return {
       userId: context.userId,
       username: profile?.username ?? "",
@@ -36,6 +41,7 @@ export const getMyAccount = createServerFn({ method: "GET" })
       isOwner: (roles ?? []).length > 0,
       referral_code: profile?.referral_code ?? null,
       referred_by_id: profile?.referred_by_id ?? null,
+      testLinks: testLinks || []
     };
   });
 
