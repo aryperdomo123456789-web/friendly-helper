@@ -1,37 +1,44 @@
 # Deploy no aaPanel / VPS Ubuntu 22.04
 
-Este projeto foi construído com TanStack Start e está pronto para produção.
+Projeto em TanStack Start, pronto para produção na porta **6873** com PM2 + Nginx.
+
+> **Vai usar backend próprio (Supabase seu ou Postgres na VPS)?**
+> Siga o guia completo: [`deploy/MIGRACAO-BACKEND-PROPRIO.md`](deploy/MIGRACAO-BACKEND-PROPRIO.md).
+> Ele traz os scripts SQL de schema + dados e o seed do dono/usuários.
 
 ## Requisitos
 - Node.js 18 ou superior
-- PM2 (npm install -g pm2)
-- Banco de dados Supabase (Lovable Cloud)
+- PM2 (`npm install -g pm2`)
+- Um projeto Supabase (o atual ou o seu próprio)
 
-## Passos para Instalação
+## Arquivos de deploy
+| Arquivo | Uso |
+|---|---|
+| `deploy/MIGRACAO-BACKEND-PROPRIO.md` | Guia passo a passo da migração completa |
+| `deploy/sql/01-schema.sql` | Schema: tabelas, índices, RLS, grants, funções, triggers, bucket |
+| `deploy/sql/02-dados-base.sql` | Planos, servidores IPTV + DNS, links de indicação, config global |
+| `deploy/seed/users.json` | Usuários a recriar (dono + usuários) e suas senhas |
+| `deploy/seed/seed-users.mjs` | Cria auth users, profiles, papéis, acessos e indicações |
+| `deploy/ecosystem.config.cjs` | PM2 na porta 6873, isolado dos outros apps |
+| `deploy/nginx.conf` | Proxy reverso 127.0.0.1:6873 com timeouts de streaming |
 
-1. **Clone o repositório** na sua VPS ou aaPanel.
-2. **Instale as dependências**:
-   ```bash
-   npm install
-   ```
-3. **Configure as variáveis de ambiente**:
-   Crie um arquivo `.env` na raiz com as chaves do Supabase.
-4. **Build do projeto**:
-   ```bash
-   npm run build
-   ```
-5. **Inicie com PM2**:
-   ```bash
-   pm2 start ecosystem.config.cjs
-   ```
+## Passos rápidos
+```bash
+cd /www/wwwroot/stream.mago-bot.com
+npm install
+npm run build:node
+pm2 start deploy/ecosystem.config.cjs && pm2 save
+```
 
-## Configuração do Mercado Pago
-1. Acesse o Painel do Dono -> Configuração Central.
-2. Insira seu **Access Token** e **Public Key**.
-3. No painel do Mercado Pago, configure a URL de Webhook:
-   `https://seu-dominio.com/api/public/mercadopago-webhook`
-4. Marque os eventos de `payment`.
+## Variáveis de ambiente (`.env` no servidor, nunca no Git)
+`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+`VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, `STREAM_PROXY_SECRET`,
+`NODE_ENV=production`, `HOST=127.0.0.1`, `PORT=6873`.
 
-## Dica Profissional (Nginx no aaPanel)
-Para o streaming funcionar perfeitamente em HTTPS sem erros de mixed content, o proxy reverso já está configurado no código. Apenas certifique-se que o Nginx permite conexões longas (timeouts de 60s+).
+## Mercado Pago
+1. Painel do Dono → Configuração Central → Access Token + Public Key.
+2. Webhook no Mercado Pago: `https://seu-dominio.com/api/public/mercadopago-webhook` (evento `payment`).
+3. Bônus por indicação é creditado automaticamente na aprovação do pagamento.
 
+## Dica (Nginx)
+O proxy de streaming já roda dentro da aplicação (resolve mixed content HTTP/HTTPS). Garanta apenas timeouts de 60s+ no Nginx.
