@@ -375,6 +375,7 @@ function PainelDono() {
                         base_url: values['base_url'] as string,
                         tmdb_api_key: values['tmdb_api_key'] as string || undefined,
                         epg_xmltv_url: values['epg_xmltv_url'] as string || undefined,
+                        theme_mode: values['theme_mode'] as "azul" | "dark" | "light",
                         theme: {
                           ...configQuery.data?.theme,
                           primary: values['primary'] as string,
@@ -425,8 +426,21 @@ function PainelDono() {
                   </div>
 
                   <div className="border-t pt-4">
-                    <h3 className="text-sm font-semibold mb-3">Identidade Visual & Tema</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <h3 className="text-sm font-semibold mb-3">Temas & Identidade Visual</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="space-y-2">
+                        <Label>Tema do Sistema</Label>
+                        <Select name="theme_mode" defaultValue={configQuery.data?.theme_mode || "azul"}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Selecione o tema" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="azul">Azul (Clássico)</SelectItem>
+                            <SelectItem value="dark">Preto e Branco (Dark)</SelectItem>
+                            <SelectItem value="light">Branco e Preto (Light)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <div className="space-y-2">
                         <Label>Cor Primária</Label>
                         <div className="flex gap-2">

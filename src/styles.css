@@ -144,10 +144,12 @@
 }
 
 /* ------------------------------------------------------------------
- * WebPlayer theme (dark navy + azul) — inspirado no layout original.
+ * Themes definition
  * ------------------------------------------------------------------ */
+
+/* Default: AZUL (Original WebPlayer) */
 :root,
-.dark {
+[data-theme="azul"] {
   --radius: 0.875rem;
   --background: oklch(0.09 0.012 262);
   --foreground: oklch(0.95 0.008 250);
@@ -163,8 +165,6 @@
   --muted-foreground: oklch(0.74 0.03 252);
   --accent: oklch(0.3 0.05 262);
   --accent-foreground: oklch(0.96 0.01 250);
-  --destructive: oklch(0.62 0.21 25);
-  --destructive-foreground: oklch(0.98 0 0);
   --border: oklch(0.32 0.045 264 / 60%);
   --input: oklch(0.3 0.04 264 / 70%);
   --ring: oklch(0.68 0.16 249);
@@ -180,6 +180,58 @@
   --sidebar-ring: oklch(0.68 0.16 249);
 }
 
+/* DARK (Preto e Branco) */
+[data-theme="dark"] {
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.12 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.1 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(1 0 0);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.15 0 0);
+  --secondary-foreground: oklch(0.9 0 0);
+  --muted: oklch(0.15 0 0);
+  --muted-foreground: oklch(0.6 0 0);
+  --accent: oklch(0.2 0 0);
+  --accent-foreground: oklch(1 0 0);
+  --border: oklch(0.3 0 0);
+  --input: oklch(0.2 0 0);
+  --ring: oklch(1 0 0);
+  --sidebar: oklch(0.05 0 0);
+  --sidebar-foreground: oklch(0.9 0 0);
+  --sidebar-primary: oklch(1 0 0);
+  --sidebar-primary-foreground: oklch(0 0 0);
+  --sidebar-border: oklch(0.2 0 0);
+}
+
+/* LIGHT (Branco e Preto) */
+[data-theme="light"] {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0 0 0);
+  --card: oklch(0.97 0 0);
+  --card-foreground: oklch(0.1 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0 0 0);
+  --primary: oklch(0 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.9 0 0);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.9 0 0);
+  --muted-foreground: oklch(0.4 0 0);
+  --accent: oklch(0.85 0 0);
+  --accent-foreground: oklch(0 0 0);
+  --border: oklch(0.8 0 0);
+  --input: oklch(0.9 0 0);
+  --ring: oklch(0 0 0);
+  --sidebar: oklch(0.95 0 0);
+  --sidebar-foreground: oklch(0.1 0 0);
+  --sidebar-primary: oklch(0 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.85 0 0);
+}
+
 @theme inline {
   --color-gold: var(--gold);
   --color-online: var(--online);
@@ -187,9 +239,16 @@
 
 body {
   background-image:
+    radial-gradient(1000px 500px at 12% -10%, var(--primary) / 0.16, transparent 60%),
+    radial-gradient(900px 500px at 105% 0%, var(--secondary) / 0.12, transparent 60%);
+  background-attachment: fixed;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+[data-theme="azul"] body {
+  background-image:
     radial-gradient(1000px 500px at 12% -10%, oklch(0.68 0.16 249 / 0.16), transparent 60%),
     radial-gradient(900px 500px at 105% 0%, oklch(0.6 0.14 300 / 0.12), transparent 60%);
-  background-attachment: fixed;
 }
 
 .wp-scroll::-webkit-scrollbar {

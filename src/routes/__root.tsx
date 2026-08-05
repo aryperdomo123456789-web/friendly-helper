@@ -120,10 +120,30 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const fetchConfig = useServerFn(getAppConfig);
+
+  const { data: config } = useQuery({
+    queryKey: ["app-config-public"],
+    queryFn: () => fetchConfig(),
+    staleTime: 5 * 60_000,
+  });
+
+  useEffect(() => {
+    if (config?.theme_mode) {
+      document.documentElement.setAttribute("data-theme", config.theme_mode);
+      if (config.theme_mode === "light") {
+        document.documentElement.classList.remove("dark");
+      } else {
+        document.documentElement.classList.add("dark");
+      }
+    } else {
+      document.documentElement.setAttribute("data-theme", "azul");
+      document.documentElement.classList.add("dark");
+    }
+  }, [config?.theme_mode]);
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
     </QueryClientProvider>
   );
