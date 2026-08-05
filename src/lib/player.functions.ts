@@ -9,13 +9,17 @@ const kindSchema = z.enum(["live", "movie", "series"]);
 async function resolveAccess(userId: string, serverId: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("id, username, max_connections, expires_at, is_active")
-    .eq("id", userId)
-    .maybeSingle();
-  const isOwner = !profile;
-  if (profile) {
+  const [{ data: profile }, { data: roles }] = await Promise.all([
+    supabaseAdmin
+      .from("profiles")
+      .select("id, username, max_connections, expires_at, is_active")
+      .eq("id", userId)
+      .maybeSingle(),
+    supabaseAdmin.from("user_roles").select("role").eq("user_id", userId),
+  ]);
+  const isOwner =
+    !profile || !!roles?.some((r) => r.role === "owner" || r.role === "admin");
+  if (profile && !isOwner) {
     if (!profile.is_active) throw new Error("Acesso desativado. Fale com o suporte.");
     if (profile.expires_at && new Date(profile.expires_at).getTime() < Date.now()) {
       throw new Error("Acesso expirado. Renove com o suporte.");
@@ -27,6 +31,7 @@ async function resolveAccess(userId: string, serverId: string) {
       .eq("server_id", serverId);
     if (!count) throw new Error("Servidor nao liberado para este acesso");
   }
+
 
   const { data: server } = await supabaseAdmin
     .from("iptv_servers")
