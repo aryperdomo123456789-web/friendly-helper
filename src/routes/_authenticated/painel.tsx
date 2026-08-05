@@ -369,20 +369,21 @@ function PainelDono() {
                       const values = Object.fromEntries(data.entries());
                       const newConfig = {
                         ...configQuery.data,
-                        name: values.name,
-                        short_name: values.short_name,
-                        domain: values.domain,
-                        base_url: values.base_url,
+                        name: values['name'] as string,
+                        short_name: values['short_name'] as string,
+                        domain: values['domain'] as string,
+                        base_url: values['base_url'] as string,
                         theme: {
                           ...configQuery.data?.theme,
-                          primary: values.primary,
-                          bg: values.bg,
+                          primary: values['primary'] as string,
+                          bg: values['bg'] as string,
                         },
                         copy: {
                           ...configQuery.data?.copy,
-                          home_title: values.home_title,
+                          home_title: values['home_title'] as string,
                         }
                       };
+
                       await mutationSaveConfig({ data: newConfig });
                       toast.success("Configurações salvas!");
                       configQuery.refetch();
