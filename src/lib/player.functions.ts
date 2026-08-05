@@ -300,7 +300,11 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
     }
 
     const { buildStreamUrl } = await import("./xtream.server");
-    return {
-      url: buildStreamUrl(credential, data.kind, data.stream_id, data.ext ?? undefined),
-    };
+    const { signStreamUrl } = await import("./stream-proxy.server");
+    const direct = buildStreamUrl(credential, data.kind, data.stream_id, data.ext ?? undefined);
+    // Proxied through our own origin: the panels only serve plain HTTP and the
+    // browser refuses mixed content on an HTTPS page.
+    const proxied = await signStreamUrl(direct);
+    const isHls = direct.endsWith(".m3u8");
+    return { url: isHls ? `${proxied}&hls=1` : proxied };
   });

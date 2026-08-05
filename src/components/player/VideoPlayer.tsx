@@ -21,7 +21,7 @@ export function VideoPlayer({ url, poster, title }: Props) {
     setError(null);
     setLoading(true);
 
-    const isHls = url.includes(".m3u8");
+    const isHls = url.includes(".m3u8") || url.includes("hls=1");
     const nativeHls = video.canPlayType("application/vnd.apple.mpegurl") !== "";
 
     async function start() {
@@ -30,13 +30,39 @@ export function VideoPlayer({ url, poster, title }: Props) {
         const Hls = mod.default;
         if (destroyed) return;
         if (Hls.isSupported()) {
-          hls = new Hls({ lowLatencyMode: true, enableWorker: true });
+          let recoveries = 0;
+          hls = new Hls({
+            lowLatencyMode: true,
+            enableWorker: true,
+            manifestLoadingMaxRetry: 4,
+            levelLoadingMaxRetry: 4,
+            fragLoadingMaxRetry: 6,
+          });
           hls.loadSource(url);
           hls.attachMedia(video!);
-          hls.on(Hls.Events.ERROR, (_event, data) => {
-            if (data.fatal) setError("Nao foi possivel iniciar o canal. Tente outro DNS ou canal.");
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            void video!.play().catch(() => undefined);
           });
-          void video!.play().catch(() => undefined);
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            console.error("[player] hls", data.type, data.details, data.fatal);
+            if (!data.fatal) return;
+            if (recoveries < 3 && data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+              recoveries += 1;
+              hls?.recoverMediaError();
+              return;
+            }
+            if (recoveries < 3 && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+              recoveries += 1;
+              hls?.startLoad();
+              return;
+            }
+            const code = (data.response as { code?: number } | undefined)?.code;
+            setError(
+              code === 404 || code === 502
+                ? "Canal indisponivel no servidor agora (fora do ar ou limite de conexoes em uso)."
+                : "Nao foi possivel iniciar o canal. Tente outro canal ou servidor.",
+            );
+          });
           return;
         }
       }
