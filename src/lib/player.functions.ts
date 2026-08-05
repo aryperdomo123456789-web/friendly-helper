@@ -333,9 +333,18 @@ export const getChannelEPG = createServerFn({ method: "POST" })
 
     if (!result?.epg_listings || !Array.isArray(result.epg_listings)) return [];
 
+    const decode = (str: string) => {
+      try {
+        // Xtream EPG titles/descriptions are usually base64
+        return decodeURIComponent(escape(atob(str)));
+      } catch (e) {
+        return str; // Fallback if not base64
+      }
+    };
+
     return result.epg_listings.map((item) => ({
-      title: atob(item.title || ""),
-      description: atob(item.description || ""),
+      title: decode(item.title || ""),
+      description: decode(item.description || ""),
       start: item.start,
       end: item.end,
       start_timestamp: item.start_timestamp,
