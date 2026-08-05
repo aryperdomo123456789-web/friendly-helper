@@ -139,15 +139,29 @@ CREATE TABLE IF NOT EXISTS public.test_device_tracking (
 -- Suporte / chat
 CREATE TABLE IF NOT EXISTS public.support_threads (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  protocol text UNIQUE,
   last_message text,
   last_message_at timestamptz NOT NULL DEFAULT now(),
   unread_count_owner integer NOT NULL DEFAULT 0,
   unread_count_user integer NOT NULL DEFAULT 0,
   status text NOT NULL DEFAULT 'open',
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id) -- Mantendo a unicidade se desejar apenas uma thread por user, ou remova para multi-thread
 );
+
+-- Notificações
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title text NOT NULL,
+  content text NOT NULL,
+  type text NOT NULL DEFAULT 'info', -- 'info', 'warning', 'success', 'expiration', 'mass'
+  is_read boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS notifications_user_id_idx ON public.notifications (user_id);
 
 CREATE TABLE IF NOT EXISTS public.support_messages (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -228,6 +242,9 @@ GRANT ALL ON public.support_threads TO service_role;
 GRANT SELECT, INSERT ON public.support_messages TO authenticated;
 GRANT ALL ON public.support_messages TO service_role;
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.notifications TO authenticated;
+GRANT ALL ON public.notifications TO service_role;
+
 -- =====================================================================
 -- RLS
 -- =====================================================================
@@ -243,6 +260,7 @@ ALTER TABLE public.test_links             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.test_device_tracking   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.support_threads        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.support_messages       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications          ENABLE ROW LEVEL SECURITY;
 
 -- app_config
 DROP POLICY IF EXISTS "Allow anyone to read app_config" ON public.app_config;
@@ -326,6 +344,17 @@ CREATE POLICY "Participants can send messages" ON public.support_messages FOR IN
     WHERE t.id = support_messages.thread_id
       AND (t.user_id = auth.uid() OR public.has_role(auth.uid(), 'owner') OR public.has_role(auth.uid(), 'admin'))
   ));
+
+-- notifications
+DROP POLICY IF EXISTS "Users can see their own notifications" ON public.notifications;
+CREATE POLICY "Users can see their own notifications" ON public.notifications FOR SELECT TO authenticated
+  USING (auth.uid() = user_id OR public.has_role(auth.uid(), 'owner') OR public.has_role(auth.uid(), 'admin'));
+DROP POLICY IF EXISTS "Users can update their own notifications" ON public.notifications;
+CREATE POLICY "Users can update their own notifications" ON public.notifications FOR UPDATE TO authenticated
+  USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "System can insert notifications" ON public.notifications;
+CREATE POLICY "System can insert notifications" ON public.notifications FOR INSERT TO authenticated
+  WITH CHECK (public.has_role(auth.uid(), 'owner') OR public.has_role(auth.uid(), 'admin') OR auth.uid() = user_id);
 
 -- =====================================================================
 -- STORAGE (anexos do chat de suporte)
