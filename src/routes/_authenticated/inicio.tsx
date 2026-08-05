@@ -166,12 +166,12 @@ function FloatingChat({ userId }: { userId?: string }) {
         setThread(data);
         setUnread(0);
         
-        await mutationMarkRead({ data: { threadId: data.id, isOwner: false } });
+        await mutationMarkRead({ data: { threadId: data['id'], isOwner: false } });
 
         const { data: msgs, error: fetchErr } = await (supabase
           .from('support_messages' as any)
           .select('*')
-          .eq('thread_id', data.id)
+          .eq('thread_id', data['id'])
           .order('created_at', { ascending: true }) as any);
         
         if (fetchErr) throw fetchErr;
@@ -179,12 +179,12 @@ function FloatingChat({ userId }: { userId?: string }) {
 
         // Subscrição em tempo real para novas mensagens
         channel = supabase
-          .channel(`thread_user:${data.id}`)
+          .channel(`thread_user:${data['id']}`)
           .on('postgres_changes', { 
             event: 'INSERT', 
             schema: 'public', 
             table: 'support_messages', 
-            filter: `thread_id=eq.${data.id}` 
+            filter: `thread_id=eq.${data['id']}` 
           }, (payload) => {
             console.log("Nova mensagem recebida via Realtime:", payload.new);
             setMessages(prev => {
