@@ -1,7 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { usePlayerSession } from "@/lib/player-store";
-import { Card, CardContent } from "@/components/ui/card";
-import { Film, MonitorPlay, Server, Tv } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Film, MonitorPlay, Server, Tv, Zap, CreditCard, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { useServerFn } from "@tanstack/react-start";
+import { createPaymentPreference, getMercadoPagoConfig } from "@/lib/payments.functions";
+import { getPlans } from "@/lib/plans.functions";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
 
 export const Route = createFileRoute("/_authenticated/inicio")({
   head: () => ({
@@ -24,6 +31,42 @@ const CARDS = [
 
 function Inicio() {
   const { profile, activeServer, isOwner, servers } = usePlayerSession();
+  const search = Route.useSearch() as any;
+  const navigate = useNavigate();
+  const createPayment = useServerFn(createPaymentPreference);
+
+  useEffect(() => {
+    if (search.payment === 'success') {
+      toast.success("Pagamento aprovado! Seu acesso foi renovado.");
+      navigate({ to: "/inicio", search: {}, replace: true });
+    } else if (search.payment === 'failure') {
+      toast.error("O pagamento falhou ou foi cancelado.");
+      navigate({ to: "/inicio", search: {}, replace: true });
+    }
+  }, [search.payment, navigate]);
+
+  const fetchPlans = useServerFn(getPlans);
+  const { data: plans } = useQuery({
+    queryKey: ["available-plans"],
+    queryFn: () => fetchPlans(),
+  });
+
+  const [paymentLoading, setPaymentLoading] = useState(false);
+
+  const handlePay = async (planId: string) => {
+    setPaymentLoading(true);
+    try {
+      const res = await createPayment({ data: { planId } });
+      window.location.href = res.init_point;
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao iniciar pagamento");
+    } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  const isExpired = profile?.expires_at && new Date(profile.expires_at).getTime() < Date.now();
+
 
   return (
     <div className="space-y-6 min-w-0 w-full overflow-x-hidden">
@@ -39,6 +82,40 @@ function Inicio() {
           {profile ? ` · limite de ${profile.max_connections} conexao(oes)` : ""}
         </p>
       </div>
+
+      {isExpired && !isOwner && (
+        <Card className="border-destructive/50 bg-destructive/10 animate-pulse">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-destructive flex items-center gap-2">
+              <Zap className="h-5 w-5" /> ACESSO EXPIRADO
+            </CardTitle>
+            <CardDescription className="text-destructive/80 font-medium">
+              Sua assinatura venceu. Escolha um plano abaixo para continuar assistindo.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {plans?.filter(p => p.price > 0).map((plan) => (
+                <Card key={plan.id} className="bg-card/50 border-destructive/20">
+                  <CardHeader className="p-4">
+                    <CardTitle className="text-base">{plan.name}</CardTitle>
+                    <div className="text-xl font-black text-primary">R$ {Number(plan.price).toFixed(2)}</div>
+                  </CardHeader>
+                  <CardContent className="p-4 pt-0">
+                    <Button 
+                      className="w-full h-10 font-bold" 
+                      onClick={() => handlePay(plan.id)}
+                      disabled={paymentLoading}
+                    >
+                      {paymentLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CreditCard className="mr-2 h-4 w-4" /> RENOVAR AGORA</>}
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {CARDS.map((card) => (

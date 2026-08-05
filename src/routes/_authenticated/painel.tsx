@@ -569,6 +569,9 @@ function PainelDono() {
                         tmdb_api_key: values['tmdb_api_key'] as string || undefined,
                         epg_xmltv_url: values['epg_xmltv_url'] as string || undefined,
                         theme_mode: values['theme_mode'] as "azul" | "dark" | "light",
+                        mp_access_token: values['mp_access_token'] as string,
+                        mp_public_key: values['mp_public_key'] as string,
+                        mp_enabled: values['mp_enabled'] === 'on',
                         theme: {
                           ...configQuery.data?.theme,
                           primary: values['primary'] as string,
@@ -653,6 +656,33 @@ function PainelDono() {
                         <Input name="home_title" defaultValue={configQuery.data?.copy?.home_title} />
                       </div>
                     </div>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <h3 className="text-sm font-semibold mb-3">Configuração Mercado Pago</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Access Token (MP)</Label>
+                        <Input name="mp_access_token" type="password" defaultValue={configQuery.data?.mp_access_token} placeholder="APP_USR-..." />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Public Key (MP)</Label>
+                        <Input name="mp_public_key" defaultValue={configQuery.data?.mp_public_key} placeholder="APP_USR-..." />
+                      </div>
+                      <div className="flex items-center gap-2 pt-4">
+                        <input
+                          type="checkbox"
+                          name="mp_enabled"
+                          defaultChecked={configQuery.data?.mp_enabled}
+                          id="mp-enabled"
+                          className="rounded border-border bg-sidebar-accent"
+                        />
+                        <Label htmlFor="mp-enabled">Habilitar Pagamentos Automáticos</Label>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-2">
+                      URL de Webhook para configurar no Mercado Pago: <code className="bg-muted px-1 rounded">{configQuery.data?.base_url}/api/public/mercadopago-webhook</code>
+                    </p>
                   </div>
 
                   <div className="flex justify-end pt-4">
