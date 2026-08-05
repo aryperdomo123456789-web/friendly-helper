@@ -25,11 +25,14 @@ import {
   Bell,
   History,
   Clock,
+  X,
+  Send,
 } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { listSupportThreads, getOrCreateThread } from "@/lib/chat.functions";
+import { listSupportThreads, getOrCreateThread, markThreadRead } from "@/lib/chat.functions";
+
 import { getNotifications, markNotificationRead } from "@/lib/notifications.functions";
 import { cn } from "@/lib/utils";
 import {
@@ -107,6 +110,190 @@ function ShellLayout() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <ShellLayoutInner />
+      <SupportBubble />
+    </div>
+  );
+}
+
+function SupportBubble() {
+  const { isOwner, profile } = usePlayerSession();
+  const [isOpen, setIsOpen] = useState(false);
+  const [thread, setThread] = useState<any>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const fetchOrCreateThread = useServerFn(getOrCreateThread);
+  const queryClient = useQueryClient();
+
+  // Se for dono, nao mostra a bolha (ja tem aba suporte)
+  if (isOwner || !profile) return null;
+
+  const toggleChat = async () => {
+    if (!isOpen && !thread) {
+      try {
+        const data = await fetchOrCreateThread({ data: { userId: profile.id } });
+        setThread(data);
+      } catch (err) {
+        console.error("Erro ao abrir suporte:", err);
+      }
+    }
+    setIsOpen(!isOpen);
+  };
+
+  useEffect(() => {
+    if (!thread?.id || !isOpen) return;
+
+    let isMounted = true;
+    const fetchMessages = async () => {
+      const { data } = await (supabase
+        .from('support_messages' as any)
+        .select('*')
+        .eq('thread_id', thread.id)
+        .order('created_at', { ascending: true }) as any);
+      if (data && isMounted) setMessages(data);
+    };
+    fetchMessages();
+
+    const channel = supabase
+      .channel(`chat_bubble:${thread.id}`)
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'support_messages', 
+        filter: `thread_id=eq.${thread.id}` 
+      }, (payload) => {
+        if (isMounted) {
+          setMessages(prev => {
+            if (prev.some(m => m['id'] === payload.new['id'])) return prev;
+            return [...prev, payload.new];
+          });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [thread?.id, isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      scrollRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages, isOpen]);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !thread) return;
+
+    setSending(true);
+    try {
+      const { data: msgData, error } = await supabase
+        .from('support_messages')
+        .insert([{
+          thread_id: thread.id,
+          sender_id: profile.id,
+          content: newMessage
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await supabase
+        .from('support_threads')
+        .update({ 
+          last_message: newMessage, 
+          last_message_at: new Date().toISOString(),
+          unread_count_owner: (thread.unread_count_owner || 0) + 1
+        })
+        .eq('id', thread.id);
+      
+      setNewMessage("");
+      if (msgData) setMessages(prev => [...prev, msgData]);
+    } catch (err: any) {
+      toast.error("Erro ao enviar: " + err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed bottom-6 right-6 z-50">
+      {isOpen ? (
+        <Card className="mb-4 flex h-[450px] w-[320px] flex-col overflow-hidden border-primary/20 bg-sidebar/95 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center justify-between border-b border-sidebar-border bg-primary/10 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground shadow-lg">
+                SUP
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest">Suporte Online</p>
+                <p className="text-[9px] font-bold text-online animate-pulse">Atendente pronto</p>
+              </div>
+            </div>
+            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full hover:bg-destructive/10 hover:text-destructive" onClick={() => setIsOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+            {messages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center text-center space-y-2 opacity-40">
+                <MessageSquare className="h-10 w-10" />
+                <p className="text-[10px] font-bold uppercase tracking-widest">Inicie uma conversa</p>
+              </div>
+            ) : (
+              messages.map((msg) => {
+                const isMe = msg.sender_id === profile.id;
+                return (
+                  <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
+                    <div className={cn(
+                      "max-w-[85%] rounded-2xl px-3 py-2 text-[12px] shadow-sm",
+                      isMe 
+                        ? "bg-primary text-primary-foreground rounded-tr-none" 
+                        : "bg-sidebar-accent border border-sidebar-border rounded-tl-none"
+                    )}>
+                      {msg.content}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <div ref={scrollRef} />
+          </div>
+
+          <form onSubmit={handleSend} className="border-t border-sidebar-border p-3 bg-sidebar/50">
+            <div className="flex gap-2">
+              <Input 
+                placeholder="Dúvida?" 
+                value={newMessage}
+                onChange={e => setNewMessage(e.target.value)}
+                className="h-9 text-xs bg-sidebar-accent/50"
+              />
+              <Button type="submit" size="icon" className="h-9 w-9 shrink-0" disabled={sending || !newMessage.trim()}>
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </form>
+        </Card>
+      ) : null}
+
+      <Button
+        onClick={toggleChat}
+        className="h-14 w-14 rounded-full shadow-2xl shadow-primary/40 hover:scale-105 transition-all"
+        aria-label="Suporte"
+      >
+        <MessageSquare className="h-6 w-6" />
+      </Button>
+    </div>
+  );
+}
+
+function ShellLayoutInner() {
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-sidebar-border bg-sidebar transition-transform lg:translate-x-0",
