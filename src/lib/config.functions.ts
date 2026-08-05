@@ -1,6 +1,5 @@
 
 import { createServerFn } from "@tanstack/react-start";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { AppConfigSchema } from "./types";
 import { z } from "zod";
 
@@ -10,6 +9,7 @@ import { z } from "zod";
  */
 export const getAppConfig = createServerFn({ method: "GET" })
   .handler(async () => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     // We use a query that bypasses the generated types since they might not be in sync yet
     const { data, error } = await (supabaseAdmin
       .from('app_config' as any)
@@ -42,6 +42,7 @@ export const getAppConfig = createServerFn({ method: "GET" })
 export const updateAppConfig = createServerFn({ method: "POST" })
   .validator((data: any) => AppConfigSchema.parse(data))
   .handler(async ({ data: newConfig }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: existing } = await (supabaseAdmin.from('app_config' as any).select('id').limit(1).maybeSingle() as any);
     
     if (existing) {
