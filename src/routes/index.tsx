@@ -1,5 +1,5 @@
 /**
- * agora logue com um user criado pelo link de indicação faça uma contratação de plano depois crie um novo user usando o link de indicaçção do user criado pelo link e ai sim tera testado completo
+ * preciso que voce faça teste profundos e praticos em todos os fluxos de reprodução canais filmes e series com conteudos variados e nos 4 servidores navegue defato com um user e zapeie pelos conteudos e garanat fluides teste os 4 servidores
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
