@@ -374,6 +374,7 @@ function PainelDono() {
                         domain: values['domain'] as string,
                         base_url: values['base_url'] as string,
                         tmdb_api_key: values['tmdb_api_key'] as string || undefined,
+                        epg_xmltv_url: values['epg_xmltv_url'] as string || undefined,
                         theme: {
                           ...configQuery.data?.theme,
                           primary: values['primary'] as string,
@@ -416,6 +417,10 @@ function PainelDono() {
                     <div className="space-y-2">
                       <Label>TMDB API Key (v3 auth)</Label>
                       <Input name="tmdb_api_key" placeholder="Insira sua chave TMDB para posters/sinopses extras" defaultValue={configQuery.data?.tmdb_api_key} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>XMLTV EPG URL (ddns.net/epg.xml)</Label>
+                      <Input name="epg_xmltv_url" placeholder="URL para guia de programação externo" defaultValue={configQuery.data?.epg_xmltv_url} />
                     </div>
                   </div>
 
