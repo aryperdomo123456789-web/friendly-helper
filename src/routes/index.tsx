@@ -1,5 +1,8 @@
 /**
  * Sistema Inteligente de TMDB e EPG integrado para match de conteúdos variados.
+ *
+ * aguarde o propt
+ * vou te enviar outro propt para voce executar olhando o projeto em geral e sempre tenha extremo cuidado com os playr preciso que nos sitema os canasi filmes e series que osuser abrir tenha velocidade fluides e leveza e fique aberto por horas e horas sem interrupções
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
