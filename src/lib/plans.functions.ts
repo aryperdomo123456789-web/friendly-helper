@@ -13,7 +13,7 @@ export const getPlans = createServerFn({ method: "GET" })
       .order("price", { ascending: true });
 
     if (error) throw error;
-    return data as SubscriptionPlan[];
+    return (data as any) as SubscriptionPlan[];
   });
 
 export const savePlan = createServerFn({ method: "POST" })

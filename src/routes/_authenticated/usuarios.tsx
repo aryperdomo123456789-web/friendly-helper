@@ -186,7 +186,7 @@ function UsuariosPage() {
               is_active: true,
               plan_id: testPlan?.id || null,
               expires_at: testPlan 
-                ? new Date(Date.now() + testPlan.duration_days * 24 * 60 * 60 * 1000).toISOString()
+                ? new Date(Date.now() + testPlan.duration_value * (testPlan.duration_unit === 'hours' ? 60 : 24 * 60) * 60 * 1000).toISOString()
                 : null
             });
           }}
@@ -335,7 +335,8 @@ function UsuariosPage() {
                     if (selectedPlan) {
                       updates.max_connections = selectedPlan.max_connections;
                       const expiry = new Date();
-                      expiry.setDate(expiry.getDate() + selectedPlan.duration_days);
+                      const msToAdd = selectedPlan.duration_value * (selectedPlan.duration_unit === 'hours' ? 60 : 24 * 60) * 60 * 1000;
+                      expiry.setTime(expiry.getTime() + msToAdd);
                       updates.expires_at = expiry.toISOString();
                     }
                     

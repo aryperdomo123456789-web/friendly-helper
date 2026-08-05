@@ -904,7 +904,7 @@ function PainelDono() {
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm text-muted-foreground">
                     <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" /> {plan.duration_days} dias de acesso
+                      <Calendar className="h-4 w-4" /> {plan.duration_value} {plan.duration_unit === 'hours' ? 'horas' : 'dias'} de acesso
                     </div>
                     <div className="flex items-center gap-2">
                       <Wifi className="h-4 w-4" /> {plan.max_connections} conexão(ões)
