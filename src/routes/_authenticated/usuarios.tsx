@@ -201,6 +201,7 @@ function UsuariosPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Usuario</TableHead>
+              <TableHead>Indicação</TableHead>
               <TableHead>Servidores</TableHead>
               <TableHead className="text-center">Conexoes</TableHead>
               <TableHead>Vencimento</TableHead>
@@ -211,13 +212,13 @@ function UsuariosPage() {
           <TableBody>
             {users.isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
-                  Carregando...
+                <TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
+                  Carregando usuários...
                 </TableCell>
               </TableRow>
             ) : (users.data ?? []).length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center">
+                <TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
                   Nenhum usuario cadastrado.
                 </TableCell>
               </TableRow>
@@ -227,6 +228,15 @@ function UsuariosPage() {
                   <TableCell>
                     <div className="font-medium">{user.display_name || user.username}</div>
                     <div className="text-xs text-muted-foreground">@{user.username}</div>
+                  </TableCell>
+                  <TableCell>
+                    {user.referred_by ? (
+                      <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                        @{user.referred_by.username}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-tighter">Direto</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs">{user.server_ids.length} sv(s)</TableCell>
                   <TableCell className="text-center">

@@ -379,9 +379,9 @@ function PainelDono() {
               </TableHeader>
               <TableBody>
                 {users.isLoading ? (
-                  <TableRow><TableCell colSpan={6} className="h-24 text-center">Carregando...</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground uppercase tracking-widest">Carregando...</TableCell></TableRow>
                 ) : (users.data ?? []).length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="h-24 text-center">Nenhum usuario cadastrado.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground uppercase tracking-widest">Nenhum usuario cadastrado.</TableCell></TableRow>
                 ) : (
                   users.data?.map((user: any) => (
                     <TableRow key={user.id}>
