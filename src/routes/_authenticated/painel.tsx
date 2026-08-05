@@ -323,7 +323,13 @@ function PainelDono() {
             <Server className="h-4 w-4" /> Servidores
           </TabsTrigger>
           <TabsTrigger value="configuracao" className="gap-2">
-            <Settings className="h-4 w-4" /> Configuração Central
+            <Settings className="h-4 w-4" /> Central
+          </TabsTrigger>
+          <TabsTrigger value="suporte" className="gap-2">
+            <MessageSquare className="h-4 w-4" /> Suporte 
+            {threads.data?.some((t: any) => t.unread_count_owner > 0) && (
+              <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+            )}
           </TabsTrigger>
           <TabsTrigger value="planos" className="gap-2">
             <Key className="h-4 w-4" /> Planos
