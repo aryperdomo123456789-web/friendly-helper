@@ -857,6 +857,25 @@ function PainelDono() {
                   />
                 </div>
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="bulk_action">Ação em Massa para Usuários</Label>
+                <Select 
+                  value={serverModal?.bulk_action || "none"} 
+                  onValueChange={(val) => setServerModal({...serverModal, bulk_action: val})}
+                >
+                  <SelectTrigger id="bulk_action">
+                    <SelectValue placeholder="Escolha uma ação" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhuma (Apenas salvar servidor)</SelectItem>
+                    <SelectItem value="add_to_all">Adicionar este servidor para TODOS os usuários</SelectItem>
+                    <SelectItem value="remove_from_all">Remover este servidor de TODOS os usuários</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  * A ação será executada ao clicar em Salvar.
+                </p>
+              </div>
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setServerModal(null)}>Cancelar</Button>

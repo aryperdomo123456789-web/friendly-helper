@@ -20,6 +20,7 @@ const serverSchema = z.object({
   is_active: z.boolean().default(true),
   sort_order: z.number().int().min(0).max(999).default(0),
   credentials: z.array(credentialSchema).min(1).max(6),
+  bulk_action: z.enum(["none", "add_to_all", "remove_from_all"]).optional().default("none"),
 });
 
 const accessUserSchema = z.object({
@@ -118,6 +119,22 @@ export const saveServer = createServerFn({ method: "POST" })
       })),
     );
     if (credError) throw credError;
+
+    // Ações em massa para usuários
+    if (data.bulk_action === "add_to_all") {
+      const { data: allUsers } = await supabaseAdmin.from("profiles").select("id");
+      if (allUsers && allUsers.length > 0) {
+        // Obter acessos atuais para evitar duplicatas (chave única user_id, server_id)
+        const userServerAccess = allUsers.map((u: any) => ({
+          user_id: u.id,
+          server_id: serverId!,
+        }));
+        await supabaseAdmin.from("user_server_access").upsert(userServerAccess, { onConflict: "user_id,server_id" });
+      }
+    } else if (data.bulk_action === "remove_from_all") {
+      await supabaseAdmin.from("user_server_access").delete().eq("server_id", serverId);
+    }
+
     return { id: serverId };
   });
 
