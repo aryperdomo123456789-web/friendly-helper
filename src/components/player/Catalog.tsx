@@ -494,15 +494,18 @@ function PlayerInfo({
   if (tmdb.data) {
     const data = tmdb.data;
     const rating = data.vote_average ? Math.round(data.vote_average * 10) / 10 : null;
+    const posterUrl = data.poster_path ? `https://image.tmdb.org/t/p/w300${data.poster_path}` : null;
+
     
     return (
       <div className="rounded-xl border border-border bg-card/50 p-3 space-y-3">
         <div className="flex gap-3">
-          {data.poster_path && (
+          {posterUrl && (
             <img 
-              src={`https://image.tmdb.org/t/p/w200${data.poster_path}`} 
-              className="w-20 rounded-lg shadow-lg border border-border/50"
-              alt="Poster"
+              src={posterUrl} 
+              className="w-20 sm:w-24 rounded-lg shadow-2xl border border-primary/20 ring-1 ring-white/10"
+              alt="Poster TMDB"
+              loading="lazy"
             />
           )}
           <div className="flex-1 space-y-1">

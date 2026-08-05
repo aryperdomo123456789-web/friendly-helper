@@ -331,20 +331,31 @@ export const getChannelEPG = createServerFn({ method: "POST" })
       }>;
     }>(credential, { action: "get_short_epg", stream_id: data.stream_id });
 
-    if (!result?.epg_listings || !Array.isArray(result.epg_listings)) return [];
+    if (!result?.epg_listings || !Array.isArray(result.epg_listings)) {
+      // Fallback: Tenta um EPG genérico se o painel estiver vazio mas tivermos a URL global
+      const config = await getAppConfig();
+      if (config.epg_xmltv_url) {
+        // Logica para parsear XMLTV poderia entrar aqui, mas por ora retornamos vazio seguro
+        return [];
+      }
+      return [];
+    }
 
     const decode = (str: string) => {
       try {
-        // Xtream EPG titles/descriptions are usually base64
-        return decodeURIComponent(escape(atob(str)));
+        if (!str) return "";
+        // Tenta base64, se falhar retorna a string original limpa
+        const decoded = atob(str);
+        // Verifica se e UTF-8 valido
+        return decodeURIComponent(escape(decoded));
       } catch (e) {
-        return str; // Fallback if not base64
+        return str; 
       }
     };
 
     return result.epg_listings.map((item) => ({
-      title: decode(item.title || ""),
-      description: decode(item.description || ""),
+      title: decode(item.title),
+      description: decode(item.description),
       start: item.start,
       end: item.end,
       start_timestamp: item.start_timestamp,
