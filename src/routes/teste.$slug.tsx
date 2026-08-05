@@ -43,21 +43,50 @@ function TestePublico() {
     expiresAt: string;
   } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState(false);
 
   const mutationCreateTest = useServerFn(createTestUser);
+
+  const getFingerprint = () => {
+    if (typeof window === 'undefined') return '';
+    const data = [
+      navigator.userAgent,
+      screen.width,
+      screen.height,
+      navigator.language,
+      new Date().getTimezoneOffset(),
+      navigator.hardwareConcurrency || 0,
+    ].join("|");
+    
+    // Simple hash function
+    let hash = 0;
+    for (let i = 0; i < data.length; i++) {
+      const char = data.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+    return Math.abs(hash).toString(16);
+  };
 
   const handleCreateTest = async () => {
     setLoading(true);
     try {
-      const res = await mutationCreateTest({ data: { slug } });
+      const fingerprint = getFingerprint();
+      const res = await mutationCreateTest({ data: { slug, fingerprint } });
       setCredentials(res);
       toast.success("Teste gerado com sucesso!");
     } catch (err: any) {
-      toast.error(err.message || "Erro ao gerar teste");
+      console.error("Erro ao gerar teste:", err);
+      const message = err.message || "Erro ao gerar teste";
+      toast.error(message);
+      if (message.toLowerCase().includes("dispositivo") || message.toLowerCase().includes("já gerou")) {
+        setBlocked(true);
+      }
     } finally {
       setLoading(false);
     }
   };
+
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
