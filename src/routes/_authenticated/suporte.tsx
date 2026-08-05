@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlayerSession } from "@/lib/player-store";
-import { listSupportThreads, markThreadRead } from "@/lib/chat.functions";
+import { listSupportThreads, markThreadRead, getOrCreateThread } from "@/lib/chat.functions";
 import {
   Card,
   CardHeader,
@@ -87,49 +87,50 @@ function SuportePage() {
         {/* Threads List */}
         {isOwner && (
           <Card className="md:col-span-4 flex flex-col overflow-hidden bg-sidebar/30 border-sidebar-border">
-          <CardHeader className="py-4 border-b border-sidebar-border">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" /> Conversas
-            </CardTitle>
-          </CardHeader>
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            {threads.isLoading ? (
-              <div className="p-4 text-center">Carregando...</div>
-            ) : (threads.data ?? []).length === 0 ? (
-              <div className="p-4 text-center text-muted-foreground text-sm italic">Nenhuma conversa ativa.</div>
-            ) : (
-              threads.data?.map((thread: any) => (
-                <button
-                  key={thread.id}
-                  onClick={() => {
-                    setSelectedThread(thread);
-                    mutationMarkRead({ data: { threadId: thread.id, isOwner: true } });
-                    queryClient.invalidateQueries({ queryKey: ["support-threads-nav"] });
-                  }}
-                  className={cn(
-                    "w-full p-4 text-left hover:bg-primary/10 border-b border-sidebar-border transition-all flex items-center justify-between group",
-                    selectedThread?.id === thread.id && "bg-primary/20 border-l-4 border-l-primary"
-                  )}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold truncate text-sm group-hover:text-primary transition-colors">
-                      {thread.profile?.display_name || thread.profile?.username || "Usuário"}
+            <CardHeader className="py-4 border-b border-sidebar-border">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" /> Conversas
+              </CardTitle>
+            </CardHeader>
+            <div className="flex-1 overflow-y-auto custom-scrollbar">
+              {threads.isLoading ? (
+                <div className="p-4 text-center">Carregando...</div>
+              ) : (threads.data ?? []).length === 0 ? (
+                <div className="p-4 text-center text-muted-foreground text-sm italic">Nenhuma conversa ativa.</div>
+              ) : (
+                threads.data?.map((thread: any) => (
+                  <button
+                    key={thread.id}
+                    onClick={() => {
+                      setSelectedThread(thread);
+                      mutationMarkRead({ data: { threadId: thread.id, isOwner: true } });
+                      queryClient.invalidateQueries({ queryKey: ["support-threads-nav"] });
+                    }}
+                    className={cn(
+                      "w-full p-4 text-left hover:bg-primary/10 border-b border-sidebar-border transition-all flex items-center justify-between group",
+                      selectedThread?.id === thread.id && "bg-primary/20 border-l-4 border-l-primary"
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold truncate text-sm group-hover:text-primary transition-colors">
+                        {thread.profile?.display_name || thread.profile?.username || "Usuário"}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground truncate opacity-70">
+                        {thread.last_message || "Iniciou uma conversa"}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-muted-foreground truncate opacity-70">
-                      {thread.last_message || "Iniciou uma conversa"}
-                    </div>
-                  </div>
-                  {thread.unread_count_owner > 0 && (
-                    <span className="ml-2 bg-destructive text-destructive-foreground text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg animate-bounce">
-                      {thread.unread_count_owner}
-                    </span>
-                  )}
-                </button>
-              ))
-            )}
-          </div>
+                    {thread.unread_count_owner > 0 && (
+                      <span className="ml-2 bg-destructive text-destructive-foreground text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg animate-bounce">
+                        {thread.unread_count_owner}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </Card>
         )}
- 
+
         {/* Chat Window */}
         <Card className={cn("flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20", isOwner ? "md:col-span-8" : "w-full")}>
           {selectedThread ? (
