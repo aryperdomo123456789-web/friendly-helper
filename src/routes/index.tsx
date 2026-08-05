@@ -1,6 +1,9 @@
 /**
- * ja testei dois servidores e não esta reproduzindo so conteudos 
- * preciso de fluides que abra rapido os canais leve fluido parrudo
+ * /www/wwwroot/stream.mago-bot.com
+ * ja criei o diretorio no aapanel e adicionei o sitem statico 
+ * quero levar o projeto pra la para rodar em um pm2 tendo em vista que la ja tem projetos em pm2 nn pode embolar esse deve etr porta personalizada 6873
+ * me ajdue verificar tudo vai ssh 
+ * devmos tamebm fazer aarquivo personalizado de configuração do nginx para nn embolar nas porats publicas 80 e 443
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
