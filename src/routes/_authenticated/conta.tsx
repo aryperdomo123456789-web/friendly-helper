@@ -119,7 +119,13 @@ function ContaPage() {
   }
 
   const currentPlan = account.data?.plan;
-  const availablePlans = account.data?.availablePlans || [];
+  const isOwner = account.data?.isOwner;
+  const availablePlans = (account.data?.availablePlans || []).filter((plan: any) => {
+    // Esconde o plano "Teste" (ou com preço 0) da lista de upgrades, a menos que seja o dono
+    const isTestPlan = plan.name.toLowerCase().includes("teste") || Number(plan.price) === 0;
+    if (isTestPlan && !isOwner) return false;
+    return true;
+  });
   const expiresDate = account.data?.expires_at ? new Date(account.data.expires_at) : null;
 
   return (
