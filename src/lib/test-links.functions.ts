@@ -97,6 +97,13 @@ export const createTestUser = createServerFn({ method: "POST" })
     const newUserId = created.user.id;
 
     // Create profile
+    const { data: testPlan } = await supabaseAdmin
+      .from("subscription_plans")
+      .select("id")
+      .ilike("name", "%teste%")
+      .limit(1)
+      .single();
+
     await supabaseAdmin.from("profiles").insert({
       id: newUserId,
       username: username,
@@ -104,6 +111,7 @@ export const createTestUser = createServerFn({ method: "POST" })
       max_connections: link.max_connections,
       expires_at: expiresAt,
       is_active: true,
+      plan_id: testPlan?.id || null,
     });
 
     await supabaseAdmin.from("user_roles").insert({ user_id: newUserId, role: "user" });
