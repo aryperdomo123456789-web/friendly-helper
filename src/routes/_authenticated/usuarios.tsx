@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -64,6 +64,8 @@ export const Route = createFileRoute("/_authenticated/usuarios")({
 function UsuariosPage() {
   const { isOwner } = usePlayerSession();
   const queryClient = useQueryClient();
+  const router = useRouter();
+
 
   const fetchServers = useServerFn(listServers);
   const fetchUsers = useServerFn(listAccessUsers);
@@ -465,7 +467,7 @@ function UsuariosPage() {
                           try {
                             const thread = await fetchThread({ data: { userId: user.id } });
                             // Redireciona para o suporte selecionando o thread (ou apenas navega)
-                            void Route.navigate({ to: "/suporte" });
+                            void router.navigate({ to: "/suporte" });
                           } catch (err) {
                             toast.error("Erro ao abrir suporte");
                           }
