@@ -71,43 +71,6 @@ function Shell() {
 }
 
 function ShellLayout() {
-  const { profile, isOwner, servers, serverId, setServerId, blocked, expired } = usePlayerSession();
-  const [open, setOpen] = useState(false);
-  const [showSupportModal, setShowSupportModal] = useState(false);
-  const router = useRouter();
-  const location = useLocation();
-  const queryClient = useQueryClient();
-  const fetchThreads = useServerFn(listSupportThreads);
-  const fetchNotifications = useServerFn(getNotifications);
-  const mutationMarkRead = useServerFn(markNotificationRead);
-  const fetchOrCreateThread = useServerFn(getOrCreateThread);
-
-  const { data: threads } = useQuery({
-    queryKey: ["support-threads-nav"],
-    queryFn: () => fetchThreads(),
-    enabled: isOwner,
-    refetchInterval: 10000,
-  });
-
-  const { data: userNotifications } = useQuery({
-    queryKey: ["notifications"],
-    queryFn: () => fetchNotifications(),
-    refetchInterval: 30000,
-  });
-
-  const unreadNotificationsCount = useMemo(() => 
-    (userNotifications ?? []).filter((n: any) => !n.is_read).length,
-  [userNotifications]);
-
-  const totalUnread = (threads ?? []).reduce((acc: number, t: any) => acc + (t.unread_count_owner || 0), 0);
-
-  const signOut = async () => {
-    await queryClient.cancelQueries();
-    queryClient.clear();
-    await supabase.auth.signOut();
-    void router.navigate({ to: "/", replace: true });
-  };
-
   return (
     <div className="min-h-screen bg-background text-foreground">
       <ShellLayoutInner />
@@ -115,6 +78,7 @@ function ShellLayout() {
     </div>
   );
 }
+
 
 function SupportBubble() {
   const { isOwner, profile } = usePlayerSession();
@@ -294,12 +258,51 @@ function SupportBubble() {
 }
 
 function ShellLayoutInner() {
+  const { profile, isOwner, servers, serverId, setServerId, blocked, expired } = usePlayerSession();
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const router = useRouter();
+
+  const fetchThreads = useServerFn(listSupportThreads);
+  const fetchNotifications = useServerFn(getNotifications);
+  const mutationMarkRead = useServerFn(markNotificationRead);
+
+  const { data: threads } = useQuery({
+    queryKey: ["support-threads-nav"],
+    queryFn: () => fetchThreads(),
+    enabled: isOwner,
+    refetchInterval: 10000,
+  });
+
+  const { data: userNotifications } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => fetchNotifications(),
+    refetchInterval: 30000,
+  });
+
+  const unreadNotificationsCount = useMemo(() => 
+    (userNotifications ?? []).filter((n: any) => !n.is_read).length,
+  [userNotifications]);
+
+  const totalUnread = (threads ?? []).reduce((acc: number, t: any) => acc + (t.unread_count_owner || 0), 0);
+
+  const signOut = async () => {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await supabase.auth.signOut();
+    void router.navigate({ to: "/", replace: true });
+  };
+
+  return (
+    <>
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-sidebar-border bg-sidebar transition-transform lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
+
         <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
           <span className="grid h-8 w-8 place-items-center rounded-lg bg-primary text-sm font-black text-primary-foreground">
             W
@@ -551,6 +554,6 @@ function ShellLayoutInner() {
           )}
         </main>
       </div>
-    </div>
+    </>
   );
 }
