@@ -38,6 +38,7 @@ export type Database = {
           device_id: string
           id: string
           last_seen: string
+          server_id: string | null
           user_agent: string | null
           user_id: string
         }
@@ -46,6 +47,7 @@ export type Database = {
           device_id: string
           id?: string
           last_seen?: string
+          server_id?: string | null
           user_agent?: string | null
           user_id: string
         }
@@ -54,6 +56,7 @@ export type Database = {
           device_id?: string
           id?: string
           last_seen?: string
+          server_id?: string | null
           user_agent?: string | null
           user_id?: string
         }
@@ -61,6 +64,7 @@ export type Database = {
       }
       iptv_servers: {
         Row: {
+          connection_capacity: number | null
           created_at: string | null
           created_by: string | null
           id: string
@@ -70,6 +74,7 @@ export type Database = {
           url: string
         }
         Insert: {
+          connection_capacity?: number | null
           created_at?: string | null
           created_by?: string | null
           id?: string
@@ -79,6 +84,7 @@ export type Database = {
           url: string
         }
         Update: {
+          connection_capacity?: number | null
           created_at?: string | null
           created_by?: string | null
           id?: string
@@ -444,6 +450,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_device_session: {
+        Args: {
+          p_device_id: string
+          p_server_id: string
+          p_user_agent?: string | null
+          p_user_id: string
+        }
+        Returns: {
+          allowed: boolean
+          reason: string
+          server_active: number
+          server_limit: number | null
+          user_active: number
+          user_limit: number | null
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

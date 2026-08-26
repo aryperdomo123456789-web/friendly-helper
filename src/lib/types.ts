@@ -44,6 +44,7 @@ export interface IPTVServer {
   name: string;
   is_active: boolean;
   sort_order: number;
+  connection_capacity?: number | null;
   credentials: ServerCredential[];
 }
 

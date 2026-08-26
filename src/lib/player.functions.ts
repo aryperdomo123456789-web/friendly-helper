@@ -19,6 +19,44 @@ const streamCacheMap: Record<Kind, { categories: string; streams: string }> = {
   series: { categories: "get_series_categories", streams: "get_series" },
 };
 
+type DeviceSessionClaim = {
+  allowed: boolean;
+  reason: string;
+  user_active: number;
+  user_limit: number | null;
+  server_active: number;
+  server_limit: number | null;
+};
+
+async function claimDeviceSession(params: {
+  userId: string;
+  serverId: string;
+  deviceId: string;
+  userAgent?: string | null;
+}) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin.rpc("claim_device_session", {
+    p_user_id: params.userId,
+    p_server_id: params.serverId,
+    p_device_id: params.deviceId,
+    p_user_agent: params.userAgent ?? null,
+  });
+
+  if (error) throw new Error(`Falha ao reservar a conexão: ${error.message}`);
+  const result = (data?.[0] ?? null) as DeviceSessionClaim | null;
+  if (!result) throw new Error("Falha ao reservar a conexão: resposta inválida.");
+  if (result.allowed) return result;
+
+  if (result.reason === "server_limit") {
+    const capacity = result.server_limit ? ` (${result.server_active}/${result.server_limit})` : "";
+    throw new Error(`Capacidade de conexões do servidor atingida${capacity}.`);
+  }
+  if (result.reason === "user_limit") {
+    throw new Error(`Limite de ${result.user_limit ?? 0} conexões simultâneas atingido neste acesso.`);
+  }
+  throw new Error("Servidor indisponível para novas conexões.");
+}
+
 type ResolvedAccess = {
   credential: {
     dns: string;
@@ -214,7 +252,13 @@ export const getMySession = createServerFn({ method: "GET" })
 export const heartbeat = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ device_id: z.string().min(6).max(80), user_agent: z.string().max(300).optional() }).parse(input),
+    z
+      .object({
+        device_id: z.string().min(6).max(80),
+        server_id: z.string().uuid().optional(),
+        user_agent: z.string().max(300).optional(),
+      })
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -227,7 +271,24 @@ export const heartbeat = createServerFn({ method: "POST" })
 
     if (!profile.is_active) throw new Error("Acesso desativado.");
     const expired = profile.expires_at && new Date(profile.expires_at).getTime() < Date.now();
-    
+
+    if (data.server_id) {
+      const claim = await claimDeviceSession({
+        userId: context.userId,
+        serverId: data.server_id,
+        deviceId: data.device_id,
+        userAgent: data.user_agent,
+      });
+      return {
+        ok: true,
+        limit: claim.user_limit ?? profile.max_connections,
+        expired: Boolean(expired),
+        server_limit: claim.server_limit,
+        server_active: claim.server_active,
+      };
+    }
+
+    // Compatibilidade temporária para bancos anteriores à migration de capacidade.
     const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
     await supabaseAdmin
       .from("device_sessions")
@@ -240,7 +301,7 @@ export const heartbeat = createServerFn({ method: "POST" })
       .select("device_id")
       .eq("user_id", context.userId);
 
-    const known = (active ?? []).some((row: any) => row.device_id === data.device_id);
+    const known = (active ?? []).some((row) => row.device_id === data.device_id);
     if (!known && (active ?? []).length >= profile.max_connections) {
       throw new Error(
         `Limite de ${profile.max_connections} conexões simultâneas atingido neste acesso.`,
@@ -533,28 +594,11 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
       .maybeSingle();
 
     if (profile) {
-      const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
-      await supabaseAdmin
-        .from("device_sessions")
-        .delete()
-        .eq("user_id", context.userId)
-        .lt("last_seen", cutoff);
-      const { data: active } = await supabaseAdmin
-        .from("device_sessions")
-        .select("device_id")
-        .eq("user_id", context.userId);
-      const known = (active ?? []).some((row: any) => row.device_id === data.device_id);
-      if (!known && (active ?? []).length >= profile.max_connections) {
-        throw new Error(`Limite de ${profile.max_connections} conexões simultâneas atingido.`);
-      }
-      await supabaseAdmin.from("device_sessions").upsert(
-        {
-          user_id: context.userId,
-          device_id: data.device_id,
-          last_seen: new Date().toISOString(),
-        },
-        { onConflict: "user_id,device_id" },
-      );
+      await claimDeviceSession({
+        userId: context.userId,
+        serverId: data.server_id,
+        deviceId: data.device_id,
+      });
     }
 
     const { buildStreamUrl } = await import("./xtream.server");

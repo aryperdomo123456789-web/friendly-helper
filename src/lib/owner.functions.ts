@@ -21,6 +21,7 @@ const serverSchema = z.object({
   id: z.string().uuid().optional(),
   name: z.string().trim().min(1).max(120),
   is_active: z.boolean().default(true),
+  connection_capacity: z.number().int().min(1).max(1_000_000).nullable().optional(),
   sort_order: z.number().int().min(0).max(999).default(0),
   credentials: z.array(credentialSchema).max(6).default([]),
   bulk_action: z.enum(["none", "add_to_all", "remove_from_all"]).optional().default("none"),
@@ -102,7 +103,7 @@ export const listServers = createServerFn({ method: "GET" })
     const [{ data: servers, error }, { data: credentials, error: credentialsError }] = await Promise.all([
       supabaseAdmin
         .from("iptv_servers")
-        .select("id, name, url, is_active, sort_order, created_at")
+        .select("id, name, url, is_active, sort_order, created_at, connection_capacity")
         .order("sort_order")
         .order("created_at"),
       supabaseAdmin
@@ -122,6 +123,7 @@ export const listServers = createServerFn({ method: "GET" })
       url: (server as any).url,
       is_active: server.is_active,
       sort_order: server.sort_order,
+      connection_capacity: server.connection_capacity,
       created_at: server.created_at,
       credentials: credentialByServerId.has(server.id)
         ? [credentialByServerId.get(server.id)]
@@ -184,12 +186,16 @@ export const saveServer = createServerFn({ method: "POST" })
         name: string;
         is_active: boolean;
         sort_order: number;
+        connection_capacity?: number | null;
         url?: string;
       } = {
         name: data.name,
         is_active: data.is_active,
         sort_order: data.sort_order,
       };
+      if (data.connection_capacity !== undefined) {
+        serverPayload.connection_capacity = data.connection_capacity;
+      }
       if (nextDns) {
         serverPayload.url = nextDns;
       }
@@ -206,6 +212,7 @@ export const saveServer = createServerFn({ method: "POST" })
           url: nextDns!,
           is_active: data.is_active,
           sort_order: data.sort_order,
+          connection_capacity: data.connection_capacity ?? null,
           created_by: context.userId,
         })
         .select("id")

@@ -363,6 +363,7 @@ function PainelDono() {
         credentials: [{ username: "", password: "", dns: "" }],
         is_active: true,
         sort_order: nextServerSortOrder,
+        connection_capacity: null,
         bulk_action: "none",
         __draft_seed: seed,
       });
@@ -1203,8 +1204,11 @@ function PainelDono() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-xs text-muted-foreground truncate mb-4">
+                      <div className="mb-1 truncate text-xs text-muted-foreground">
                         Credenciais protegidas no servidor
+                      </div>
+                      <div className="mb-4 text-xs text-muted-foreground">
+                        Capacidade: {server.connection_capacity ? `${server.connection_capacity} conexões` : "não definida"}
                       </div>
                       {refreshStage ? (
                         <div className="mb-4 flex items-center gap-2">
@@ -2217,6 +2221,26 @@ function PainelDono() {
                   }}
                   placeholder={serverModal?.id ? "Deixe em branco para manter o DNS atual" : "Obrigatório para novo servidor"}
                 />
+              </div>
+              <div className="grid gap-2">
+                <Label>Conexões contratadas neste servidor (opcional)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={1000000}
+                  value={serverModal?.connection_capacity ?? ""}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setServerModal({
+                      ...serverModal,
+                      connection_capacity: value ? Number(value) : null,
+                    });
+                  }}
+                  placeholder="Ex.: 1000"
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  Limita conexões simultâneas deste servidor; a quantidade de servidores cadastrados não limita ativos.
+                </p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">

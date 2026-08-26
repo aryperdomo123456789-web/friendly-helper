@@ -185,7 +185,11 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
     const send = async () => {
       try {
         const result = await ping({
-          data: { device_id: getDeviceId(), user_agent: navigator.userAgent.slice(0, 280) },
+          data: {
+            device_id: getDeviceId(),
+            server_id: serverId ?? undefined,
+            user_agent: navigator.userAgent.slice(0, 280),
+          },
         });
         if (!cancelled) {
           setBlocked(result.expired ? "Plano expirado" : null);
@@ -203,7 +207,7 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [isLoading, ping]);
+  }, [isLoading, ping, serverId]);
 
   const value = useMemo<SessionValue>(
     () => ({
