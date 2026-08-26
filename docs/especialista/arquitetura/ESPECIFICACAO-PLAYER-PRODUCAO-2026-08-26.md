@@ -138,9 +138,9 @@ A função server-side `recordPlaybackTelemetry` deriva a identidade da sessão 
 
 O catálogo deixou de fazer prefetch de URLs de playback em hover, foco ou carregamento de página. Como `getPlaybackUrl` reivindica o lease de conexão, essa alteração impede que navegar pelo catálogo consuma uma sessão antes do clique real em Play. O prefetch de imagens e metadata de séries permanece.
 
-A suíte passou com 20 testes, incluindo três casos de telemetria. O build multisserviço passou com URL e chave pública do Supabase obtidas em memória; a varredura do `.output` não encontrou o identificador legado. O typecheck completo ainda apresenta erros históricos em arquivos fora do player; não há erro novo em `VideoPlayer.tsx`, `player-telemetry.ts` ou nos contratos server-side adicionados nesta rodada. A telemetria e a remoção do prefetch ainda não foram publicadas em produção.
+A suíte passou com 20 testes, incluindo três casos de telemetria. O build multisserviço passou com URL e chave pública do Supabase obtidas em memória; a varredura do `.output` não encontrou o identificador legado. O typecheck completo ainda apresenta erros históricos em arquivos fora do player; não há erro novo em `VideoPlayer.tsx`, `player-telemetry.ts` ou nos contratos server-side adicionados nesta rodada. O Player Reliability v1 foi publicado em produção por troca atômica, com manifesto local/remoto idêntico, reload individual dos quatro processos e readiness aprovado.
 
-## 7. Plano de implementação por fases
+## 8. Plano de implementação por fases
 
 ### Fase P1 — Instrumentação sem alteração de contrato — entregue
 
@@ -162,7 +162,7 @@ Executar a matriz de navegadores, codecs, resoluções, mobile e tela grande. Va
 
 Medir QoE por origem, capacidade do proxy, taxa de fallback e impacto em CPU/RAM/rede. Somente após conteúdo/licença aprovados, avaliar EME/DRM em uma trilha isolada e reversível.
 
-## 8. Rollout de produção
+## 9. Rollout de produção
 
 Cada fase deve ser publicada em branch e commit próprios, com `npm run test:worker`, testes específicos do player, lint direcionado, build completo e inspeção do bundle. Migrations, se necessárias, devem ser aditivas, precedidas de backup PostgreSQL verificável e acompanhadas de rollback.
 
@@ -170,13 +170,21 @@ O rollout deve usar feature flag ou segmentação por conta de laboratório/owne
 
 O smoke test mínimo deve validar login, catálogo, seleção de Portal, abertura de live, filme e episódio, buffering controlado, troca de origem, logout, isolamento de dois usuários e ausência de URL upstream na rede do navegador. O teste deve registrar apenas métricas e identificadores redigidos.
 
-## 9. Classificação atual e decisão
+## 10. Classificação atual e decisão
 
-Com base na auditoria do código, o player atual é **7/10 para IPTV multi-servidor** e aproximadamente **5/10 quando comparado a players OTT de primeira linha**. Essa nota não representa defeito de segurança crítico; representa distância de recursos, medição e operação premium.
+Com base na auditoria, na implementação do Player Reliability v1 e no smoke test pós-rollout, o player está em aproximadamente **7,5/10 como player IPTV multi-servidor em evolução** e **5/10 quando comparado a players OTT de primeira linha**. A nota continua provisória porque o laboratório não ofereceu conteúdo reproduzível para medir QoE. Essa classificação não representa defeito de segurança crítico; representa distância de recursos, medição e operação premium.
 
-A decisão recomendada é não reescrever o player. O caminho de menor risco é preservar `VideoPlayer`, `Catalog`, `getPlaybackUrl`, `stream-proxy` e `xtreamCall`, extraindo primeiro telemetria e política de recovery. Depois, implementar resume, capabilities, qualidade e acessibilidade. O proxy e a autorização devem continuar server-side.
+A decisão recomendada continua sendo não reescrever o player. O caminho de menor risco é preservar `VideoPlayer`, `Catalog`, `getPlaybackUrl`, `stream-proxy` e `xtreamCall`; a telemetria e a política inicial de recovery já foram entregues no Player Reliability v1. As próximas evoluções são resume, capabilities, qualidade, acessibilidade e fallback baseado em evidência. O proxy e a autorização devem continuar server-side.
 
-O primeiro marco de produção é **Player Reliability v1**, com telemetria, estados, recuperação finita e relatório por origem. Sem esse marco, qualquer afirmação de player 10/10 será opinião. Com ele, o produto passa a ter dados para evoluir rápido sem sacrificar login, sessões, permissões, catálogo ou proxy.
+## 11. Evidências pós-rollout em produção
+
+O login da conta laboratorial e a rota `/inicio` funcionaram no domínio real. As rotas `/canais` e `/filmes` carregaram com o portal atualmente selecionado, mas retornaram zero itens para essa conta; `/series` apresentou acesso suspenso do laboratório e resposta upstream 502. Por isso, a sessão não forneceu um conteúdo reproduzível e não é válido declarar primeiro frame, buffering, recovery ou QoE real como medidos.
+
+O painel owner carregou diretamente após a autenticação e mostrou sete origens sequenciais, `Portal 1` a `Portal 7`, todas ativas, porém com capacidade operacional não definida na interface. A tentativa da conta comum de abrir `/painel` não expôs controles administrativos. O estado atual confirma o rollout e as permissões, mas deixa pendente a validação de reprodução com uma origem que contenha catálogo ativo.
+
+Após 60 segundos de observação, main, player e payments permaneceram HTTP 200; o worker permaneceu online sem novo restart na janela, com memória aproximada de 99 MiB e contador histórico de reinícios ainda elevado. O hash agregado do `.output` local e ativo foi igual. O relatório sanitizado está em `docs/especialista/deploy/SMOKE-PLAYER-PRODUCAO-2026-08-26.md`.
+
+O primeiro marco de produção, **Player Reliability v1**, foi entregue e publicado com telemetria, estados, recuperação finita e relatório por origem. O próximo marco é medir QoE em conteúdo real e completar resume, capabilities, qualidade, acessibilidade e fallback baseado em evidência. Sem esses dados, qualquer afirmação de player 10/10 continuará sendo opinião.
 
 ## Referências
 
