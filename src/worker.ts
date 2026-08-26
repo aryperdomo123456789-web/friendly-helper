@@ -10,6 +10,7 @@ import {
   recordRefreshCycleStarted,
   recordTaskCompleted,
   recordTaskFailed,
+  recordTaskStarted,
   recordTickCompleted,
   recordTickStarted,
   setObservabilityService,
