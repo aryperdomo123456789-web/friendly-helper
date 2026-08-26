@@ -48,6 +48,7 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
     let recoveryAttempts = 0;
     let hasStartedPlaying = false;
     let hasReportedPlaying = false;
+    let hasNativeError = false;
     const sessionId = createPlaybackSessionId();
 
     const engine = video.canPlayType("application/vnd.apple.mpegurl") !== "" ? "native" : "hls.js";
@@ -120,12 +121,14 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
 
     const onNativeError = () => {
       if (destroyed) return;
+      hasNativeError = true;
       telemetry.record("fatal_error", {
         error_code: "native_media_error",
         fatal: true,
         reason: "native_playback_error",
         ...currentDetails(),
       });
+      setLoading(false);
       setError("Fluxo indisponível neste momento.");
     };
 
@@ -133,6 +136,7 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
       try {
         await video.play();
       } catch {
+        if (hasNativeError || video.error) return;
         telemetry.record("fatal_error", {
           error_code: "autoplay_blocked",
           fatal: false,
@@ -294,7 +298,6 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
         onLoadedData={() => setLoading(false)}
         onWaiting={() => setLoading(true)}
         onStalled={() => setLoading(true)}
-        onError={() => setError("Fluxo indisponível neste momento.")}
       />
       {loading && !error ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
