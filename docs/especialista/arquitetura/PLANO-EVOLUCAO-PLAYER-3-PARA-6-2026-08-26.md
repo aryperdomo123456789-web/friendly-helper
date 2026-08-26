@@ -33,7 +33,9 @@ Os valores de TTFF são **critérios internos de piloto**, não benchmark de mer
 
 Foi implementado o helper puro `src/lib/stream-format.ts` e o builder `buildStreamUrl` passou a aceitar apenas extensões seguras. Para live, `ts` permanece TS e `m3u8` permanece HLS; valores desconhecidos continuam em HLS como fallback conservador. O ponto de geração de playback deixou de tratar qualquer live sem `ext=ts` como HLS por heurística textual e passou a decidir pelo URL efetivamente construído.
 
-Foram adicionados casos determinísticos à suíte `test:worker`: extensão TS, extensão HLS e fallback para valores desconhecidos. O build foi gerado com as variáveis atuais de produção somente em memória, passou a varredura contra o identificador legado e produziu o manifesto local `054abddb7183da50d8b515499d9c38c40d3e76dd10a027469d233cd3cb08101b`.
+Foram adicionados casos determinísticos à suíte `test:worker`: extensão TS, extensão HLS e fallback para valores desconhecidos. O build foi gerado com as variáveis atuais de produção somente em memória, passou a varredura contra o identificador legado e produziu o manifesto de rollout `a0c8a40899eb8b2c466b1722091eacbc3bc2a8b5557eb7fb280c869f1a7efacc`.
+
+O commit `8f93d37` foi publicado no GitHub e o mesmo build foi aplicado atomicamente no aaPanel. O manifesto anterior `26d33d34422f6df86c904ed491e36648ed3c184bd4cc971ad6452536db030688` ficou preservado para rollback. Readiness local e público passaram, e a observação adicional manteve os quatro processos online. Não houve nova reprodução após o deploy; primeiro frame, recovery e TTFF continuam gates pendentes.
 
 ## 4. Etapas seguintes
 
