@@ -4,9 +4,9 @@ Atualizado em: 2026-08-14
 
 Este documento consolida, de forma objetiva, o que ja foi implementado no projeto com base em:
 
-- [DOCUMENTACAO_ESPECIALISTA.md](/www/wwwroot/stream.mago-bot.com/DOCUMENTACAO_ESPECIALISTA.md)
-- [deploy/DOCUMENTACAO-ESPECIALISTA.md](/www/wwwroot/stream.mago-bot.com/deploy/DOCUMENTACAO-ESPECIALISTA.md)
-- [PLANO_EXECUCAO_POR_FASES_MAGOPLAYERPRO.md](/www/wwwroot/stream.mago-bot.com/PLANO_EXECUCAO_POR_FASES_MAGOPLAYERPRO.md)
+- [../DOCUMENTACAO_ESPECIALISTA.md](/www/wwwroot/stream.mago-bot.com/docs/especialista/DOCUMENTACAO_ESPECIALISTA.md)
+- [DOCUMENTACAO-ESPECIALISTA.md](/www/wwwroot/stream.mago-bot.com/DOCUMENTACAO-ESPECIALISTA.md)
+- [../PLANO_EXECUCAO_POR_FASES_MAGOPLAYERPRO.md](/www/wwwroot/stream.mago-bot.com/docs/especialista/PLANO_EXECUCAO_POR_FASES_MAGOPLAYERPRO.md)
 
 Objetivo:
 

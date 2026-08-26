@@ -34,5 +34,5 @@ Se o banco ainda nao tiver os novos campos de indicacao, o app pode abrir, mas o
 
 ## Guias complementares
 
-- `deploy/CHECKLIST-MIGRACAO-SQL-FINAL.md`
-- `deploy/VARREDURA-DEPLOY-SEGURA.md`
+- `CHECKLIST-MIGRACAO-SQL-FINAL.md`
+- `VARREDURA-DEPLOY-SEGURA.md`

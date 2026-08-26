@@ -120,7 +120,7 @@ O fluxo do Mercado Pago envia `notification_url` e processa a confirmação no w
 
 Se quiser salvar e reconstruir o ambiente inteiro depois, use:
 
-- [`BACKUP-RESTAURACAO.md`](/www/wwwroot/stream.mago-bot.com/BACKUP-RESTAURACAO.md)
+- [`BACKUP-RESTAURACAO.md`](BACKUP-RESTAURACAO.md)
 
 ## Quando iniciar uma nova sessão
 

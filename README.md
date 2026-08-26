@@ -14,6 +14,11 @@ Continue developing this project in the [Lovable editor](https://lovable.dev/pro
 
 ## Development
 
+## Documentação técnica
+
+A documentação consolidada para operação e evolução do projeto está em
+[`docs/especialista/README.md`](docs/especialista/README.md).
+
 Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
 
 ```sh

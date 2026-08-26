@@ -240,5 +240,5 @@ Se quiser entender a operação em uma frase:
 - [`deploy/pm2/start-player.sh`](/www/wwwroot/stream.mago-bot.com/deploy/pm2/start-player.sh)
 - [`deploy/pm2/start-payments.sh`](/www/wwwroot/stream.mago-bot.com/deploy/pm2/start-payments.sh)
 - [`deploy/pm2/start-worker.sh`](/www/wwwroot/stream.mago-bot.com/deploy/pm2/start-worker.sh)
-- [`deploy/PROPOSTA-FILESYSTEM-POR-SERVIDOR-AAPANEL.md`](/www/wwwroot/stream.mago-bot.com/deploy/PROPOSTA-FILESYSTEM-POR-SERVIDOR-AAPANEL.md)
+- [`PROPOSTA-FILESYSTEM-POR-SERVIDOR-AAPANEL.md`](/www/wwwroot/stream.mago-bot.com/PROPOSTA-FILESYSTEM-POR-SERVIDOR-AAPANEL.md)
 

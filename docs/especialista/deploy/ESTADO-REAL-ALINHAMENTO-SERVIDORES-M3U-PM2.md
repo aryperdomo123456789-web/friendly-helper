@@ -182,11 +182,11 @@ Se eu resumir o estado real em uma linha:
 
 ## 9. Referências Principais
 
-- [`deploy/ARQUITETURA-SERVIDORES-M3U-PM2-ESPECIALISTA.md`](/www/wwwroot/stream.mago-bot.com/deploy/ARQUITETURA-SERVIDORES-M3U-PM2-ESPECIALISTA.md)
-- [`deploy/PROPOSTA-FILESYSTEM-POR-SERVIDOR-AAPANEL.md`](/www/wwwroot/stream.mago-bot.com/deploy/PROPOSTA-FILESYSTEM-POR-SERVIDOR-AAPANEL.md)
-- [`deploy/PLANO-IMPLEMENTACAO-FILESYSTEM-POR-SERVIDOR.md`](/www/wwwroot/stream.mago-bot.com/deploy/PLANO-IMPLEMENTACAO-FILESYSTEM-POR-SERVIDOR.md)
-- [`deploy/PLANO-PM2-NUCLEOS-SERVICOS.md`](/www/wwwroot/stream.mago-bot.com/deploy/PLANO-PM2-NUCLEOS-SERVICOS.md)
-- [`deploy/PLANO-PM2-MULTISERVICO-IMPLEMENTACAO.md`](/www/wwwroot/stream.mago-bot.com/deploy/PLANO-PM2-MULTISERVICO-IMPLEMENTACAO.md)
+- [`ARQUITETURA-SERVIDORES-M3U-PM2-ESPECIALISTA.md`](/www/wwwroot/stream.mago-bot.com/ARQUITETURA-SERVIDORES-M3U-PM2-ESPECIALISTA.md)
+- [`PROPOSTA-FILESYSTEM-POR-SERVIDOR-AAPANEL.md`](/www/wwwroot/stream.mago-bot.com/PROPOSTA-FILESYSTEM-POR-SERVIDOR-AAPANEL.md)
+- [`PLANO-IMPLEMENTACAO-FILESYSTEM-POR-SERVIDOR.md`](/www/wwwroot/stream.mago-bot.com/PLANO-IMPLEMENTACAO-FILESYSTEM-POR-SERVIDOR.md)
+- [`PLANO-PM2-NUCLEOS-SERVICOS.md`](/www/wwwroot/stream.mago-bot.com/PLANO-PM2-NUCLEOS-SERVICOS.md)
+- [`PLANO-PM2-MULTISERVICO-IMPLEMENTACAO.md`](/www/wwwroot/stream.mago-bot.com/PLANO-PM2-MULTISERVICO-IMPLEMENTACAO.md)
 
 ## 10. Atualização de Produção em 2026-08-16
 

@@ -22,7 +22,7 @@ Confirme antes de abrir o SQL Editor:
 
 Se voce quiser o mapa mais operacional, abra tambem:
 
-- `deploy/REVISAO-SQL-LINHA-A-LINHA.md`
+- `REVISAO-SQL-LINHA-A-LINHA.md`
 
 ## Passo 1 - Schema
 

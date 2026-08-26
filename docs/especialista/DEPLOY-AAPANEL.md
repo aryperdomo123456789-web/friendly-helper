@@ -6,7 +6,7 @@ O passo a passo completo foi movido para:
 
 Para guardar e restaurar tudo depois, use também:
 
-[`BACKUP-RESTAURACAO.md`](/www/wwwroot/stream.mago-bot.com/BACKUP-RESTAURACAO.md)
+[`BACKUP-RESTAURACAO.md`](BACKUP-RESTAURACAO.md)
 
 Use esse guia para:
 

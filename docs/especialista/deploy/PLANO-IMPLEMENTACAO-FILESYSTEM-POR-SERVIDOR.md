@@ -96,7 +96,7 @@ Responsabilidades:
 
 Criar:
 
-- [`deploy/ARQUITETURA-FILESYSTEM-POR-SERVIDOR.md`](/www/wwwroot/stream.mago-bot.com/deploy/ARQUITETURA-FILESYSTEM-POR-SERVIDOR.md)
+- [`ARQUITETURA-FILESYSTEM-POR-SERVIDOR.md`](/www/wwwroot/stream.mago-bot.com/ARQUITETURA-FILESYSTEM-POR-SERVIDOR.md)
 
 Responsabilidades:
 

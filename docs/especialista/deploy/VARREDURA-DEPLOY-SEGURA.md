@@ -39,12 +39,12 @@ Este arquivo separa o que e novidade segura para portar para producao do que ja 
 
 ### Documentacao operacional
 
-- `deploy/CHECKLIST-MIGRACAO-SQL-LINHA-A-LINHA.md`
-- `deploy/CHECKLIST-MIGRACAO-SQL-FINAL.md`
-- `deploy/DOCUMENTACAO-ESPECIALISTA.md`
-- `deploy/MIGRACAO-BACKEND-PROPRIO.md`
-- `deploy/ROTEIRO-MIGRACAO-INDICACAO-SMARTTV.md`
-- `deploy/AUDITORIA-PLAYER-REPRODUCAO.md`
+- `CHECKLIST-MIGRACAO-SQL-LINHA-A-LINHA.md`
+- `CHECKLIST-MIGRACAO-SQL-FINAL.md`
+- `DOCUMENTACAO-ESPECIALISTA.md`
+- `MIGRACAO-BACKEND-PROPRIO.md`
+- `ROTEIRO-MIGRACAO-INDICACAO-SMARTTV.md`
+- `AUDITORIA-PLAYER-REPRODUCAO.md`
 
 Esses arquivos sao guias. Nao alteram runtime, mas ajudam a manter o fluxo seguro.
 
