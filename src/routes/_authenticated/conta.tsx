@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyAccount, updateMyAccount } from "@/lib/account.functions";
 import { getMercadoPagoConfig, createPaymentPreference } from "@/lib/payments.functions";
@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, UserCog, Link as LinkIcon, Copy, CreditCard, Check, Crown } from "lucide-react";
+import { Loader2, UserCog, Link as LinkIcon, Copy, CreditCard, Check, Crown, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,8 @@ export const Route = createFileRoute("/_authenticated/conta")({
 });
 
 function ContaPage() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const fetchAccount = useServerFn(getMyAccount);
   const saveAccount = useServerFn(updateMyAccount);
   const mpPreference = useServerFn(createPaymentPreference);
@@ -93,6 +95,13 @@ function ContaPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSignOut = async () => {
+    await queryClient.cancelQueries();
+    queryClient.clear();
+    await supabase.auth.signOut();
+    void router.navigate({ to: "/", replace: true });
   };
 
   const handleUpgrade = async (planId: string) => {
@@ -510,6 +519,28 @@ function ContaPage() {
             </Button>
           </form>
         </CardContent>
+      </Card>
+
+      <Card className="border-destructive/20 bg-destructive/5">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl font-black tracking-tight">
+            <LogOut className="h-5 w-5 text-destructive" /> Encerrar sessão
+          </CardTitle>
+          <CardDescription>
+            Use este botão para sair com segurança deste dispositivo.
+          </CardDescription>
+        </CardHeader>
+        <CardFooter>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full border-destructive/30 text-destructive hover:bg-destructive/10 sm:w-auto"
+            onClick={() => void handleSignOut()}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Sair da conta
+          </Button>
+        </CardFooter>
       </Card>
     </UserPageShell>
   );
