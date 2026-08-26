@@ -295,16 +295,12 @@ export async function refreshServerCatalogCache(
 
     if (!catalog) {
       const kinds: Kind[] = ["live", "movie", "series"];
-      const fresh = await Promise.all(
-        kinds.map(async (kind) => {
-          const payload = await fetchCatalogKind(credential, kind);
-          return { kind, payload };
-        }),
-      );
-
       catalog = createEmptyPlaylistCatalog();
-      for (const item of fresh) {
-        catalog[item.kind] = item.payload;
+
+      for (const kind of kinds) {
+        // Fetch one catalog kind at a time so large Xtream responses do not
+        // remain resident together with the other kinds during a refresh.
+        catalog[kind] = await fetchCatalogKind(credential, kind);
       }
 
       source = "xtream";

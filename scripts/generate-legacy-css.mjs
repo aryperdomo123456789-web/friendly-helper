@@ -2,7 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import postcss from "postcss";
 
-const outputDir = path.resolve("/www/wwwroot/stream.mago-bot.com/.output/public");
+const outputDir = path.resolve(
+  process.env["MAGO_OUTPUT_DIR"] ?? path.join(process.cwd(), ".output", "public"),
+);
 const assetsDir = path.join(outputDir, "assets");
 const legacyCssPath = path.join(outputDir, "legacy.css");
 

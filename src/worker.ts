@@ -1,4 +1,5 @@
 import { refreshServerCatalogCache } from "@/lib/iptv-cache.server";
+import { createWorkerScheduler } from "@/lib/worker-scheduler";
 
 type WorkerTask = {
   name: string;
@@ -28,25 +29,29 @@ if (ENABLE_PRUNE) {
 }
 
 async function main() {
+  const scheduler = createWorkerScheduler({
+    intervalMs: WORKER_INTERVAL_MS,
+    runTick,
+    onError: (error) => {
+      console.error("[worker] erro inesperado no tick", error);
+    },
+  });
+
   console.log("[worker] iniciado", {
     intervalMs: WORKER_INTERVAL_MS,
     tasks: tasks.map((task) => task.name),
   });
 
-  await runTick();
-
-  const timer = setInterval(() => {
-    void runTick();
-  }, WORKER_INTERVAL_MS);
-
-  const shutdown = (signal: string) => {
+  const shutdown = async (signal: string) => {
     console.log(`[worker] encerrando por ${signal}`);
-    clearInterval(timer);
-    process.exit(0);
+    await scheduler.stop();
+    process.exitCode = 0;
   };
 
-  process.on("SIGINT", () => shutdown("SIGINT"));
-  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+
+  await scheduler.start();
 }
 
 async function runTick() {
@@ -91,4 +96,7 @@ function parseDuration(value: string): number {
   return Math.floor(parsed);
 }
 
-void main();
+void main().catch((error) => {
+  console.error("[worker] falha fatal na inicialização", error);
+  process.exitCode = 1;
+});
