@@ -12,7 +12,8 @@ import {
   updateAccessUser, 
   deleteAccessUser,
   kickDevices,
-  testServerConnection
+  testServerConnection,
+  listAdminAuditLogsPage,
 } from "@/lib/owner.functions";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -105,6 +106,7 @@ import {
   Loader2,
   RefreshCw,
   GripVertical,
+  ScrollText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -139,7 +141,9 @@ function PainelDono() {
   const [plansCurrentPage, setPlansCurrentPage] = useState(1);
   const [testLinksCurrentPage, setTestLinksCurrentPage] = useState(1);
   const [threadsPage, setThreadsPage] = useState(1);
+  const [auditPage, setAuditPage] = useState(1);
   const threadsPageSize = 10;
+  const auditPageSize = 10;
 
   // Server functions
   const fetchServers = useServerFn(listServers);
@@ -165,6 +169,7 @@ function PainelDono() {
   const mutationDeletePlan = useServerFn(deletePlan);
   const fetchThreadsPage = useServerFn(listSupportThreadsPage);
   const mutationMarkRead = useServerFn(markThreadRead);
+  const fetchAuditPage = useServerFn(listAdminAuditLogsPage);
 
   const threads = useQuery({
     queryKey: ["support-threads-page", threadsPage, threadsPageSize],
@@ -221,6 +226,33 @@ function PainelDono() {
     (max, server) => Math.max(max, Number(server.sort_order) || 0),
     -1,
   ) + 1;
+
+  const auditLogs = useQuery({
+    queryKey: ["admin-audit-page", auditPage, auditPageSize],
+    queryFn: () =>
+      fetchAuditPage({
+        data: {
+          page: auditPage,
+          page_size: auditPageSize,
+        },
+      }),
+    enabled: isOwner,
+    placeholderData: (previous) => previous,
+  });
+
+  const auditTotal = auditLogs.data?.total ?? 0;
+  const auditTotalPages = Math.max(1, Math.ceil(auditTotal / auditPageSize));
+  const auditSafePage = Math.min(auditPage, auditTotalPages);
+  const auditItems = auditLogs.data?.items ?? [];
+  const auditPaginationPages = useMemo(() => {
+    const windowSize = 5;
+    if (auditTotalPages <= windowSize) {
+      return Array.from({ length: auditTotalPages }, (_, index) => index + 1);
+    }
+    const start = Math.max(1, Math.min(auditSafePage - 2, auditTotalPages - (windowSize - 1)));
+    const end = Math.min(auditTotalPages, start + windowSize - 1);
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [auditSafePage, auditTotalPages]);
 
   const plans = useQuery({
     queryKey: ["admin-plans"],
@@ -2183,6 +2215,111 @@ function PainelDono() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="auditoria" className="space-y-4">
+          <Card className="border-sidebar-border bg-sidebar/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ScrollText className="h-5 w-5 text-primary" />
+                Auditoria administrativa
+              </CardTitle>
+              <CardDescription>
+                Ações administrativas recentes, sem credenciais, URLs, tokens ou IDs brutos.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="overflow-x-auto rounded-xl border border-border/60">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Ação</TableHead>
+                      <TableHead>Entidade</TableHead>
+                      <TableHead>Ator</TableHead>
+                      <TableHead>Alvo</TableHead>
+                      <TableHead>Detalhes</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {auditLogs.isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                          Carregando auditoria...
+                        </TableCell>
+                      </TableRow>
+                    ) : auditItems.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                          Nenhum evento administrativo registrado.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      auditItems.map((entry: any) => (
+                        <TableRow key={entry.id}>
+                          <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                            {entry.created_at ? new Date(entry.created_at).toLocaleString("pt-BR") : "—"}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs font-semibold">{entry.action}</TableCell>
+                          <TableCell className="text-xs">{entry.entity_type}</TableCell>
+                          <TableCell className="font-mono text-xs">{entry.actor_ref ?? "sistema"}</TableCell>
+                          <TableCell className="font-mono text-xs">{entry.target_ref ?? entry.entity_ref ?? "—"}</TableCell>
+                          <TableCell className="max-w-[280px] truncate font-mono text-[11px] text-muted-foreground">
+                            {Object.keys(entry.details ?? {}).length > 0 ? JSON.stringify(entry.details) : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {auditTotalPages > 1 ? (
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Página <span className="font-semibold text-foreground">{auditSafePage}</span> de{" "}
+                    <span className="font-semibold text-foreground">{auditTotalPages}</span>
+                  </p>
+                  <Pagination className="mx-0 w-auto justify-start md:justify-end">
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious
+                          href="#"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            setAuditPage((current) => Math.max(1, current - 1));
+                          }}
+                          className={auditSafePage <= 1 ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
+                      {auditPaginationPages.map((page) => (
+                        <PaginationItem key={page}>
+                          <Button
+                            variant={page === auditSafePage ? "default" : "ghost"}
+                            size="icon"
+                            className="h-9 w-9"
+                            onClick={() => setAuditPage(page)}
+                          >
+                            {page}
+                          </Button>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext
+                          href="#"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            setAuditPage((current) => Math.min(auditTotalPages, current + 1));
+                          }}
+                          className={auditSafePage >= auditTotalPages ? "pointer-events-none opacity-50" : ""}
+                        />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
         </TabsContent>
 
       </Tabs>

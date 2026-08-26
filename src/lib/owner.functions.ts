@@ -8,6 +8,7 @@ import { clearLocalImageCache } from "./server-media-cache.server";
 import { portalName } from "./portal-name";
 import type { Database } from "@/integrations/supabase/types";
 import { recordAdminAudit } from "./admin-audit.server";
+import { sanitizeAdminAuditDetails } from "./admin-audit";
 
 export const SYNTHETIC_EMAIL_DOMAIN = "iptv.local";
 
@@ -63,6 +64,11 @@ const reorderServersSchema = z.object({
   ids: z.array(z.string().uuid()).min(1),
 });
 
+const adminAuditPageSchema = z.object({
+  page: z.number().int().min(1).default(1),
+  page_size: z.number().int().min(1).max(50).default(10),
+});
+
 async function normalizePortalNames(supabaseAdmin: SupabaseClient<Database>) {
   const { data: orderedServers, error } = await supabaseAdmin
     .from("iptv_servers")
@@ -101,6 +107,15 @@ async function assertOwner(supabase: any, userId: string): Promise<"owner" | "ad
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new Error("Acesso restrito à área administrativa.");
   return data.some((row: { role: string }) => row.role === "owner") ? "owner" : "admin";
+}
+
+async function hashAdminReference(value: string | null | undefined) {
+  if (!value) return null;
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest))
+    .slice(0, 8)
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function assertNotOwnerAccount(supabase: any, userId: string) {
@@ -458,6 +473,46 @@ export const listAccessUsersPage = createServerFn({ method: "POST" })
       };
       page: number;
       page_size: number;
+    };
+  });
+
+export const listAdminAuditLogsPage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => adminAuditPageSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertOwner(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const from = (data.page - 1) * data.page_size;
+    const to = from + data.page_size - 1;
+    const { data: rows, count, error } = await (supabaseAdmin
+      .from("audit_logs")
+      .select(
+        "id, actor_user_id, target_user_id, action, entity_type, entity_id, details, source, created_at",
+        { count: "exact" },
+      )
+      .order("created_at", { ascending: false })
+      .range(from, to) as any);
+    if (error) throw error;
+
+    const items = await Promise.all(
+      (rows ?? []).map(async (row: any) => ({
+        id: row.id,
+        actor_ref: await hashAdminReference(row.actor_user_id),
+        target_ref: await hashAdminReference(row.target_user_id),
+        action: String(row.action ?? "unknown").slice(0, 80),
+        entity_type: String(row.entity_type ?? "unknown").slice(0, 80),
+        entity_ref: await hashAdminReference(row.entity_id),
+        source: String(row.source ?? "server").slice(0, 40),
+        details: sanitizeAdminAuditDetails((row.details ?? {}) as Record<string, boolean | number | string | null>),
+        created_at: row.created_at,
+      })),
+    );
+
+    return {
+      items,
+      total: count ?? 0,
+      page: data.page,
+      page_size: data.page_size,
     };
   });
 

@@ -1,4 +1,4 @@
-import { MessageSquare, Server, Settings, Share2, Users, Key } from "lucide-react";
+import { Key, MessageSquare, ScrollText, Server, Settings, Share2, Users } from "lucide-react";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
@@ -9,6 +9,7 @@ const OWNER_PANEL_TABS = [
   { value: "suporte", label: "Suporte", icon: MessageSquare },
   { value: "planos", label: "Planos", icon: Key },
   { value: "referencia", label: "Indicação", icon: Share2 },
+  { value: "auditoria", label: "Auditoria", icon: ScrollText },
 ] as const;
 
 type OwnerPanelTabsProps = {
@@ -24,7 +25,7 @@ export function OwnerPanelTabs({ hasUnreadSupport }: OwnerPanelTabsProps) {
             Núcleo administrativo
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Acesso separado para operação, suporte, planos e configuração.
+            Acesso separado para operação, suporte, planos, configuração e auditoria.
           </p>
         </div>
       </div>
