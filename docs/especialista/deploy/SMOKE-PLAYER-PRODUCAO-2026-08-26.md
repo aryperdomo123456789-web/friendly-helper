@@ -86,3 +86,9 @@ Essa prova melhora a avaliação do caminho de live para aproximadamente 5/10 em
 ## Observação final do hotfix de estado
 
 Após mais de 65 segundos do reload, o manifesto ativo permaneceu `9cc1d4322fa1841f5b1826f8341bb10b8bceb55d61331da16deeff54f2128124`. Os quatro processos nominais permaneceram online: main PID 107675, player PID 107723, payments PID 107864 e worker PID 107904. Os três health checks internos e o domínio público responderam HTTP 200. O rollback `.output.rollback.player-state-20260826T211434Z` permaneceu preservado. Na leitura de aproximadamente quatro minutos, o worker estava em cerca de 93,5 MiB e sem novo restart durante a janela; a diferença de versão informativa do PM2 permaneceu sem `pm2 update`.
+
+## Matriz real pós-timeout/retry — sessão comum
+
+Após login manual da conta QA comum, Portal 3 foi mantido como origem de laboratório e a validação foi executada em série, sem paralelismo. O catálogo live abriu 58 itens; uma reprodução live registrou `first_frame` em 3.931 s, `playing` em 3.932 s e um buffer curto de aproximadamente 33 ms. Um filme VOD respondeu HTTP 200 como `video/mp4` e registrou `first_frame`/`playing` em 10.705 s. Um episódio respondeu HTTP 200 como `video/mp4` e registrou `first_frame`/`playing` em 7.731 s. Não houve `startup_timeout`, `native_media_error`, `autoplay_blocked`, `player_initialization_error` ou `format_fallback` nas três tentativas; o caminho primário funcionou em todas.
+
+A matriz confirma live, filme e episódio em uma origem autorizada e mostra que o timeout não disparou indevidamente. Ainda não é a matriz completa de 20 tentativas nem prova multiportal: Portal 1 e Portal 2 mantêm falhas anteriores de origem, e o fallback TS ainda não foi forçado em runtime. A sessão comum foi encerrada e o navegador retornou ao login público.
