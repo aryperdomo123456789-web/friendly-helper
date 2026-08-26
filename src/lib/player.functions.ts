@@ -277,7 +277,7 @@ export const heartbeat = createServerFn({ method: "POST" })
         userId: context.userId,
         serverId: data.server_id,
         deviceId: data.device_id,
-        userAgent: data.user_agent,
+        ...(data.user_agent ? { userAgent: data.user_agent } : {}),
       });
       return {
         ok: true,
@@ -612,6 +612,103 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
     // For live channels, force HLS mode if the URL structure suggests it
     const forceHls = data.kind === "live" && !direct.includes("ext=ts");
     return { url: (isHls || forceHls) ? `${proxied}&hls=1` : proxied };
+  });
+
+const playbackTelemetryEventSchema = z.object({
+  name: z.enum([
+    "startup_requested",
+    "manifest_loaded",
+    "first_frame",
+    "playing",
+    "buffer_start",
+    "buffer_end",
+    "fatal_error",
+    "recover_attempt",
+    "recover_success",
+    "ended",
+    "destroyed",
+  ]),
+  at_ms: z.number().int().min(0).max(86_400_000),
+  duration_ms: z.number().int().min(0).max(86_400_000).optional(),
+  buffer_seconds: z.number().min(0).max(86_400).optional(),
+  latency_ms: z.number().int().min(0).max(86_400_000).optional(),
+  bitrate: z.number().int().min(0).max(1_000_000_000).optional(),
+  level: z.number().int().min(0).max(10_000).optional(),
+  fatal: z.boolean().optional(),
+  error_code: z.string().max(64).optional(),
+  recovery_attempt: z.number().int().min(0).max(20).optional(),
+  reason: z.string().max(80).optional(),
+});
+
+const playbackTelemetrySchema = z.object({
+  session_id: z.string().min(8).max(100),
+  server_id: z.string().uuid(),
+  kind: kindSchema,
+  engine: z.enum(["native", "hls.js"]),
+  events: z.array(playbackTelemetryEventSchema).min(1).max(20),
+});
+
+async function hashPlaybackRef(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest))
+    .slice(0, 8)
+    .map((part) => part.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+export const recordPlaybackTelemetry = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => playbackTelemetrySchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [{ data: profile }, { data: roles }, { data: server }] = await Promise.all([
+      supabaseAdmin
+        .from("profiles")
+        .select("id, is_active, expires_at")
+        .eq("id", context.userId)
+        .maybeSingle(),
+      supabaseAdmin.from("user_roles").select("role").eq("user_id", context.userId),
+      supabaseAdmin
+        .from("iptv_servers")
+        .select("id, is_active")
+        .eq("id", data.server_id)
+        .maybeSingle(),
+    ]);
+    const isOwner = !!roles?.some(
+      (row: { role: string }) => row.role === "owner" || row.role === "admin",
+    );
+    if (!server?.is_active) throw new Error("Servidor indisponível.");
+    if (profile && !isOwner) {
+      if (!profile.is_active) throw new Error("Acesso desativado.");
+      if (profile.expires_at && new Date(profile.expires_at).getTime() < Date.now()) {
+        throw new Error("Acesso expirado.");
+      }
+      const { count } = await supabaseAdmin
+        .from("user_server_access")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", context.userId)
+        .eq("server_id", data.server_id);
+      if (!count) throw new Error("Servidor não liberado para este acesso.");
+    }
+
+    const [userRef, serverRef] = await Promise.all([
+      hashPlaybackRef(context.userId),
+      hashPlaybackRef(data.server_id),
+    ]);
+    console.info(
+      JSON.stringify({
+        event: "playback_qoe",
+        service: "main",
+        user_ref: userRef,
+        server_ref: serverRef,
+        session_ref: data.session_id.slice(0, 16),
+        kind: data.kind,
+        engine: data.engine,
+        events: data.events,
+        recorded_at: new Date().toISOString(),
+      }),
+    );
+    return { ok: true };
   });
 
 export const getChannelEPG = createServerFn({ method: "POST" })

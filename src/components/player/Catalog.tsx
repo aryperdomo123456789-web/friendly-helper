@@ -176,7 +176,6 @@ const CatalogGridCard = memo(function CatalogGridCard({
   active,
   loading,
   priority,
-  onPrefetch,
   onActivate,
   onHover,
 }: {
@@ -186,7 +185,6 @@ const CatalogGridCard = memo(function CatalogGridCard({
   active: boolean;
   loading: boolean;
   priority: boolean;
-  onPrefetch: (item: CatalogStreamItem) => void;
   onActivate: (item: CatalogStreamItem) => void;
   onHover?: (item: CatalogStreamItem) => void;
 }) {
@@ -195,11 +193,8 @@ const CatalogGridCard = memo(function CatalogGridCard({
   return (
     <button
       type="button"
-      onMouseEnter={() => onPrefetch(item)}
-      onMouseEnterCapture={() => onHover?.(item)}
-      onFocus={() => onPrefetch(item)}
-      onFocusCapture={() => onHover?.(item)}
-      onTouchStart={() => onPrefetch(item)}
+      onMouseEnter={() => onHover?.(item)}
+      onFocus={() => onHover?.(item)}
       onClick={() => onActivate(item)}
       tabIndex={0}
       data-tv-focus
@@ -246,20 +241,16 @@ const CatalogGridCard = memo(function CatalogGridCard({
 const CatalogEpisodeButton = memo(function CatalogEpisodeButton({
   episode,
   loading,
-  onPrefetch,
   onActivate,
 }: {
   episode: CatalogEpisode;
   loading: boolean;
-  onPrefetch: (episode: CatalogEpisode) => void;
   onActivate: (episode: CatalogEpisode) => void;
 }) {
   return (
     <Button
       variant="secondary"
       className="w-full justify-start"
-      onMouseEnter={() => onPrefetch(episode)}
-      onFocus={() => onPrefetch(episode)}
       onClick={() => onActivate(episode)}
     >
       {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4" />}
@@ -377,14 +368,6 @@ export function Catalog({
     }
   }, [queryClient, playbackCacheKey, playbackQueryFn]);
 
-  const prefetchPlayback = useCallback((item: { id: string; name: string; icon: string | null; ext?: string | null }) => {
-    if (!serverId) return;
-    void queryClient.prefetchQuery({
-      queryKey: playbackCacheKey(item),
-      queryFn: playbackQueryFn(item),
-      staleTime: 24 * 60 * 60 * 1000,
-    });
-  }, [queryClient, serverId, playbackCacheKey, playbackQueryFn]);
 
   const prefetchCategoryStreams = useCallback((targetCategoryId: string) => {
     if (!serverId || !targetCategoryId) return;
@@ -419,15 +402,6 @@ export function Catalog({
     void play(item);
   }, [kind, play]);
 
-  const prefetchEpisodePlayback = useCallback((episode: CatalogEpisode) => {
-    const seriesName = openSeries?.name ?? "";
-    prefetchPlayback({
-      id: episode.id,
-      name: `${seriesName} - ${episode.episode_num}. ${episode.title}`,
-      icon: null,
-      ext: episode.ext,
-    });
-  }, [openSeries?.name, prefetchPlayback]);
 
   const activateEpisode = useCallback((episode: CatalogEpisode) => {
     if (!openSeries) return;
@@ -577,7 +551,6 @@ export function Catalog({
     () => filtered.slice((safePage - 1) * activePageSize, safePage * activePageSize),
     [filtered, safePage, activePageSize],
   );
-  const warmPlaybackItems = useMemo(() => paginatedItems.slice(0, kind === "live" ? 3 : 4), [kind, paginatedItems]);
   const pageImageSources = useMemo(
     () => paginatedItems.slice(0, 4).map((item) => proxyMediaUrl(item.icon, serverId)),
     [paginatedItems, serverId],
@@ -601,51 +574,7 @@ export function Catalog({
 
   useImagePrefetch(pageImageSources, `${serverId ?? "no-server"}:${kind}`);
 
-  useEffect(() => {
-    if (!serverId || openSeries || streams.isLoading || streams.isError) return;
-    if (!warmPlaybackItems.length) return;
 
-    for (const item of warmPlaybackItems) {
-      if (kind === "series") {
-        prefetchSeriesInfo({ id: item.id, name: item.name });
-      } else {
-        prefetchPlayback(item);
-      }
-    }
-  }, [
-    serverId,
-    kind,
-    openSeries,
-    streams.isLoading,
-    streams.isError,
-    warmPlaybackItems,
-    prefetchPlayback,
-    prefetchSeriesInfo,
-  ]);
-
-  const visibleEpisodes = useMemo(
-    () =>
-      openSeries
-        ? currentEpisodeGroups.flatMap(({ items }) => items).slice(0, 4)
-        : [],
-    [currentEpisodeGroups, openSeries],
-  );
-
-  useEffect(() => {
-    if (!openSeries || !serverId || seriesInfo.isLoading || seriesInfo.isError) return;
-    if (!visibleEpisodes.length) return;
-
-    for (const episode of visibleEpisodes) {
-      prefetchEpisodePlayback(episode);
-    }
-  }, [
-    openSeries,
-    serverId,
-    seriesInfo.isLoading,
-    seriesInfo.isError,
-    visibleEpisodes,
-    prefetchEpisodePlayback,
-  ]);
 
   if (!serverId) {
     return (
@@ -914,7 +843,6 @@ export function Catalog({
                               key={episode.id}
                               episode={episode}
                               loading={loadingId === episode.id}
-                              onPrefetch={prefetchEpisodePlayback}
                               onActivate={activateEpisode}
                             />
                           ))}
@@ -1017,9 +945,8 @@ export function Catalog({
                               active={isActiveItem}
                               loading={loadingId === item.id}
                               priority={index < 4}
-                              onPrefetch={prefetchPlayback}
                               onActivate={activateCatalogItem}
-                              onHover={kind === "series" ? prefetchSeriesInfo : undefined}
+                              {...(kind === "series" ? { onHover: prefetchSeriesInfo } : {})}
                             />
                           );
                         })}
@@ -1114,6 +1041,7 @@ export function Catalog({
             <div className="space-y-2">
               <VideoPlayer
                 url={playing.url}
+                serverId={serverId}
                 poster={proxyMediaUrl(playing.icon, serverId) ?? playing.icon}
                 title={playing.name}
                 kind={kind}
