@@ -23,11 +23,18 @@ import {
 import { usePlayerSession } from "@/lib/player-store";
 import { getAdminAppConfig, updateAppConfig } from "@/lib/config.functions";
 import { getPlans, getPlansPage, savePlan, deletePlan } from "@/lib/plans.functions";
-import { listSupportThreadsPage, markThreadRead, listSupportMessagesPage } from "@/lib/chat.functions";
+import {
+  listSupportThreadsPage,
+  markThreadRead,
+  listSupportMessagesPage,
+  sendSupportOwnerMessage,
+  sendSupportAttachment,
+} from "@/lib/chat.functions";
 import {
   getSupportMessageTypeMeta,
   inferSupportMessageType,
 } from "@/lib/support-message.types";
+import { isAttachmentWithinLimit, isValidAttachmentType } from "@/lib/chat-policy";
 
 import { 
   Card, 
@@ -2725,6 +2732,10 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fetchMessagesPage = useServerFn(listSupportMessagesPage);
+  const mutationSendOwnerMessage = useServerFn(sendSupportOwnerMessage);
+  const mutationSendAttachment = useServerFn(sendSupportAttachment);
+  const pendingMessageIdRef = useRef<string | null>(null);
+  const pendingMessageContentRef = useRef<string | null>(null);
 
   const messagesQuery = useQuery({
     queryKey: ["support-messages-page", thread.id, messagesPage, messagesPageSize],
@@ -2789,44 +2800,31 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
 
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!newMessage.trim()) return;
+    const content = newMessage.trim();
+    if (!content || sending) return;
+
+    if (pendingMessageContentRef.current && pendingMessageContentRef.current !== content) {
+      pendingMessageIdRef.current = null;
+      pendingMessageContentRef.current = null;
+    }
 
     setSending(true);
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const clientMessageId = pendingMessageIdRef.current ?? crypto.randomUUID();
+    pendingMessageIdRef.current = clientMessageId;
+    pendingMessageContentRef.current = content;
 
     try {
-      // Get attendant name from config
-      const { data: configData } = await supabase.from('app_config').select('config').maybeSingle();
-      const config = (configData?.config as any) || {};
-      const attendantName = config.support_attendant_name || "Suporte";
-
-      const { error } = await (supabase
-        .from('support_messages' as any)
-        .insert([{
-          thread_id: thread.id,
-          sender_id: session.user.id,
-          content: `${attendantName}: ${newMessage}`,
-          message_type: "support_reply",
-        }]) as any);
-
-      if (error) throw error;
-
-      // Update thread last message
-      await (supabase
-        .from('support_threads' as any)
-        .update({ 
-          last_message: newMessage, 
-          last_message_at: new Date().toISOString(),
-          unread_count_user: (thread.unread_count_user || 0) + 1
-        } as any)
-        .eq('id', thread.id) as any);
-
+      await mutationSendOwnerMessage({
+        data: { threadId: thread.id, content, clientMessageId },
+      });
+      pendingMessageIdRef.current = null;
+      pendingMessageContentRef.current = null;
       setNewMessage("");
       setMessagesPage(1);
-      queryClient.invalidateQueries({ queryKey: ["support-messages-page", thread.id] });
+      await queryClient.invalidateQueries({ queryKey: ["support-messages-page", thread.id] });
+      await queryClient.invalidateQueries({ queryKey: ["support-threads-page"] });
     } catch (err: any) {
-      toast.error("Erro ao enviar: " + err.message);
+      toast.error("Erro ao enviar: " + (err?.message || "falha desconhecida"));
     } finally {
       setSending(false);
     }
@@ -2836,40 +2834,42 @@ function ChatWindow({ thread, onClose }: { thread: any, onClose: () => void }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!isValidAttachmentType(file.type)) {
+      toast.error("Envie somente imagem ou áudio.");
+      e.target.value = "";
+      return;
+    }
+    if (!isAttachmentWithinLimit(file.size)) {
+      toast.error("O anexo deve ter no máximo 10 MB.");
+      e.target.value = "";
+      return;
+    }
+
     setSending(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `chat/${thread.id}/${fileName}`;
+      const extension = file.name.includes(".")
+        ? `.${file.name.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "")}`
+        : "";
+      const filePath = `chat/${thread.id}/${crypto.randomUUID()}${extension}`;
+      const fileType = file.type.startsWith("image/") ? "image" : "audio";
+      const clientMessageId = crypto.randomUUID();
 
       const { error: uploadError } = await supabase.storage
-        .from('chat-files-v2')
-        .upload(filePath, file);
-
+        .from("chat-files-v2")
+        .upload(filePath, file, { contentType: file.type, upsert: false });
       if (uploadError) throw uploadError;
 
-      const { data: signed, error: signErr } = await supabase.storage
-        .from('chat-files-v2')
-        .createSignedUrl(filePath, 60 * 60 * 24 * 365);
-      if (signErr) throw signErr;
-      const publicUrl = signed.signedUrl;
-
-      const fileType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('audio/') ? 'audio' : 'file';
-
-      const { data: { session } } = await supabase.auth.getSession();
-      await (supabase.from('support_messages' as any).insert([{
-        thread_id: thread.id,
-        sender_id: session?.user.id,
-        file_url: publicUrl,
-        file_type: fileType,
-        content: `Enviou um ${fileType}`,
-        message_type: "support_reply",
-      }]) as any);
-
+      await mutationSendAttachment({
+        data: { threadId: thread.id, path: filePath, fileType, clientMessageId },
+      });
       toast.success("Arquivo enviado!");
+      setMessagesPage(1);
+      await queryClient.invalidateQueries({ queryKey: ["support-messages-page", thread.id] });
+      await queryClient.invalidateQueries({ queryKey: ["support-threads-page"] });
     } catch (err: any) {
-      toast.error("Erro no upload: " + err.message);
+      toast.error("Erro no upload: " + (err?.message || "falha desconhecida"));
     } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
       setSending(false);
     }
   };
