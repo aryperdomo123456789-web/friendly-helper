@@ -64,3 +64,9 @@ Cada publicação deve seguir o procedimento versionado em `deploy/instructions.
 ## 6. Definição de pronto
 
 O player será reportado como **6/10** somente quando a matriz QoE registrar primeiro frame e `playing` em fonte autorizada, os gates de erro/recovery/portal forem aprovados e os indicadores de operação forem observados sem regressão. Até lá, a classificação correta é **“fundação técnica evoluída, reprodução ainda bloqueada pela origem”**.
+
+## Evidência adicional — primeiro frame real no build ativo
+
+Após o hotfix `d4192fd`, publicado no build com manifesto `9cc1d4322fa1841f5b1826f8341bb10b8bceb55d61331da16deeff54f2128124`, uma reprodução autorizada no Portal 3 atingiu `first_frame` em 8.431 ms e `playing` no mesmo instante, com cerca de 9,776 s de buffer e engine nativo. A origem respondeu HTTP 200 com playlist HLS e mídia MPEG-TS, e não houve `native_media_error`, `autoplay_blocked` ou exceção JavaScript. O fallback de formato estava disponível, porém não foi necessário nessa amostra.
+
+O caminho live de laboratório sobe para aproximadamente 5/10, mas a meta global 6/10 continua condicionada à repetição em mais de um portal, VOD, recovery, TTFF p50/p95, buffering sustentado, observação prolongada do worker e matriz mínima de dispositivos/navegadores. A evidência é positiva, não licença para vender fumaça.
