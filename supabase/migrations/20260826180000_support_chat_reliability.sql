@@ -23,6 +23,25 @@ alter table public.support_messages
   add constraint support_messages_client_message_id_length
   check (client_message_id is null or char_length(client_message_id) between 8 and 128);
 
+-- Mantém apenas a thread aberta mais recente por usuário. Nenhuma mensagem é removida.
+with ranked_open_threads as (
+  select id,
+         row_number() over (
+           partition by user_id
+           order by last_message_at desc, created_at desc, id desc
+         ) as thread_rank
+  from public.support_threads
+  where status = 'open'
+)
+update public.support_threads as thread
+set status = 'closed',
+    closed_at = coalesce(thread.closed_at, timezone('utc'::text, now())),
+    closed_by_role = coalesce(thread.closed_by_role, 'system'),
+    closure_prompt_at = null
+from ranked_open_threads ranked
+where ranked.id = thread.id
+  and ranked.thread_rank > 1;
+
 create unique index if not exists support_messages_sender_client_message_id_uidx
   on public.support_messages(sender_id, client_message_id)
   where sender_id is not null and client_message_id is not null;

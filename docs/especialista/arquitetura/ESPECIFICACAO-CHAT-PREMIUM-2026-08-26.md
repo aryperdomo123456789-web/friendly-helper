@@ -47,7 +47,7 @@ Nesta entrega, o inbox do owner recebeu prioridade, categoria, responsável, est
 | Realtime       | Reconexão, deduplicação de evento e estado de entrega                                                     | Fase posterior                                              |
 | Omnichannel    | E-mail, WhatsApp, automações externas e roteamento multicanal                                             | Fase posterior                                              |
 
-As migrations `20260826180000_support_chat_reliability.sql`, `20260826200000_support_chat_storage_hardening.sql` e `20260826201000_support_ticket_operations.sql` foram apenas versionadas nesta rodada. Elas não foram aplicadas na produção. Antes da aplicação, é obrigatório backup verificável, revisão do SQL, teste em ambiente isolado e plano de rollback.
+As migrations `20260826180000_support_chat_reliability.sql`, `20260826200000_support_chat_storage_hardening.sql` e `20260826201000_support_ticket_operations.sql` foram versionadas para o rollout. A migration de confiabilidade consolida, sem apagar mensagens, eventuais threads abertas duplicadas por usuário, preservando a mais recente antes de criar o índice único. Antes da aplicação, é obrigatório backup verificável, revisão do SQL, teste em ambiente isolado e plano de rollback.
 
 ## Fases posteriores
 
