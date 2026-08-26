@@ -37,6 +37,8 @@ Foram adicionados casos determinísticos à suíte `test:worker`: extensão TS, 
 
 O commit `8f93d37` foi publicado no GitHub e o mesmo build foi aplicado atomicamente no aaPanel. O manifesto anterior `26d33d34422f6df86c904ed491e36648ed3c184bd4cc971ad6452536db030688` ficou preservado para rollback. Readiness local e público passaram, e a observação adicional manteve os quatro processos online. Não houve nova reprodução após o deploy; primeiro frame, recovery e TTFF continuam gates pendentes.
 
+O commit `a815a64` adicionou uma tentativa única de formato alternativo quando live não informa extensão: HLS é usado primeiro e TS é tentado somente após falha fatal antes do primeiro frame. A troca destrói o engine anterior, limpa o elemento de mídia e emite `format_fallback`; o limite impede loop de retries. O build foi publicado no aaPanel com manifesto `d668c73130690a664a2375dd396f7daadf24285ee08283fa5c68b6c765699306`, com o manifesto `a0c8a40899eb8b2c466b1722091eacbc3bc2a8b5557eb7fb280c869f1a7efacc` preservado para rollback. Readiness e domínio público passaram após observação adicional. O worker, porém, chegou a aproximadamente 348 MiB nessa janela; continua online, mas exige acompanhamento de memória e reinícios antes de qualquer escala.
+
 ## 4. Etapas seguintes
 
 ### Etapa A — Formato e origem
