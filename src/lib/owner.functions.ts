@@ -7,6 +7,7 @@ import { clearServerCache, clearServerPlaylistCache, refreshServerCatalogCache }
 import { clearLocalImageCache } from "./server-media-cache.server";
 import { portalName } from "./portal-name";
 import type { Database } from "@/integrations/supabase/types";
+import { recordAdminAudit } from "./admin-audit.server";
 
 export const SYNTHETIC_EMAIL_DOMAIN = "iptv.local";
 
@@ -309,6 +310,20 @@ export const saveServer = createServerFn({ method: "POST" })
       console.error("Falha ao recarregar o cache do servidor", error);
     });
 
+    await recordAdminAudit({
+      actorUserId: context.userId,
+      action: "server.save",
+      entityType: "iptv_server",
+      entityId: serverId,
+      details: {
+        created: !data.id,
+        is_active: data.is_active,
+        sort_order: data.sort_order,
+        connection_capacity: data.connection_capacity ?? null,
+        bulk_action: data.bulk_action ?? "none",
+      },
+    });
+
     return { id: serverId };
   });
 
@@ -322,6 +337,12 @@ export const reorderServers = createServerFn({ method: "POST" })
     });
 
     if (error) throw error;
+    await recordAdminAudit({
+      actorUserId: context.userId,
+      action: "server.reorder",
+      entityType: "iptv_server",
+      details: { count: data.ids.length },
+    });
     return result;
   });
 
@@ -339,6 +360,12 @@ export const deleteServer = createServerFn({ method: "POST" })
       clearServerPlaylistCache(data.id),
       clearLocalImageCache(data.id),
     ]);
+    await recordAdminAudit({
+      actorUserId: context.userId,
+      action: "server.delete",
+      entityType: "iptv_server",
+      entityId: data.id,
+    });
     return { ok: true };
   });
 
@@ -487,6 +514,19 @@ export const createAccessUser = createServerFn({ method: "POST" })
       .from("user_server_access")
       .insert(data.server_ids.map((serverId) => ({ user_id: newUserId, server_id: serverId })));
 
+    await recordAdminAudit({
+      actorUserId: context.userId,
+      action: "user.create",
+      entityType: "profile",
+      entityId: newUserId,
+      targetUserId: newUserId,
+      details: {
+        max_connections: data.max_connections,
+        server_count: data.server_ids.length,
+        has_plan: Boolean(data.plan_id),
+      },
+    });
+
     return { id: newUserId };
   });
 
@@ -550,6 +590,22 @@ export const updateAccessUser = createServerFn({ method: "POST" })
     if (!data.is_active) {
       await supabaseAdmin.from("device_sessions").delete().eq("user_id", data.id);
     }
+
+    await recordAdminAudit({
+      actorUserId: context.userId,
+      action: "user.update",
+      entityType: "profile",
+      entityId: data.id,
+      targetUserId: data.id,
+      details: {
+        max_connections: data.max_connections,
+        is_active: data.is_active,
+        server_count: data.server_ids.length,
+        password_changed: Boolean(data.password),
+        plan_provided: data.plan_id !== undefined,
+      },
+    });
+
     return { ok: true };
   });
 
@@ -562,6 +618,13 @@ export const deleteAccessUser = createServerFn({ method: "POST" })
     await assertNotOwnerAccount(supabaseAdmin, data.id);
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.id);
     if (error) throw error;
+    await recordAdminAudit({
+      actorUserId: context.userId,
+      action: "user.delete",
+      entityType: "profile",
+      entityId: data.id,
+      targetUserId: data.id,
+    });
     return { ok: true };
   });
 
@@ -572,5 +635,12 @@ export const kickDevices = createServerFn({ method: "POST" })
     await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin.from("device_sessions").delete().eq("user_id", data.id);
+    await recordAdminAudit({
+      actorUserId: context.userId,
+      action: "user.kick_devices",
+      entityType: "device_sessions",
+      targetUserId: data.id,
+      details: { all_devices: true },
+    });
     return { ok: true };
   });
