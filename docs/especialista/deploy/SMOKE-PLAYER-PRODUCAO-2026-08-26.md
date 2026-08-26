@@ -58,3 +58,9 @@ A arquitetura, os critérios e as referências oficiais utilizadas estão em [Es
 O commit `07b2964` ajustou exclusivamente `src/components/player/VideoPlayer.tsx`: o erro nativo encerra o loading, impede que a rejeição de `play()` seja registrada como autoplay quando já existe erro de mídia e remove o handler JSX duplicado. Prettier, os 20 testes determinísticos de worker/player, lint direcionado e build sanitizado passaram. O typecheck global continua com falhas preexistentes em rotas, schema gerado e outros componentes fora do escopo desta correção; não foi introduzida migration nem alteração de contrato.
 
 Após a publicação, a conta laboratorial permaneceu autenticada no Portal 2, o catálogo renderizou 20 itens e a reprodução final confirmou o comportamento de erro controlado. A ausência de primeiro frame continua bloqueada pela origem/proxy e não foi mascarada pelo hotfix.
+
+## Adendo — observabilidade do upstream
+
+O commit `5d62afd` adicionou logs estruturados e sanitizados ao caminho principal/player do stream e passou a carregar no token cifrado somente uma referência interna do servidor para correlação. O manifesto do build publicado foi `26d33d34422f6df86c904ed491e36648ed3c184bd4cc971ad6452536db030688`, substituindo o manifesto `2898c3087bdc9dee63fe0d1709c9ae1a8a70808b6c0c7350794177285f0a1555`; o rollback permanece preservado.
+
+Os quatro processos ficaram online, os health checks locais de main/player/payments responderam 200 e o domínio público respondeu 200 após 60+ segundos. A conta QA foi deslogada e não foi feita nova reprodução após esse deploy; portanto, os novos campos de upstream aguardam a próxima tentativa autorizada de playback para revelar o status e o tipo de conteúdo devolvido pela origem.
