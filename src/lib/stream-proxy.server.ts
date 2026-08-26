@@ -20,6 +20,7 @@ type TokenPayload = {
   u: string; // upstream absolute URL
   e: number; // expiry (epoch seconds)
   s?: string; // subject (user id) — audit binding only
+  r?: string; // internal server reference for sanitized observability
 };
 
 function b64urlFromBytes(bytes: Uint8Array): string {
@@ -57,12 +58,13 @@ async function aesKey(): Promise<CryptoKey> {
 
 export async function signStreamUrl(
   target: string,
-  options: { ttlSeconds?: number; subject?: string } = {},
+  options: { ttlSeconds?: number; subject?: string; reference?: string } = {},
 ): Promise<string> {
   const payload: TokenPayload = {
     u: target,
     e: Math.floor(Date.now() / 1000) + (options.ttlSeconds ?? DEFAULT_TTL_SECONDS),
     ...(options.subject ? { s: options.subject } : {}),
+    ...(options.reference ? { r: options.reference } : {}),
   };
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipher = new Uint8Array(
@@ -80,7 +82,7 @@ export async function signStreamUrl(
 
 export async function readStreamToken(
   token: string | null,
-): Promise<{ url: string; expiresAt: number; subject?: string } | null> {
+): Promise<{ url: string; expiresAt: number; subject?: string; reference?: string } | null> {
   if (!token || token.length > 4096) return null;
   try {
     const packed = bytesFromB64url(token);
@@ -100,6 +102,7 @@ export async function readStreamToken(
       url: payload.u,
       expiresAt: payload.e,
       ...(payload.s ? { subject: payload.s } : {}),
+      ...(payload.r ? { reference: payload.r } : {}),
     };
   } catch {
     return null;
@@ -118,7 +121,7 @@ export function looksLikePlaylist(contentType: string, body: string): boolean {
 export async function rewritePlaylist(
   body: string,
   baseUrl: string,
-  options: { ttlSeconds?: number; subject?: string } = {},
+  options: { ttlSeconds?: number; subject?: string; reference?: string } = {},
 ): Promise<string> {
   const lines = body.split(/\r?\n/);
   const out: string[] = [];

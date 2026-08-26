@@ -1,4 +1,10 @@
 import { readStreamToken, looksLikePlaylist, rewritePlaylist } from "@/lib/stream-proxy.server";
+import {
+  hashStreamReference,
+  logStreamUpstream,
+  sanitizeContentType,
+} from "@/lib/stream-observability";
+import type { StreamUpstreamOutcome } from "@/lib/stream-observability";
 import { isMainModule, startFetchService } from "@/lib/node-fetch-server.server";
 
 type PlayerServiceEntry = {
@@ -34,6 +40,23 @@ const playerService = {
       const target = token.url;
       const range = request.headers.get("range");
       const expectsHls = url.searchParams.get("hls") === "1" || target.includes(".m3u8");
+      const serverRef = await hashStreamReference(token.reference);
+      const startedAt = Date.now();
+      let attempts = 0;
+      const finish = (
+        outcome: StreamUpstreamOutcome["outcome"],
+        details: Partial<Pick<StreamUpstreamOutcome, "status" | "contentType" | "reason">> = {},
+      ) => {
+        logStreamUpstream({
+          service: "player",
+          serverRef,
+          outcome,
+          attempts,
+          elapsedMs: Date.now() - startedAt,
+          expectsHls,
+          ...details,
+        });
+      };
       const requestSignal = request.signal;
 
       const attemptFetch = async (): Promise<Response | null> => {
@@ -45,18 +68,18 @@ const playerService = {
         } else {
           requestSignal.addEventListener("abort", abortForwarded, { once: true });
         }
-          try {
-            return await fetch(target, {
-              redirect: "follow",
-              signal: controller.signal,
-              headers: {
-                "User-Agent": "VLC/3.0.21 LibVLC/3.0.21",
-                "Accept-Encoding": "identity",
-                "Icy-MetaData": "1",
-                Accept: "*/*",
-                ...(range ? { Range: range } : {}),
-              },
-            });
+        try {
+          return await fetch(target, {
+            redirect: "follow",
+            signal: controller.signal,
+            headers: {
+              "User-Agent": "VLC/3.0.21 LibVLC/3.0.21",
+              "Accept-Encoding": "identity",
+              "Icy-MetaData": "1",
+              Accept: "*/*",
+              ...(range ? { Range: range } : {}),
+            },
+          });
         } catch {
           return null;
         } finally {
@@ -67,16 +90,17 @@ const playerService = {
 
       let upstream: Response | null = null;
       for (let attempt = 0; attempt < 4; attempt += 1) {
+        attempts = attempt + 1;
         if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
         upstream = await attemptFetch();
 
         if (upstream && (upstream.status === 301 || upstream.status === 302)) {
-            const location = upstream.headers.get("location");
-            if (location) {
-              const redirectRes = await fetch(location, {
-                signal: requestSignal,
-                headers: {
-                  "User-Agent": "VLC/3.0.21 LibVLC/3.0.21",
+          const location = upstream.headers.get("location");
+          if (location) {
+            const redirectRes = await fetch(location, {
+              signal: requestSignal,
+              headers: {
+                "User-Agent": "VLC/3.0.21 LibVLC/3.0.21",
                 Accept: "*/*",
               },
             });
@@ -92,6 +116,7 @@ const playerService = {
       }
 
       if (!upstream) {
+        finish("fetch_exhausted", { reason: "no_upstream_response" });
         return expectsHls ? unavailableHlsResponse() : unavailableMediaResponse();
       }
 
@@ -99,6 +124,11 @@ const playerService = {
       const baseUrl = upstream.url || target;
 
       if (!upstream.ok && upstream.status !== 206) {
+        finish("http_error", {
+          status: upstream.status,
+          contentType: sanitizeContentType(contentType),
+          reason: "upstream_non_success",
+        });
         if (expectsHls) {
           await upstream.body?.cancel().catch(() => undefined);
           return unavailableHlsResponse();
@@ -117,11 +147,21 @@ const playerService = {
           const rewritten = await rewritePlaylist(body, baseUrl, {
             ttlSeconds,
             ...(token.subject ? { subject: token.subject } : {}),
+            ...(token.reference ? { reference: token.reference } : {}),
           });
           const headers = new Headers(SECURITY_HEADERS);
           headers.set("content-type", "application/vnd.apple.mpegurl");
+          finish("playlist_rewritten", {
+            status: upstream.status,
+            contentType: sanitizeContentType(contentType),
+          });
           return new Response(rewritten, { status: 200, headers });
         }
+        finish("playlist_invalid", {
+          status: upstream.status,
+          contentType: sanitizeContentType(contentType),
+          reason: "playlist_signature_missing",
+        });
         return unavailableHlsResponse();
       }
 
@@ -132,9 +172,13 @@ const playerService = {
         if (value) headers.set(key, value);
       }
 
+      finish("media_forwarded", {
+        status: upstream.status,
+        contentType: sanitizeContentType(contentType),
+      });
       return new Response(upstream.body, { status: upstream.status, headers });
-    } catch (error) {
-      console.error("Player service failed", error);
+    } catch {
+      console.error("Player service failed: sanitized handler error");
       return unavailableMediaResponse();
     }
   },

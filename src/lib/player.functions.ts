@@ -607,7 +607,11 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
     const playbackTtlSeconds = 24 * 60 * 60;
     // Proxied through our own origin: the panels only serve plain HTTP and the
     // browser refuses mixed content on an HTTPS page.
-    const proxied = await signStreamUrl(direct, { subject: context.userId, ttlSeconds: playbackTtlSeconds });
+    const proxied = await signStreamUrl(direct, {
+      subject: context.userId,
+      reference: data.server_id,
+      ttlSeconds: playbackTtlSeconds,
+    });
     const isHls = direct.endsWith(".m3u8") || direct.includes("m3u8");
     // For live channels, force HLS mode if the URL structure suggests it
     const forceHls = data.kind === "live" && !direct.includes("ext=ts");

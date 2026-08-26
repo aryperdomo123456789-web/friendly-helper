@@ -1,5 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { proxyToInternalService } from "@/lib/internal-service-proxy.server";
+import {
+  hashStreamReference,
+  logStreamUpstream,
+  sanitizeContentType,
+} from "@/lib/stream-observability";
+import { readStreamToken } from "@/lib/stream-proxy.server";
 
 // Public because <video>/hls.js cannot attach an Authorization header.
 // Security model: the querystring carries ONLY an AES-256-GCM ciphertext produced
@@ -9,19 +15,47 @@ export const Route = createFileRoute("/api/public/stream")({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        const url = new URL(request.url);
         const playerServiceUrl = process.env["STREAM_SERVICE_URL"];
         if (playerServiceUrl) {
+          const startedAt = Date.now();
+          const token = await readStreamToken(url.searchParams.get("s"));
+          const serverRef = await hashStreamReference(token?.reference);
+          const expectsHls =
+            url.searchParams.get("hls") === "1" || Boolean(token?.url.includes(".m3u8"));
           try {
-            return await proxyToInternalService(request, playerServiceUrl);
-          } catch (error) {
-            console.error("Falha ao encaminhar a rota de stream para o player dedicado", error);
+            const response = await proxyToInternalService(request, playerServiceUrl);
+            logStreamUpstream({
+              service: "main",
+              serverRef,
+              outcome:
+                response.status >= 200 && response.status < 400
+                  ? "upstream_response"
+                  : "http_error",
+              status: response.status,
+              contentType: sanitizeContentType(response.headers.get("content-type")),
+              attempts: 1,
+              elapsedMs: Date.now() - startedAt,
+              expectsHls,
+              reason: "internal_player_response",
+            });
+            return response;
+          } catch {
+            console.error("Falha ao encaminhar a rota de stream para o player dedicado");
+            logStreamUpstream({
+              service: "main",
+              serverRef,
+              outcome: "handler_error",
+              status: null,
+              attempts: 1,
+              elapsedMs: Date.now() - startedAt,
+              expectsHls,
+              reason: "internal_player_unreachable",
+            });
           }
         }
 
-        const { readStreamToken, looksLikePlaylist, rewritePlaylist } = await import(
-          "@/lib/stream-proxy.server"
-        );
-        const url = new URL(request.url);
+        const { looksLikePlaylist, rewritePlaylist } = await import("@/lib/stream-proxy.server");
         const token = await readStreamToken(url.searchParams.get("s"));
         if (!token) return new Response("Token inválido ou expirado.", { status: 403 });
 
@@ -67,7 +101,7 @@ export const Route = createFileRoute("/api/public/stream")({
         for (let attempt = 0; attempt < 4; attempt += 1) {
           if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
           upstream = await attemptFetch();
-          
+
           // Check for redirect manually if 'follow' is acting up in Worker environment
           if (upstream && (upstream.status === 301 || upstream.status === 302)) {
             const location = upstream.headers.get("location");
@@ -75,17 +109,18 @@ export const Route = createFileRoute("/api/public/stream")({
               // Follow the redirect manually once
               const redirectRes = await fetch(location, {
                 signal: requestSignal,
-                 headers: { "User-Agent": "VLC/3.0.21 LibVLC/3.0.21", Accept: "*/*" }
-               });
-               if (redirectRes.ok || redirectRes.status === 206) {
-                 upstream = redirectRes;
-                 break;
-               }
+                headers: { "User-Agent": "VLC/3.0.21 LibVLC/3.0.21", Accept: "*/*" },
+              });
+              if (redirectRes.ok || redirectRes.status === 206) {
+                upstream = redirectRes;
+                break;
+              }
             }
           }
 
-          if (upstream && (upstream.ok || upstream.status === 206 || upstream.status === 404)) break;
-          
+          if (upstream && (upstream.ok || upstream.status === 206 || upstream.status === 404))
+            break;
+
           await upstream?.body?.cancel().catch(() => undefined);
         }
 
@@ -93,7 +128,6 @@ export const Route = createFileRoute("/api/public/stream")({
           if (expectsHls) return unavailableHlsResponse();
           return unavailableMediaResponse();
         }
-
 
         const contentType = upstream.headers.get("content-type") ?? "";
         const baseUrl = upstream.url || target;
@@ -122,6 +156,7 @@ export const Route = createFileRoute("/api/public/stream")({
             const rewritten = await rewritePlaylist(body, baseUrl, {
               ttlSeconds,
               ...(token.subject ? { subject: token.subject } : {}),
+              ...(token.reference ? { reference: token.reference } : {}),
             });
             const headers = baseSecurityHeaders();
             headers.set("content-type", "application/vnd.apple.mpegurl");
