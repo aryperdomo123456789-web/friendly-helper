@@ -58,7 +58,10 @@ async function checkHttpService(service) {
   try {
     const response = await fetch(service.url, {
       signal: AbortSignal.timeout(5_000),
-      headers: { accept: "application/json,text/plain" },
+      headers:
+        service.name === "main"
+          ? { accept: "text/html,application/xhtml+xml" }
+          : { accept: "application/json,text/plain" },
     });
     return {
       name: service.name,
