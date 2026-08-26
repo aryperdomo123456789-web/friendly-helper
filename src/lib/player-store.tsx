@@ -11,7 +11,13 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getCategories, getMySession, heartbeat } from "@/lib/player.functions";
-import { getDeviceId, SERVER_KEY } from "@/lib/device";
+import { getDeviceId } from "@/lib/device";
+import {
+  getServerSelectionStorageKey,
+  isPlayerQuery,
+  isServerScopedQuery,
+  resolveServerSelection,
+} from "@/lib/player-isolation";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -40,25 +46,18 @@ type SessionValue = {
 
 const SessionContext = createContext<SessionValue | null>(null);
 
-function isServerScopedQuery(queryKey: readonly unknown[], serverId: string) {
-  if (!Array.isArray(queryKey)) return false;
-  const [scope, second, third] = queryKey;
-  return (
-    (scope === "categories" || scope === "series-info" || scope === "epg") && second === serverId ||
-    (scope === "streams" || scope === "playback-url") && (second === serverId || third === serverId)
-  );
-}
-
 export function PlayerSessionProvider({ children }: { children: ReactNode }) {
   const fetchSession = useServerFn(getMySession);
   const ping = useServerFn(heartbeat);
   const fetchCategories = useServerFn(getCategories);
   const queryClient = useQueryClient();
+  const [authUserId, setAuthUserId] = useState<string | null>(null);
   const [serverId, setServerIdState] = useState<string | null>(null);
   const [blocked, setBlocked] = useState<string | null>(null);
   const catalogInvalidateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const warmedServersRef = useRef(new Set<string>());
   const warmingServersRef = useRef(new Set<string>());
+  const previousAuthUserIdRef = useRef<string | null>(null);
 
   const scheduleCatalogInvalidation = () => {
     if (catalogInvalidateTimer.current) {
@@ -73,28 +72,69 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
     }, 600);
   };
 
+  useEffect(() => {
+    let mounted = true;
+    void supabase.auth.getSession().then(({ data: sessionData }) => {
+      if (mounted) setAuthUserId(sessionData.session?.user.id ?? null);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUserId(session?.user.id ?? null);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
   const { data, isLoading } = useQuery({
-    queryKey: ["player-session"],
+    queryKey: ["player-session", authUserId],
     queryFn: () => fetchSession(),
     staleTime: 60_000,
+    enabled: authUserId !== null,
   });
 
   const servers: ServerRow[] = data?.servers ?? [];
 
   useEffect(() => {
-    if (servers.length === 0) return;
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem(SERVER_KEY) : null;
-    const valid = servers.find((server: ServerRow) => server.id === stored)?.id ?? servers[0]!.id;
-    setServerIdState((current) => {
-      if (!current) return valid;
-      return servers.some((server: ServerRow) => server.id === current) ? current : valid;
-    });
-  }, [servers]);
+    const previousAuthUserId = previousAuthUserIdRef.current;
+    if (previousAuthUserId === authUserId) return;
+
+    if (previousAuthUserId !== null) {
+      void queryClient.cancelQueries({ predicate: (query) => isPlayerQuery(query.queryKey) });
+      queryClient.removeQueries({ predicate: (query) => isPlayerQuery(query.queryKey) });
+      warmedServersRef.current.clear();
+      warmingServersRef.current.clear();
+      setServerIdState(null);
+      setBlocked(null);
+    }
+    previousAuthUserIdRef.current = authUserId;
+  }, [authUserId, queryClient]);
+
+  useEffect(() => {
+    if (!authUserId || servers.length === 0) {
+      setServerIdState(null);
+      return;
+    }
+
+    const storageKey = getServerSelectionStorageKey(authUserId);
+    const stored = storageKey ? window.localStorage.getItem(storageKey) : null;
+    const valid = resolveServerSelection(servers, stored);
+    setServerIdState((current) =>
+      current && servers.some((server) => server.id === current) ? current : valid,
+    );
+  }, [authUserId, servers]);
 
   const warmServerCatalog = useCallback(
     async (targetServerId: string) => {
       if (!targetServerId) return;
-      if (warmingServersRef.current.has(targetServerId) || warmedServersRef.current.has(targetServerId)) {
+      if (
+        warmingServersRef.current.has(targetServerId) ||
+        warmedServersRef.current.has(targetServerId)
+      ) {
         return;
       }
 
@@ -130,20 +170,12 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const channel = supabase
       .channel("player_session_realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "iptv_servers" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["player-session"] });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "user_server_access" },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["player-session"] });
-        },
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "iptv_servers" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["player-session"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_server_access" }, () => {
+        queryClient.invalidateQueries({ queryKey: ["player-session"] });
+      })
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "iptv_server_cache" },
@@ -180,7 +212,7 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
   }, [queryClient, serverId]);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || !authUserId) return;
     let cancelled = false;
     const send = async () => {
       try {
@@ -207,13 +239,13 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [isLoading, ping, serverId]);
+  }, [authUserId, isLoading, ping, serverId]);
 
   const value = useMemo<SessionValue>(
     () => ({
       loading: isLoading,
       isOwner: Boolean(data?.isOwner),
-      authUserId: (data as any)?.authUserId ?? null,
+      authUserId,
       profile: (data?.profile as SessionValue["profile"]) ?? null,
       servers,
       serverId,
@@ -222,9 +254,16 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
         void warmServerCatalog(id);
       },
       setServerId: (id: string) => {
+        const selectedServer = servers.find((server: ServerRow) => server.id === id);
+        if (!selectedServer) {
+          setBlocked("Servidor não autorizado para este acesso.");
+          return;
+        }
+
         const previousServerId = serverId;
         setServerIdState(id);
-        window.localStorage.setItem(SERVER_KEY, id);
+        const storageKey = getServerSelectionStorageKey(authUserId);
+        if (storageKey) window.localStorage.setItem(storageKey, id);
         if (previousServerId && previousServerId !== id) {
           void queryClient.cancelQueries({
             predicate: (query) => isServerScopedQuery(query.queryKey, previousServerId),
@@ -233,12 +272,12 @@ export function PlayerSessionProvider({ children }: { children: ReactNode }) {
             predicate: (query) => isServerScopedQuery(query.queryKey, previousServerId),
           });
         }
-        toast.success(`Servidor ativo: ${servers.find((s: ServerRow) => s.id === id)?.name ?? ""}`);
+        toast.success(`Servidor ativo: ${selectedServer.name}`);
       },
       blocked,
       expired: Boolean(data?.expired),
     }),
-    [blocked, data, isLoading, queryClient, serverId, servers, warmServerCatalog],
+    [authUserId, blocked, data, isLoading, queryClient, serverId, servers, warmServerCatalog],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
