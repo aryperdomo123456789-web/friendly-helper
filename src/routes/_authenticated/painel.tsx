@@ -21,7 +21,7 @@ import {
   deleteTestLink
 } from "@/lib/test-links.functions";
 import { usePlayerSession } from "@/lib/player-store";
-import { updateAppConfig } from "@/lib/config.functions";
+import { getAdminAppConfig, updateAppConfig } from "@/lib/config.functions";
 import { getPlans, getPlansPage, savePlan, deletePlan } from "@/lib/plans.functions";
 import { listSupportThreadsPage, markThreadRead, listSupportMessagesPage } from "@/lib/chat.functions";
 import {
@@ -144,7 +144,7 @@ function PainelDono() {
   const mutationDeleteUser = useServerFn(deleteAccessUser);
   const mutationKick = useServerFn(kickDevices);
   const mutationTest = useServerFn(testServerConnection);
-  const fetchConfig = useServerFn(getAppConfig);
+  const fetchConfig = useServerFn(getAdminAppConfig);
   const mutationSaveConfig = useServerFn(updateAppConfig);
   const fetchTestLinksPage = useServerFn(listTestLinksPage);
   const mutationSaveTestLink = useServerFn(saveTestLink);

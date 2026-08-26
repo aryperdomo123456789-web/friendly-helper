@@ -15,8 +15,23 @@ export const simulatePaymentSuccess = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: roles, error: rolesError } = await context.supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .in("role", ["owner", "admin"])
+      .limit(1);
+
+    if (rolesError) throw new Error(rolesError.message);
+    const isAdmin = (roles ?? []).length > 0;
+    if (process.env["NODE_ENV"] === "production" && !isAdmin) {
+      throw new Error("Simulação de pagamento desabilitada em produção.");
+    }
+    if (!isAdmin && data.userId !== context.userId) {
+      throw new Error("Você só pode simular o pagamento da própria conta.");
+    }
 
     // Buscar perfil para ver indicação
     const { data: userProfile } = await supabaseAdmin

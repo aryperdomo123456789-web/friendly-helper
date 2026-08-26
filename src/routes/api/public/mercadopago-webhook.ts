@@ -5,9 +5,9 @@ import { resolveReferralSourceSlug } from "@/lib/referral";
 import { ensureUserReferralCode } from "@/lib/referral-code";
 import { proxyToInternalService } from "@/lib/internal-service-proxy.server";
 import {
+  claimApprovedPayment,
   recordAuditLog,
   recordPaymentEvent,
-  upsertPaymentRecord,
 } from "@/lib/payments-tracking.functions";
 
 function validateMercadoPagoSignature(params: {
@@ -17,7 +17,7 @@ function validateMercadoPagoSignature(params: {
   secret: string | null | undefined;
 }): boolean {
   const { signature, requestId, dataId, secret } = params;
-  if (!secret) return true;
+  if (!secret) return false;
   if (!signature) return false;
 
   const parts = new Map(
@@ -62,7 +62,6 @@ export const Route = createFileRoute("/api/public/mercadopago-webhook")({
 
         try {
           const body = await request.json();
-          console.log("Webhook do Mercado Pago recebido:", body);
 
           const url = new URL(request.url);
           const dataId = url.searchParams.get("data.id") ?? body?.data?.id ?? null;
@@ -76,12 +75,19 @@ export const Route = createFileRoute("/api/public/mercadopago-webhook")({
             .single();
           const config = configRow?.config as any;
 
+          const webhookSecret =
+            typeof config?.mp_webhook_secret === "string" ? config.mp_webhook_secret.trim() : "";
+          if (!webhookSecret) {
+            console.error("Segredo do webhook do Mercado Pago não configurado");
+            return new Response("Webhook não configurado", { status: 503 });
+          }
+
           if (
             !validateMercadoPagoSignature({
               signature,
               requestId,
               dataId,
-              secret: config?.mp_webhook_secret,
+              secret: webhookSecret,
             })
           ) {
             console.error("Assinatura inválida do webhook do Mercado Pago");
@@ -135,49 +141,50 @@ export const Route = createFileRoute("/api/public/mercadopago-webhook")({
                 newExpiry.setTime(newExpiry.getTime() + msToAdd);
 
                 const paymentReceivedAt = new Date().toISOString();
-                try {
-                  const paymentRecord = await upsertPaymentRecord({
-                    user_id: userId,
-                    plan_id: planId,
+                const paymentId = String(payment.id ?? dataId);
+                const claim = await claimApprovedPayment({
+                  user_id: userId,
+                  plan_id: planId,
+                  provider: "mercadopago",
+                  provider_payment_id: paymentId,
+                  provider_preference_id: payment.preference_id ?? payment.preferenceId ?? null,
+                  external_reference: payment.external_reference,
+                  status: "approved",
+                  amount: Number(payment.transaction_amount ?? plan.price ?? 0),
+                  currency: String(payment.currency_id ?? "BRL"),
+                  webhook_payload: payment,
+                  webhook_received_at: paymentReceivedAt,
+                  approved_at: paymentReceivedAt,
+                });
+
+                await recordPaymentEvent({
+                  payment_id: claim.payment.id,
+                  event_type: claim.shouldApply ? "payment.approved" : "payment.approved.duplicate",
+                  payload: {
+                    provider_payment_id: paymentId,
                     provider: "mercadopago",
-                    provider_payment_id: String(payment.id ?? dataId),
+                  },
+                });
+
+                await recordAuditLog({
+                  actor_user_id: userId,
+                  target_user_id: userId,
+                  action: claim.shouldApply ? "payment.approved" : "payment.approved.duplicate",
+                  entity_type: "payment",
+                  entity_id: claim.payment.id,
+                  details: {
+                    planId,
+                    provider: "mercadopago",
+                    provider_payment_id: paymentId,
                     provider_preference_id: payment.preference_id ?? payment.preferenceId ?? null,
-                    external_reference: payment.external_reference,
-                    status: "approved",
                     amount: Number(payment.transaction_amount ?? plan.price ?? 0),
                     currency: String(payment.currency_id ?? "BRL"),
-                    webhook_payload: payment,
-                    webhook_received_at: paymentReceivedAt,
-                    approved_at: paymentReceivedAt,
-                  });
+                  },
+                  source: "mercadopago",
+                });
 
-                  if (paymentRecord?.id) {
-                    await recordPaymentEvent({
-                      payment_id: paymentRecord.id,
-                      event_type: "payment.approved",
-                      payload: payment,
-                    });
-
-                    await recordAuditLog({
-                      actor_user_id: userId,
-                      target_user_id: userId,
-                      action: "payment.approved",
-                      entity_type: "payment",
-                      entity_id: paymentRecord.id,
-                      details: {
-                        planId,
-                        provider: "mercadopago",
-                        provider_payment_id: String(payment.id ?? dataId),
-                        provider_preference_id:
-                          payment.preference_id ?? payment.preferenceId ?? null,
-                        amount: Number(payment.transaction_amount ?? plan.price ?? 0),
-                        currency: String(payment.currency_id ?? "BRL"),
-                      },
-                      source: "mercadopago",
-                    });
-                  }
-                } catch (trackingError) {
-                  console.error("Falha ao registrar trilha do pagamento:", trackingError);
+                if (!claim.shouldApply) {
+                  return new Response("ok", { status: 200 });
                 }
 
                 await supabaseAdmin

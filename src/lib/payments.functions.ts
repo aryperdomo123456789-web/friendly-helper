@@ -3,18 +3,20 @@ import { createServerFn } from "@tanstack/react-start";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAppConfig, updateAppConfig } from "./config.functions";
+import { updateAppConfig } from "./config.functions";
 import { recordAuditLog, upsertPaymentRecord } from "./payments-tracking.functions";
 
 export const getMercadoPagoConfig = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async () => {
-    const config = await getAppConfig();
+  .handler(async ({ context }) => {
+    const { assertConfigAdmin, loadAppConfig } = await import("./config.server");
+    await assertConfigAdmin(context.supabase, context.userId);
+    const config = await loadAppConfig();
     return {
-      mp_access_token: (config as any).mp_access_token || "",
-      mp_public_key: (config as any).mp_public_key || "",
-      mp_webhook_secret: (config as any).mp_webhook_secret || "",
-      mp_enabled: (config as any).mp_enabled || false,
+      mp_access_token: config.mp_access_token || "",
+      mp_public_key: config.mp_public_key || "",
+      mp_webhook_secret: config.mp_webhook_secret || "",
+      mp_enabled: config.mp_enabled || false,
     };
   });
 
@@ -30,8 +32,10 @@ export const updateMercadoPagoConfig = createServerFn({ method: "POST" })
       })
       .parse(input),
   )
-  .handler(async ({ data }) => {
-    const config = await getAppConfig();
+  .handler(async ({ data, context }) => {
+    const { assertConfigAdmin, loadAppConfig } = await import("./config.server");
+    await assertConfigAdmin(context.supabase, context.userId);
+    const config = await loadAppConfig();
     await updateAppConfig({
       data: {
         ...config,
@@ -52,11 +56,26 @@ export const createPaymentPreference = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const config = (await getAppConfig()) as any;
+    const { loadAppConfig } = await import("./config.server");
+    const config = await loadAppConfig();
     const externalReference = JSON.stringify({ userId: context.userId, planId: data.planId });
 
-    // MODO TESTE: Se não houver token, permite ativação direta para teste de bonificação
+    // Em produção, somente owner/admin pode usar o modo de simulação.
     if (!config.mp_access_token || !config.mp_enabled) {
+      let isAdmin = false;
+      const { data: roles, error: rolesError } = await context.supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", context.userId)
+        .in("role", ["owner", "admin"])
+        .limit(1);
+
+      if (rolesError) throw new Error(rolesError.message);
+      isAdmin = (roles ?? []).length > 0;
+      if (process.env["NODE_ENV"] === "production" && !isAdmin) {
+        throw new Error("Pagamentos indisponíveis: o Mercado Pago não está configurado.");
+      }
+
       console.log("Modo de teste: simulando pagamento aprovado para validação do fluxo.");
       await recordAuditLog({
         actor_user_id: context.userId,

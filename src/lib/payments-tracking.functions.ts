@@ -150,3 +150,33 @@ export async function recordAuditLog(input: AuditLogInput) {
     return data;
   });
 }
+
+export async function claimApprovedPayment(input: PaymentRecordInput) {
+  if (!input.provider_payment_id) {
+    throw new Error("Pagamento aprovado sem identificador do provedor.");
+  }
+
+  const { data, error } = await (supabaseAdmin as any).rpc("claim_payment_approval", {
+    p_provider_payment_id: input.provider_payment_id,
+    p_provider_preference_id: input.provider_preference_id ?? null,
+    p_user_id: input.user_id,
+    p_plan_id: input.plan_id,
+    p_external_reference: input.external_reference ?? null,
+    p_amount: input.amount,
+    p_currency: input.currency ?? "BRL",
+    p_webhook_payload: input.webhook_payload ?? {},
+    p_webhook_received_at: input.webhook_received_at ?? null,
+    p_approved_at: input.approved_at ?? null,
+  });
+
+  if (error) throw error;
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.payment_id) {
+    throw new Error("A função de idempotência não retornou o pagamento.");
+  }
+
+  return {
+    payment: { id: String(row.payment_id) },
+    shouldApply: Boolean(row.should_apply),
+  };
+}
