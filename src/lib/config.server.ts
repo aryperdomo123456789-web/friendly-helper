@@ -2,11 +2,37 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getRequest } from "@tanstack/react-start/server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Database } from "@/integrations/supabase/types";
-import { AppConfigSchema } from "./types";
+import { AppConfigSchema, type AppConfig } from "./types";
 const DEFAULT_BRAND_IMAGE_URL = "/brand/webplayer-brand.png";
 
+type RuntimeProcess = {
+  env?: Record<string, string | undefined>;
+};
+
+function getRuntimeEnv(name: string): string | undefined {
+  const runtimeProcess = (globalThis as typeof globalThis & { process?: RuntimeProcess }).process;
+  return runtimeProcess?.env?.[name];
+}
+
+function applySandboxOverrides(config: AppConfig): AppConfig {
+  const sandboxEnabled =
+    getRuntimeEnv("NODE_ENV") !== "production" && getRuntimeEnv("MP_SANDBOX_MODE") === "true";
+  if (!sandboxEnabled) return config;
+
+  const sandboxToken = getRuntimeEnv("MP_SANDBOX_ACCESS_TOKEN")?.trim();
+  const sandboxPublicKey = getRuntimeEnv("MP_SANDBOX_PUBLIC_KEY")?.trim();
+  const sandboxWebhookSecret = getRuntimeEnv("MP_SANDBOX_WEBHOOK_SECRET")?.trim();
+
+  return AppConfigSchema.parse({
+    ...config,
+    ...(sandboxToken ? { mp_access_token: sandboxToken, mp_enabled: true } : null),
+    ...(sandboxPublicKey ? { mp_public_key: sandboxPublicKey } : null),
+    ...(sandboxWebhookSecret ? { mp_webhook_secret: sandboxWebhookSecret } : null),
+  });
+}
+
 export function mergeRuntimeConfig(config: unknown) {
-  const parsed = AppConfigSchema.parse(config);
+  const parsed = applySandboxOverrides(AppConfigSchema.parse(config));
   const request = getRequest();
   const host = request?.headers.get("x-forwarded-host") || request?.headers.get("host");
   const proto = request?.headers.get("x-forwarded-proto") || "https";
