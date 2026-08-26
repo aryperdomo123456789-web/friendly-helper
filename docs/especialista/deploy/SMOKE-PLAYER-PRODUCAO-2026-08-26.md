@@ -24,18 +24,18 @@ Os health checks internos responderam HTTP 200 para main, player e payments. O d
 
 ## 3. Evidências funcionais
 
-| Área | Evidência | Resultado |
-|---|---|---|
-| Login cliente | Conta laboratorial autenticou no domínio real e chegou a `/inicio`. | Aprovado |
-| Catálogo live | `/canais` renderizou filtros, paginação e seletor de portal. | Aprovado visualmente |
-| Catálogo filme | `/filmes` renderizou filtros e paginação. | Aprovado visualmente |
-| Conteúdo reproduzível | Conta laboratorial retornou zero itens no portal selecionado. | Não medido |
-| Séries | Rota apresentou acesso laboratorial suspenso e resposta upstream 502. | Não medido; bloqueio de dados |
-| Portais | Owner visualizou `Portal 1` a `Portal 7`, todos ativos. | Aprovado visualmente |
-| Capacidade | A UI exibiu capacidade não definida nos sete portais. | Pendência operacional |
-| Owner | `/painel` carregou após autenticação direta. | Aprovado |
-| Usuário comum | Tentativa de `/painel` não exibiu controles administrativos. | Aprovado |
-| Reprodução | Nenhum item disponível para clicar em Play. | Não certificado |
+| Área                  | Evidência                                                             | Resultado                     |
+| --------------------- | --------------------------------------------------------------------- | ----------------------------- |
+| Login cliente         | Conta laboratorial autenticou no domínio real e chegou a `/inicio`.   | Aprovado                      |
+| Catálogo live         | `/canais` renderizou filtros, paginação e seletor de portal.          | Aprovado visualmente          |
+| Catálogo filme        | `/filmes` renderizou filtros e paginação.                             | Aprovado visualmente          |
+| Conteúdo reproduzível | Conta laboratorial retornou zero itens no portal selecionado.         | Não medido                    |
+| Séries                | Rota apresentou acesso laboratorial suspenso e resposta upstream 502. | Não medido; bloqueio de dados |
+| Portais               | Owner visualizou `Portal 1` a `Portal 7`, todos ativos.               | Aprovado visualmente          |
+| Capacidade            | A UI exibiu capacidade não definida nos sete portais.                 | Pendência operacional         |
+| Owner                 | `/painel` carregou após autenticação direta.                          | Aprovado                      |
+| Usuário comum         | Tentativa de `/painel` não exibiu controles administrativos.          | Aprovado                      |
+| Reprodução            | Nenhum item disponível para clicar em Play.                           | Não certificado               |
 
 ## 4. Estabilidade observada
 
@@ -92,3 +92,9 @@ Após mais de 65 segundos do reload, o manifesto ativo permaneceu `9cc1d4322fa18
 Após login manual da conta QA comum, Portal 3 foi mantido como origem de laboratório e a validação foi executada em série, sem paralelismo. O catálogo live abriu 58 itens; uma reprodução live registrou `first_frame` em 3.931 s, `playing` em 3.932 s e um buffer curto de aproximadamente 33 ms. Um filme VOD respondeu HTTP 200 como `video/mp4` e registrou `first_frame`/`playing` em 10.705 s. Um episódio respondeu HTTP 200 como `video/mp4` e registrou `first_frame`/`playing` em 7.731 s. Não houve `startup_timeout`, `native_media_error`, `autoplay_blocked`, `player_initialization_error` ou `format_fallback` nas três tentativas; o caminho primário funcionou em todas.
 
 A matriz confirma live, filme e episódio em uma origem autorizada e mostra que o timeout não disparou indevidamente. Ainda não é a matriz completa de 20 tentativas nem prova multiportal: Portal 1 e Portal 2 mantêm falhas anteriores de origem, e o fallback TS ainda não foi forçado em runtime. A sessão comum foi encerrada e o navegador retornou ao login público.
+
+## Fixture isolado R1–R10
+
+Foi implementado e executado um fixture determinístico local usando o módulo real `createPlaybackTelemetry`. A matriz sequencial cobriu segmento live transitório, atraso de playlist, fallback HLS→TS, falha permanente, `startup_timeout`, retry manual, erro de decodificação, troca A→B→A, desmontagem/logout e VOD/episódio lento. Resultado: **10/10 cenários passaram**, sem porta pública, sem requisição a origem externa e sem tocar fontes de clientes.
+
+O fixture verificou cleanup, encerramento de loading, no máximo um fallback, retry em sessão nova, `recover_attempt`/`recover_success`, `fatal_error`, `destroyed` e ausência de `autoplay_blocked` falso. A matriz é evidência de contrato e política em ambiente determinístico; não substitui a mesma prova end-to-end em uma fonte autorizada real. O relatório sanitizado local foi gerado em `/home/ubuntu/player-recovery-matrix-2026-08-26.md`.
