@@ -27,8 +27,16 @@ Siga estes passos via SSH no seu servidor para colocar o projeto no ar na porta 
    - Sent Domain: $host
    - Ou se preferir editar o arquivo de configuração manualmente, use o modelo em `deploy/nginx.conf`.
 
-6. **Verificação:**
-   - Verifique os logs do PM2: `pm2 logs stream-mago-bot`
-   - Teste o acesso via: http://stream.mago-bot.com
+6. **Readiness e verificação:**
+   - Depois de um reload, não use um atraso fixo curto como único check. Execute o readiness com polling:
+     `node scripts/check-release-readiness.mjs 60000 2000`
+   - O check valida a aplicação principal em `127.0.0.1:6873/`, player em `/healthz`, payments em `/healthz` e os quatro processos no PM2.
+   - Verifique os logs do PM2 sem imprimir `.env`: `pm2 logs stream-mago-bot --lines 100`
+   - Teste o acesso via HTTPS: `curl -k -I https://stream.mago-bot.com/`
 
-DICA: Certifique-se de que a porta 6873 está aberta no Firewall do aaPanel e do provedor (ex: AWS, Google, Oracle).
+7. **Rollback:**
+   - Preserve o `.output` anterior com nome versionado antes da troca atômica.
+   - Em caso de falha do readiness, restaure o diretório `.output` anterior e recarregue individualmente `stream-mago-bot`, `stream-mago-bot-player`, `stream-mago-bot-payments` e `stream-mago-bot-worker`.
+   - Não use `git reset --hard`, force push, exclusão de histórico ou remoção de `.env`, `storage`, `.storage`, playlists e logs.
+
+DICA: As portas internas devem permanecer ligadas a `127.0.0.1`; o acesso público deve passar pelo Nginx/HTTPS. Não abra 6873, 6874 ou 6875 diretamente no firewall sem necessidade operacional.
