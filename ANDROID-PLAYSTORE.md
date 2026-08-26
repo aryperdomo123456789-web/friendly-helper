@@ -1,4 +1,4 @@
-# Guia: Transformando o WebPlayer em Aplicativo Android (Play Store)
+# Guia: Transformando o MAGOPLAYERPRO em Aplicativo Android (Play Store)
 
 Sim, é perfeitamente possível transformar este sistema em um aplicativo nativo para a Google Play Store usando o **Capacitor**.
 
@@ -7,14 +7,14 @@ O Capacitor é uma ponte que permite rodar sua aplicação web (React/TanStack) 
 
 ## 2. Passo a Passo para Conversão
 
-### A. Preparação do WebPlayer
+### A. Preparação do MAGOPLAYERPRO
 O código atual já é 100% responsivo, o que é o requisito número 1.
 
 ### B. Instalação do Capacitor
 No terminal do seu projeto (após transferir para sua máquina/VPS):
 ```bash
 npm install @capacitor/core @capacitor/cli @capacitor/android
-npx cap init WebPlayer com.seuapp.iptv
+npx cap init MAGOPLAYERPRO com.seuapp.iptv
 ```
 
 ### C. Build e Sincronização

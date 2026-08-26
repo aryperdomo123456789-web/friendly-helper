@@ -1,35 +1,70 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlayerSession } from "@/lib/player-store";
 import {
-  listSupportThreads,
+  listSupportThreadsPage,
+  listMySupportThreads,
   markThreadRead,
   getOrCreateThread,
   sendSupportMessage,
+  listSupportMessagesPage,
+  closeSupportThread,
+  respondToClosurePrompt,
+  submitSupportSatisfaction,
+  getSupportStats,
 } from "@/lib/chat.functions";
 import {
+  getSupportMessageTypeMeta,
+  inferSupportMessageType,
+} from "@/lib/support-message.types";
+import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   X,
   MessageSquare,
   Send,
   Image as ImageIcon,
+  ShieldCheck,
+  Star,
+  Clock3,
+  BadgeCheck,
+  History,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { UserPageShell } from "@/components/user-shell/user-page-shell";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/_authenticated/suporte")({
   head: () => ({
     meta: [
-      { title: "Suporte Técnico | WebPlayer IPTV" },
+      { title: "Suporte Técnico" },
       { name: "description", content: "Atendimento ao cliente em tempo real." },
     ],
   }),
@@ -39,17 +74,44 @@ export const Route = createFileRoute("/_authenticated/suporte")({
 function SuportePage() {
   const { isOwner, profile, authUserId } = usePlayerSession();
   const queryClient = useQueryClient();
-  const fetchThreads = useServerFn(listSupportThreads);
+  const fetchThreadsPage = useServerFn(listSupportThreadsPage);
+  const fetchMyThreads = useServerFn(listMySupportThreads);
   const mutationMarkRead = useServerFn(markThreadRead);
   const fetchOrCreateThread = useServerFn(getOrCreateThread);
-  const mutationSendSupport = useServerFn(sendSupportMessage);
+  const mutationCloseThread = useServerFn(closeSupportThread);
+  const mutationRespondClosePrompt = useServerFn(respondToClosurePrompt);
+  const mutationSubmitSatisfaction = useServerFn(submitSupportSatisfaction);
+  const fetchSupportStats = useServerFn(getSupportStats);
+  const [threadsPage, setThreadsPage] = useState(1);
+  const threadsPageSize = 10;
+  const [ownerView, setOwnerView] = useState<"atendimento" | "estatisticas">("atendimento");
 
   const threads = useQuery({
-    queryKey: ["support-threads"],
-    queryFn: () => fetchThreads(),
+    queryKey: ["support-threads-page", threadsPage, threadsPageSize],
+    queryFn: () =>
+      fetchThreadsPage({
+        data: {
+          page: threadsPage,
+          page_size: threadsPageSize,
+        },
+      }),
     enabled: isOwner,
     refetchInterval: 10000,
+    placeholderData: (previous) => previous,
   });
+
+  const threadsTotal = threads.data?.total ?? 0;
+  const threadsTotalPages = Math.max(1, Math.ceil(threadsTotal / threadsPageSize));
+  const threadsSafePage = Math.min(threadsPage, threadsTotalPages);
+  const threadsPaginationPages = useMemo(() => {
+    const windowSize = 5;
+    if (threadsTotalPages <= windowSize) {
+      return Array.from({ length: threadsTotalPages }, (_, index) => index + 1);
+    }
+    const start = Math.max(1, Math.min(threadsSafePage - 2, threadsTotalPages - (windowSize - 1)));
+    const end = Math.min(threadsTotalPages, start + windowSize - 1);
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [threadsSafePage, threadsTotalPages]);
 
   const effectiveUserId = profile?.id ?? authUserId ?? null;
 
@@ -58,6 +120,21 @@ function SuportePage() {
     queryFn: () => fetchOrCreateThread({ data: { userId: effectiveUserId! } }),
     enabled: !!effectiveUserId && !isOwner,
   });
+
+  const myThreadsQuery = useQuery({
+    queryKey: ["support-my-threads", effectiveUserId],
+    queryFn: () => fetchMyThreads(),
+    enabled: !!effectiveUserId && !isOwner,
+    placeholderData: (previous) => previous,
+  });
+
+  const statsQuery = useQuery({
+    queryKey: ["support-stats"],
+    queryFn: () => fetchSupportStats(),
+    enabled: isOwner && ownerView === "estatisticas",
+  });
+  const supportStats = statsQuery.data;
+  const satisfactionAverage = Number(supportStats?.satisfaction_average ?? 0);
 
   useEffect(() => {
     if (!isOwner) return;
@@ -72,7 +149,7 @@ function SuportePage() {
           table: "support_threads",
         },
         () => {
-          queryClient.invalidateQueries({ queryKey: ["support-threads"] });
+          queryClient.invalidateQueries({ queryKey: ["support-threads-page"] });
         },
       )
       .subscribe();
@@ -102,57 +179,247 @@ function SuportePage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{isOwner ? "Suporte ao Vivo" : "Histórico de Suporte"}</h1>
-          <p className="text-muted-foreground">{isOwner ? "Responda seus clientes em tempo real." : "Consulte suas conversas e tire dúvidas."}</p>
-        </div>
-        <div className="flex items-center gap-2 bg-online/10 text-online px-3 py-1 rounded-full text-xs font-bold animate-pulse">
-          <span className="h-2 w-2 rounded-full bg-online" />
-          SISTEMA ONLINE
-        </div>
-      </div>
+    <UserPageShell
+      title={isOwner ? "Suporte ao Vivo" : "Histórico de Suporte"}
+      description=""
+      icon={MessageSquare}
+    >
+      {isOwner ? (
+        <div className="space-y-5">
+          <Tabs value={ownerView} onValueChange={(value) => setOwnerView(value as typeof ownerView)}>
+            <TabsList className="grid h-11 w-full max-w-xl grid-cols-2 bg-muted/40">
+              <TabsTrigger value="atendimento" className="text-sm font-semibold">
+                Atendimento
+              </TabsTrigger>
+              <TabsTrigger value="estatisticas" className="text-sm font-semibold">
+                Estatísticas
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-      <div className={cn("grid gap-6 h-[75vh]", isOwner ? "grid-cols-1 md:grid-cols-12" : "grid-cols-1")}>
-        {isOwner && (
+          {ownerView === "atendimento" ? (
+            <div className="grid gap-6 h-[75vh] grid-cols-1 md:grid-cols-12">
+              <Card className="md:col-span-4 flex flex-col overflow-hidden bg-sidebar/30 border-sidebar-border">
+                <CardHeader className="py-4 border-b border-sidebar-border">
+                  <div className="space-y-2">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <MessageSquare className="h-5 w-5" /> Conversas
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      {threadsTotal === 0 ? "Nenhuma conversa ativa." : `Página ${threadsSafePage} de ${threadsTotalPages}`}
+                    </p>
+                  </div>
+                </CardHeader>
+                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                  {threads.isLoading ? (
+                    <div className="p-4 text-center">Carregando...</div>
+                  ) : (threads.data?.items ?? []).length === 0 ? (
+                    <div className="p-4 text-center text-muted-foreground text-sm italic">Nenhuma conversa ativa.</div>
+                  ) : (
+                    threads.data?.items.map((item: any) => (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setSelectedThread(item);
+                          mutationMarkRead({ data: { threadId: item.id, isOwner: true } });
+                          queryClient.invalidateQueries({ queryKey: ["support-threads-page"] });
+                        }}
+                        data-tv-focus
+                        className={cn(
+                          "w-full p-4 text-left hover:bg-primary/10 border-b border-sidebar-border transition-all flex items-center justify-between group",
+                          selectedThread?.id === item.id && "bg-primary/20 border-l-4 border-l-primary"
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <div className="font-bold truncate text-sm group-hover:text-primary transition-colors">
+                              {item.profile?.display_name || item.profile?.username || "Usuário"}
+                            </div>
+                            <Badge variant={item.status === "closed" ? "secondary" : "default"} className="text-[9px] uppercase">
+                              {item.status === "closed" ? "Fechado" : "Aberto"}
+                            </Badge>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground truncate opacity-70">
+                            {item.protocol ? `#${item.protocol} · ` : ""}
+                            {item.last_message || "Iniciou uma conversa"}
+                          </div>
+                        </div>
+                        {item.unread_count_owner > 0 && (
+                          <span className="ml-2 bg-destructive text-destructive-foreground text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg animate-bounce">
+                            {item.unread_count_owner}
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+                {threadsTotalPages > 1 && (
+                  <div className="border-t border-sidebar-border p-3">
+                    <Pagination className="mx-0 w-full justify-start">
+                      <PaginationContent>
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setThreadsPage((current) => Math.max(1, current - 1));
+                            }}
+                            className={threadsSafePage <= 1 ? "pointer-events-none opacity-50" : ""}
+                          />
+                        </PaginationItem>
+                        {threadsPaginationPages.map((page) => (
+                          <PaginationItem key={page}>
+                            <Button
+                              variant={page === threadsSafePage ? "default" : "ghost"}
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => setThreadsPage(page)}
+                            >
+                              {page}
+                            </Button>
+                          </PaginationItem>
+                        ))}
+                        {threadsTotalPages > threadsPaginationPages[threadsPaginationPages.length - 1] && (
+                          <PaginationItem>
+                            <PaginationEllipsis />
+                          </PaginationItem>
+                        )}
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(event) => {
+                              event.preventDefault();
+                              setThreadsPage((current) => Math.min(threadsTotalPages, current + 1));
+                            }}
+                            className={threadsSafePage >= threadsTotalPages ? "pointer-events-none opacity-50" : ""}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </Pagination>
+                  </div>
+                )}
+              </Card>
+
+              <Card className="md:col-span-8 flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20">
+                {selectedThread ? (
+                  <ChatWindow
+                    thread={selectedThread}
+                    onClose={() => setSelectedThread(null)}
+                    isOwner={isOwner}
+                  />
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center space-y-4">
+                    <div className="h-20 w-20 rounded-full bg-sidebar-accent/50 flex items-center justify-center">
+                      <MessageSquare className="h-10 w-10 opacity-20" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-lg">Central de Atendimento</p>
+                      <p className="text-sm opacity-60">Selecione um cliente ao lado para iniciar o suporte.</p>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </div>
+          ) : (
+            <div className="grid gap-6 xl:grid-cols-4">
+              <Card className="xl:col-span-1 border-sidebar-border bg-sidebar/30">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ShieldCheck className="h-5 w-5" /> Resumo
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Totais</p>
+                    <div className="mt-3 grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Aberto</p>
+                        <p className="text-2xl font-black text-foreground">{statsQuery.data?.open_threads ?? 0}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Fechado</p>
+                        <p className="text-2xl font-black text-foreground">{statsQuery.data?.closed_threads ?? 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                    <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Satisfação</p>
+                    <p className="mt-2 text-3xl font-black text-primary">{satisfactionAverage.toFixed(2)}</p>
+                    <p className="text-xs text-muted-foreground">Base: {statsQuery.data?.satisfaction_count ?? 0} avaliação(ões)</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="xl:col-span-3 border-sidebar-border bg-sidebar/20">
+                <CardHeader className="border-b border-sidebar-border">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Star className="h-5 w-5" /> Distribuição 1 a 5
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-5">
+                  {(statsQuery.data?.distribution ?? [1, 2, 3, 4, 5].map((score) => ({ score, count: 0 }))).map((item: any) => (
+                    <div key={item.score} className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">Nota {item.score}</p>
+                        <Badge variant="secondary" className="text-[10px]">{item.count}</Badge>
+                      </div>
+                      <p className="mt-3 text-3xl font-black">{item.count}</p>
+                      <p className="text-xs text-muted-foreground">Resultados registrados</p>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="grid gap-6 h-[75vh] grid-cols-1 md:grid-cols-12">
           <Card className="md:col-span-4 flex flex-col overflow-hidden bg-sidebar/30 border-sidebar-border">
             <CardHeader className="py-4 border-b border-sidebar-border">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" /> Conversas
-              </CardTitle>
+              <div className="space-y-2">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <History className="h-5 w-5" /> Meu histórico
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {myThreadsQuery.isLoading ? "Carregando histórico..." : `${(myThreadsQuery.data ?? []).length} atendimento(s) encontrados`}
+                </p>
+              </div>
             </CardHeader>
             <div className="flex-1 overflow-y-auto custom-scrollbar">
-              {threads.isLoading ? (
+              {myThreadsQuery.isLoading ? (
                 <div className="p-4 text-center">Carregando...</div>
-              ) : (threads.data ?? []).length === 0 ? (
-                <div className="p-4 text-center text-muted-foreground text-sm italic">Nenhuma conversa ativa.</div>
+              ) : (myThreadsQuery.data ?? []).length === 0 ? (
+                <div className="p-4 text-center text-muted-foreground text-sm italic">Nenhum atendimento encontrado.</div>
               ) : (
-                threads.data?.map((thread: any) => (
+                (myThreadsQuery.data ?? []).map((item: any) => (
                   <button
-                    key={thread.id}
+                    key={item.id}
                     onClick={() => {
-                      setSelectedThread(thread);
-                      mutationMarkRead({ data: { threadId: thread.id, isOwner: true } });
-                      queryClient.invalidateQueries({ queryKey: ["support-threads-nav"] });
+                      setSelectedThread(item);
+                      mutationMarkRead({ data: { threadId: item.id, isOwner: false } });
                     }}
                     data-tv-focus
                     className={cn(
                       "w-full p-4 text-left hover:bg-primary/10 border-b border-sidebar-border transition-all flex items-center justify-between group",
-                      selectedThread?.id === thread.id && "bg-primary/20 border-l-4 border-l-primary"
+                      selectedThread?.id === item.id && "bg-primary/20 border-l-4 border-l-primary"
                     )}
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="font-bold truncate text-sm group-hover:text-primary transition-colors">
-                        {thread.profile?.display_name || thread.profile?.username || "Usuário"}
+                      <div className="flex items-center gap-2">
+                        <div className="font-bold truncate text-sm group-hover:text-primary transition-colors">
+                          {item.protocol ? `#${item.protocol}` : "Atendimento"}
+                        </div>
+                        <Badge variant={item.status === "closed" ? "secondary" : "default"} className="text-[9px] uppercase">
+                          {item.status === "closed" ? "Fechado" : "Aberto"}
+                        </Badge>
                       </div>
                       <div className="text-[11px] text-muted-foreground truncate opacity-70">
-                        {thread.last_message || "Iniciou uma conversa"}
+                        {item.last_message || "Sem mensagens"}
                       </div>
                     </div>
-                    {thread.unread_count_owner > 0 && (
-                      <span className="ml-2 bg-destructive text-destructive-foreground text-[10px] font-black px-2 py-0.5 rounded-full shadow-lg animate-bounce">
-                        {thread.unread_count_owner}
+                    {typeof item.satisfaction_score === "number" && (
+                      <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-black text-amber-200">
+                        {item.satisfaction_score}/5
                       </span>
                     )}
                   </button>
@@ -160,51 +427,88 @@ function SuportePage() {
               )}
             </div>
           </Card>
-        )}
 
-        <Card className={cn("flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20", isOwner ? "md:col-span-8" : "w-full")}>
-          {selectedThread ? (
-            <ChatWindow
-              thread={selectedThread}
-              onClose={() => setSelectedThread(null)}
-              isOwner={isOwner}
-            />
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center space-y-4">
-              <div className="h-20 w-20 rounded-full bg-sidebar-accent/50 flex items-center justify-center">
-                <MessageSquare className="h-10 w-10 opacity-20" />
+          <Card className="md:col-span-8 flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20">
+            {selectedThread ? (
+              <ChatWindow
+                thread={selectedThread}
+                onClose={() => setSelectedThread(null)}
+                isOwner={isOwner}
+              />
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground p-8 text-center space-y-4">
+                <div className="h-20 w-20 rounded-full bg-sidebar-accent/50 flex items-center justify-center">
+                  <MessageSquare className="h-10 w-10 opacity-20" />
+                </div>
+                <div>
+                  <p className="font-bold text-lg">Histórico de suporte</p>
+                  <p className="text-sm opacity-60">Selecione um protocolo para ver o atendimento completo.</p>
+                </div>
               </div>
-              <div>
-                <p className="font-bold text-lg">Central de Atendimento</p>
-                <p className="text-sm opacity-60">Selecione um cliente ao lado para iniciar o suporte.</p>
-              </div>
-            </div>
-          )}
-        </Card>
-      </div>
-    </div>
+            )}
+          </Card>
+        </div>
+      )}
+    </UserPageShell>
   );
 }
 
 function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => void; isOwner: boolean }) {
+  const queryClient = useQueryClient();
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [threadStatus, setThreadStatus] = useState(thread.status ?? "open");
+  const [threadSatisfaction, setThreadSatisfaction] = useState<number | null>(thread.satisfaction_score ?? null);
+  const [messagesPage, setMessagesPage] = useState(1);
+  const messagesPageSize = 25;
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fetchMessagesPage = useServerFn(listSupportMessagesPage);
+  const mutationSendSupport = useServerFn(sendSupportMessage);
+  const [closeConfirm, setCloseConfirm] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
-    const fetchMessages = async () => {
-      const { data } = await (supabase
-        .from("support_messages" as any)
-        .select("*")
-        .eq("thread_id", thread.id)
-        .order("created_at", { ascending: true }) as any);
-      if (data && isMounted) setMessages(data);
-    };
-    fetchMessages();
+    setThreadStatus(thread.status ?? "open");
+    setThreadSatisfaction(thread.satisfaction_score ?? null);
+  }, [thread.id, thread.status, thread.satisfaction_score]);
 
+  const messagesQuery = useQuery({
+    queryKey: ["support-messages-page", thread.id, messagesPage, messagesPageSize],
+    queryFn: () =>
+      fetchMessagesPage({
+        data: {
+          threadId: thread.id,
+          page: messagesPage,
+          page_size: messagesPageSize,
+        },
+      }),
+    placeholderData: (previous) => previous,
+  });
+
+  const messagesTotal = messagesQuery.data?.total ?? 0;
+  const messagesTotalPages = Math.max(1, Math.ceil(messagesTotal / messagesPageSize));
+  const messagesSafePage = Math.min(messagesPage, messagesTotalPages);
+  const messagesPaginationPages = useMemo(() => {
+    const windowSize = 5;
+    if (messagesTotalPages <= windowSize) {
+      return Array.from({ length: messagesTotalPages }, (_, index) => index + 1);
+    }
+    const start = Math.max(1, Math.min(messagesSafePage - 2, messagesTotalPages - (windowSize - 1)));
+    const end = Math.min(messagesTotalPages, start + windowSize - 1);
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [messagesSafePage, messagesTotalPages]);
+
+  useEffect(() => {
+    setMessagesPage(1);
+  }, [thread.id]);
+
+  useEffect(() => {
+    setMessages(messagesQuery.data?.items ?? []);
+  }, [messagesQuery.data, thread.id]);
+
+  useEffect(() => {
     const channel = supabase
       .channel(`thread_owner:${thread.id}`)
       .on(
@@ -216,7 +520,7 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
           filter: `thread_id=eq.${thread.id}`,
         },
         (payload) => {
-          if (isMounted) {
+          if (messagesPage === 1) {
             setMessages((prev) => {
               if (prev.some((m) => m["id"] === payload.new["id"])) return prev;
               return [...prev, payload.new];
@@ -227,20 +531,16 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
       .subscribe();
 
     return () => {
-      isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, [thread.id]);
+  }, [thread.id, messagesPage]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async (e?: React.FormEvent<HTMLFormElement>) => {
-    e?.preventDefault();
-    const formValue = e?.currentTarget ? new FormData(e.currentTarget).get("message") : null;
-    const messageToSend = (typeof formValue === "string" ? formValue : newMessage).trim();
-    if (!messageToSend) return;
+  const executeSend = async (messageToSend: string) => {
+    if (!messageToSend.trim()) return;
 
     setSending(true);
 
@@ -260,6 +560,7 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
             thread_id: thread.id,
             sender_id: session.user.id,
             content,
+            message_type: "support_reply",
           }])
           .select()
           .single();
@@ -271,6 +572,7 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
           .update({
             last_message: messageToSend,
             last_message_at: new Date().toISOString(),
+            last_owner_message_at: new Date().toISOString(),
             unread_count_user: (thread.unread_count_user || 0) + 1,
           })
           .eq("id", thread.id);
@@ -293,12 +595,84 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
         }
       }
       setNewMessage("");
+      setMessagesPage(1);
+      queryClient.invalidateQueries({ queryKey: ["support-messages-page", thread.id] });
+      queryClient.invalidateQueries({ queryKey: ["support-threads-page"] });
+      queryClient.invalidateQueries({ queryKey: ["support-my-threads"] });
       toast.success("Mensagem enviada!");
     } catch (err: any) {
       toast.error("Erro ao enviar: " + err.message);
     } finally {
       setSending(false);
     }
+  };
+
+  const handleCloseThread = async () => {
+    setClosing(true);
+    try {
+      await mutationCloseThread({
+        data: {
+          threadId: thread.id,
+          closedByRole: isOwner ? "owner" : "client",
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["support-messages-page", thread.id] });
+      queryClient.invalidateQueries({ queryKey: ["support-threads-page"] });
+      queryClient.invalidateQueries({ queryKey: ["support-my-threads"] });
+      toast.success("Atendimento encerrado com sucesso.");
+      setThreadStatus("closed");
+    } catch (err: any) {
+      toast.error("Erro ao encerrar: " + err.message);
+    } finally {
+      setClosing(false);
+      setCloseConfirm(false);
+    }
+  };
+
+  const handleKeepOpen = async () => {
+    try {
+      await mutationRespondClosePrompt({
+        data: {
+          threadId: thread.id,
+          keepOpen: true,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["support-messages-page", thread.id] });
+      queryClient.invalidateQueries({ queryKey: ["support-threads-page"] });
+      queryClient.invalidateQueries({ queryKey: ["support-my-threads"] });
+      toast.success("Atendimento mantido em aberto.");
+      setThreadStatus("open");
+    } catch (err: any) {
+      toast.error("Erro ao responder: " + err.message);
+    }
+  };
+
+  const handleSatisfaction = async (score: number) => {
+    setClosing(true);
+    try {
+      await mutationSubmitSatisfaction({
+        data: {
+          threadId: thread.id,
+          score,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["support-messages-page", thread.id] });
+      queryClient.invalidateQueries({ queryKey: ["support-my-threads"] });
+      toast.success(`Avaliação registrada: ${score}/5.`);
+      setThreadSatisfaction(score);
+    } catch (err: any) {
+      toast.error("Erro ao registrar avaliação: " + err.message);
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  const handleSend = async (e?: React.FormEvent<HTMLFormElement>) => {
+    e?.preventDefault();
+    const formValue = e?.currentTarget ? new FormData(e.currentTarget).get("message") : null;
+    const messageToSend = (typeof formValue === "string" ? formValue : newMessage).trim();
+    if (!messageToSend) return;
+    await executeSend(messageToSend);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -332,6 +706,7 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
         file_url: publicUrl,
         file_type: fileType,
         content: `Enviou um ${fileType}`,
+        message_type: "support_reply",
       }]);
 
       toast.success("Arquivo enviado!");
@@ -346,33 +721,124 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
     <div className="flex flex-col h-full bg-card/50">
       <div className="p-4 border-b border-sidebar-border flex items-center justify-between bg-sidebar/40 backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary font-black shadow-inner">
+          <div className="h-11 w-11 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-primary font-black shadow-inner">
             {(thread.profile?.display_name || thread.profile?.username || "S")[0].toUpperCase()}
           </div>
           <div>
-            <div className="font-bold text-sm tracking-tight flex items-center gap-2">
+            <div className="font-bold text-sm tracking-tight flex flex-wrap items-center gap-2">
               {thread.profile?.display_name || thread.profile?.username || "Suporte Central"}
               {thread.protocol && (
                 <span className="text-[10px] bg-sidebar-accent px-1.5 py-0.5 rounded text-muted-foreground font-mono">
                   #{thread.protocol}
                 </span>
               )}
+              <Badge variant={threadStatus === "closed" ? "secondary" : "default"} className="text-[9px] uppercase">
+                {threadStatus === "closed" ? "Fechado" : "Aberto"}
+              </Badge>
             </div>
-            <div className="text-[10px] text-online font-bold flex items-center gap-1.5 uppercase">
-              <span className="h-2 w-2 rounded-full bg-online animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" /> Atendimento Online
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-online/20 bg-online/10 px-2.5 py-1 text-online">
+                <span className="h-2 w-2 rounded-full bg-online animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+                Atendimento online
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/60 px-2.5 py-1">
+                Resposta contextual
+              </span>
+            </div>
+            <div className="mt-2 text-[10px] text-muted-foreground leading-relaxed max-w-xl">
+              Chat contínuo para suporte do cliente, com histórico, confirmação de envio e identificação por protocolo.
             </div>
           </div>
         </div>
-        {isOwner && (
-          <Button data-tv-focus variant="ghost" size="icon" onClick={onClose} className="hover:bg-destructive/10 hover:text-destructive">
-            <X className="h-4 w-4" />
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isOwner && threadStatus !== "closed" && (
+            <Button
+              type="button"
+              variant="outline"
+              className="border-rose-500/30 text-rose-200 hover:bg-rose-500/10"
+              onClick={() => setCloseConfirm(true)}
+            >
+              Encerrar
+            </Button>
+          )}
+          {isOwner && (
+            <Button data-tv-focus variant="ghost" size="icon" onClick={onClose} className="hover:bg-destructive/10 hover:text-destructive">
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')]">
+        <div className="flex flex-col gap-3 rounded-2xl border border-sidebar-border/60 bg-sidebar/40 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="text-sm text-muted-foreground">
+            {messagesTotal === 0 ? (
+              "Nenhuma mensagem nesta conversa."
+            ) : (
+              <>
+                Página <span className="font-semibold text-foreground">{messagesSafePage}</span> de{" "}
+                <span className="font-semibold text-foreground">{messagesTotalPages}</span>
+              </>
+            )}
+          </div>
+          {messagesTotalPages > 1 && (
+            <Pagination className="mx-0 w-auto justify-start lg:justify-end">
+              <PaginationContent>
+                <PaginationItem>
+                  <PaginationPrevious
+                    href="#"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setMessagesPage((current) => Math.max(1, current - 1));
+                    }}
+                    className={messagesSafePage <= 1 ? "pointer-events-none opacity-50" : ""}
+                  />
+                </PaginationItem>
+                {messagesPaginationPages.map((page) => (
+                  <PaginationItem key={page}>
+                    <Button
+                      variant={page === messagesSafePage ? "default" : "ghost"}
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={() => setMessagesPage(page)}
+                    >
+                      {page}
+                    </Button>
+                  </PaginationItem>
+                ))}
+                {messagesTotalPages > messagesPaginationPages[messagesPaginationPages.length - 1] && (
+                  <PaginationItem>
+                    <PaginationEllipsis />
+                  </PaginationItem>
+                )}
+                <PaginationItem>
+                  <PaginationNext
+                    href="#"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setMessagesPage((current) => Math.min(messagesTotalPages, current + 1));
+                    }}
+                    className={messagesSafePage >= messagesTotalPages ? "pointer-events-none opacity-50" : ""}
+                  />
+                </PaginationItem>
+              </PaginationContent>
+            </Pagination>
+          )}
+        </div>
+
+        {messagesQuery.isLoading ? (
+          <div className="rounded-2xl border border-sidebar-border/60 bg-sidebar/30 p-6 text-center text-sm text-muted-foreground">
+            Carregando mensagens...
+          </div>
+        ) : null}
+
         {messages.map((msg) => {
           const isMe = isOwner ? msg.sender_id !== thread.user_id : msg.sender_id === thread.user_id;
+          const messageType = inferSupportMessageType(msg, thread.user_id);
+          const messageMeta = getSupportMessageTypeMeta(messageType);
+          const isClosePrompt = messageType === "closure_prompt";
+          const isSatisfactionPrompt = messageType === "satisfaction_prompt";
+          const scoreValue = threadSatisfaction;
           return (
             <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
               <div className={cn(
@@ -381,20 +847,69 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
                   ? "bg-primary text-primary-foreground rounded-tr-none border border-primary/20"
                   : "bg-sidebar-accent/80 border border-sidebar-border rounded-tl-none backdrop-blur-sm"
               )}>
-                {msg.file_url ? (
-                  <div className="space-y-2 py-1">
-                    {msg.file_type === "image" ? (
-                      <img src={msg.file_url} alt="Imagem" className="max-w-full rounded-lg cursor-zoom-in border border-white/10" onClick={() => window.open(msg.file_url)} />
-                    ) : msg.file_type === "audio" ? (
-                      <audio controls src={msg.file_url} className="w-full max-w-[240px] h-10" />
+                {messageType !== "user_message" && (
+                  <div className="mb-2 flex items-center gap-1.5">
+                    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]", messageMeta.className)}>
+                      {messageMeta.label}
+                    </span>
+                  </div>
+                )}
+                {isClosePrompt ? (
+                  <div className="space-y-3">
+                    <p className="leading-relaxed">{msg.content}</p>
+                    {!isOwner && threadStatus === "open" && (
+                      <div className="flex flex-wrap gap-2">
+                        <Button type="button" size="sm" variant="default" onClick={() => void handleCloseThread()} disabled={closing}>
+                          Sim, encerrar
+                        </Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => void handleKeepOpen()} disabled={closing}>
+                          Não, manter aberto
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ) : isSatisfactionPrompt ? (
+                  <div className="space-y-3">
+                    <p className="leading-relaxed">{msg.content}</p>
+                    {!isOwner && !threadSatisfaction ? (
+                      <div className="grid grid-cols-5 gap-2">
+                        {[1, 2, 3, 4, 5].map((score) => (
+                          <Button
+                            key={score}
+                            type="button"
+                            variant={score >= 4 ? "default" : "outline"}
+                            className="h-10"
+                            onClick={() => void handleSatisfaction(score)}
+                            disabled={closing}
+                          >
+                            {score}
+                          </Button>
+                        ))}
+                      </div>
                     ) : (
-                      <a href={msg.file_url} target="_blank" className="flex items-center gap-2 font-bold underline decoration-primary/50">
-                        <ImageIcon className="h-4 w-4" /> Abrir Arquivo
-                      </a>
+                      <p className="text-xs text-muted-foreground">
+                        {scoreValue ? `Avaliação registrada: ${scoreValue}/5` : "Aguardando avaliação."}
+                      </p>
                     )}
                   </div>
                 ) : (
-                  <p className="leading-relaxed">{msg.content}</p>
+                  <>
+                    {msg.file_url ? (
+                      <div className="space-y-2 py-1">
+                        {msg.file_type === "image" ? (
+                          <img src={msg.file_url} alt="Imagem" className="max-w-full rounded-lg cursor-zoom-in border border-white/10" onClick={() => window.open(msg.file_url)} />
+                        ) : msg.file_type === "audio" ? (
+                          <audio controls src={msg.file_url} className="w-full max-w-[240px] h-10" />
+                        ) : (
+                          <a href={msg.file_url} target="_blank" className="flex items-center gap-2 font-bold underline decoration-primary/50">
+                            <ImageIcon className="h-4 w-4" /> Abrir Arquivo
+                          </a>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="leading-relaxed">{msg.content}</p>
+                    )}
+                  </>
                 )}
                 <div className={cn("text-[9px] mt-1 font-bold opacity-50", isMe ? "text-right" : "text-left")}>
                   {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
@@ -406,39 +921,76 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
         <div ref={scrollRef} />
       </div>
 
-      <form onSubmit={handleSend} className="p-4 border-t border-sidebar-border bg-sidebar/60 backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            onChange={handleFileUpload}
-            accept="image/*,audio/*"
-          />
-          <Button
-            data-tv-focus
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <ImageIcon className="h-5 w-5" />
-          </Button>
-          <Input
-            name="message"
-            placeholder="Escreva sua resposta..."
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            className="flex-1 bg-sidebar-accent/30 border-sidebar-border focus-visible:ring-primary h-11 rounded-xl shadow-inner"
-            data-tv-focus
-            enterKeyHint="send"
-          />
-          <Button data-tv-focus type="submit" size="icon" className="h-11 w-11 rounded-full shadow-lg" disabled={sending || !newMessage.trim()}>
-            <Send className="h-4 w-4" />
-          </Button>
+      {threadStatus === "closed" ? (
+        <div className="border-t border-sidebar-border bg-sidebar/60 p-4">
+          <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+            <div className="flex items-center gap-2">
+              <BadgeCheck className="h-4 w-4 text-online" />
+              <p className="font-semibold">Atendimento encerrado.</p>
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Este protocolo permanece no histórico. Para abrir um novo atendimento, volte ao início e envie uma nova mensagem.
+            </p>
+          </div>
         </div>
-      </form>
+      ) : (
+        <form onSubmit={handleSend} className="p-4 border-t border-sidebar-border bg-sidebar/60 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              onChange={handleFileUpload}
+              accept="image/*,audio/*"
+            />
+            <Button
+              data-tv-focus
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-full"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <ImageIcon className="h-5 w-5" />
+            </Button>
+            <Input
+              name="message"
+              autoComplete="off"
+              placeholder="Escreva sua resposta..."
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              className="flex-1 bg-sidebar-accent/30 border-sidebar-border focus-visible:ring-primary h-11 rounded-xl shadow-inner"
+              data-tv-focus
+              enterKeyHint="send"
+            />
+            <Button data-tv-focus type="submit" size="icon" className="h-11 w-11 rounded-full shadow-lg" disabled={sending || !newMessage.trim()}>
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </form>
+      )}
+
+      <Dialog open={closeConfirm} onOpenChange={(open) => !open && setCloseConfirm(false)}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Encerrar atendimento</DialogTitle>
+            <DialogDescription>
+              Você tem certeza que deseja fechar este protocolo e iniciar a etapa de satisfação?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-sm text-muted-foreground">
+            O cliente receberá a confirmação de encerramento e a campanha de avaliação 1 a 5.
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setCloseConfirm(false)} disabled={closing}>
+              Não, voltar
+            </Button>
+            <Button type="button" variant="destructive" onClick={() => void handleCloseThread()} disabled={closing}>
+              {closing ? "Encerrando..." : "Sim, encerrar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

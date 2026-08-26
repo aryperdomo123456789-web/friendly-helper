@@ -7,6 +7,7 @@ import { z } from "zod";
 
 export const DEFAULT_BRAND_IMAGE_URL = "/brand/webplayer-brand.png";
 export const REMOTE_BRAND_IMAGE_URL = "https://i.imgur.com/RrqwMFH.png";
+export const APP_CONFIG_QUERY_KEY = ["app-config"] as const;
 
 function getRuntimeBaseUrl(): string | null {
   const request = getRequest();
@@ -53,7 +54,7 @@ export const getAppConfig = createServerFn({ method: "GET" })
       .maybeSingle() as any);
 
     if (error) {
-      throw new Error("Erro ao carregar configuracoes: " + error.message);
+      throw new Error("Erro ao carregar as configurações: " + error.message);
     }
 
     if (!data) {
@@ -64,7 +65,7 @@ export const getAppConfig = createServerFn({ method: "GET" })
         .select()
         .single() as any);
       
-      if (insertError) throw new Error("Erro ao criar configuracoes padrao: " + insertError.message);
+      if (insertError) throw new Error("Erro ao criar as configurações padrão: " + insertError.message);
       return mergeRuntimeConfig(newData.config);
     }
 
@@ -84,12 +85,12 @@ export const updateAppConfig = createServerFn({ method: "POST" })
         .from('app_config' as any)
         .update({ config: newConfig })
         .eq('id', existing.id) as any);
-      if (updateError) throw new Error("Erro ao atualizar configuracoes: " + updateError.message);
+      if (updateError) throw new Error("Erro ao atualizar as configurações: " + updateError.message);
     } else {
       const { error: insertError } = await (supabaseAdmin
         .from('app_config' as any)
         .insert([{ config: newConfig }]) as any);
-      if (insertError) throw new Error("Erro ao inserir configuracoes: " + insertError.message);
+      if (insertError) throw new Error("Erro ao inserir as configurações: " + insertError.message);
     }
 
     return { success: true };

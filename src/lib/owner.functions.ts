@@ -2,6 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ensureUserReferralCode, generateUniqueReferralCode, isReferralEligiblePlan } from "./referral-code";
+import { clearServerCache, clearServerPlaylistCache, refreshServerCatalogCache } from "./iptv-cache.server";
+import { clearLocalImageCache } from "./server-media-cache.server";
 
 export const SYNTHETIC_EMAIL_DOMAIN = "iptv.local";
 
@@ -10,9 +12,9 @@ export function usernameToEmail(username: string): string {
 }
 
 const credentialSchema = z.object({
-  username: z.string().trim().min(1).max(120),
-  password: z.string().trim().min(1).max(200),
-  dns: z.string().trim().min(4).max(300),
+  username: z.string().trim().max(120).default(""),
+  password: z.string().trim().max(200).default(""),
+  dns: z.string().trim().max(300).default(""),
 });
 
 const serverSchema = z.object({
@@ -20,7 +22,7 @@ const serverSchema = z.object({
   name: z.string().trim().min(1).max(120),
   is_active: z.boolean().default(true),
   sort_order: z.number().int().min(0).max(999).default(0),
-  credentials: z.array(credentialSchema).min(1).max(6),
+  credentials: z.array(credentialSchema).max(6).default([]),
   bulk_action: z.enum(["none", "add_to_all", "remove_from_all"]).optional().default("none"),
 });
 
@@ -40,6 +42,21 @@ const accessUserSchema = z.object({
   plan_id: z.string().uuid().nullable().optional(),
 });
 
+const accessUsersPageSchema = z.object({
+  search: z.string().trim().max(120).default(""),
+  status: z.enum(["all", "active", "blocked", "expired", "online"]).default("all"),
+  server_id: z.string().uuid().nullable().optional(),
+  plan_id: z.string().uuid().nullable().optional(),
+  referral: z.enum(["all", "direct", "referred"]).default("all"),
+  sort_order: z.enum(["newest", "oldest", "expiry"]).default("newest"),
+  page: z.number().int().min(1).default(1),
+  page_size: z.number().int().min(1).max(1000).default(10),
+});
+
+const reorderServersSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1),
+});
+
 async function assertOwner(supabase: any, userId: string) {
   // Le direto a tabela de papeis (politica permite ler o proprio papel).
   const { data, error } = await supabase
@@ -48,7 +65,7 @@ async function assertOwner(supabase: any, userId: string) {
     .eq("user_id", userId)
     .in("role", ["owner", "admin"]);
   if (error) throw new Error(error.message);
-  if (!data || data.length === 0) throw new Error("Acesso restrito ao dono do sistema");
+  if (!data || data.length === 0) throw new Error("Acesso restrito à área administrativa.");
 }
 
 async function assertNotOwnerAccount(supabase: any, userId: string) {
@@ -70,7 +87,7 @@ async function assertNotOwnerAccount(supabase: any, userId: string) {
   if (profileError) throw new Error(profileError.message);
 
   if ((roleRows ?? []).length > 0 || profile?.username === "magodono") {
-    throw new Error("O usuário Dono (@magodono) não pode ser apagado.");
+    throw new Error("O usuário administrador (@magodono) não pode ser apagado.");
   }
 }
 
@@ -82,19 +99,33 @@ export const listServers = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: servers, error } = await supabaseAdmin
-      .from("iptv_servers")
-      .select("id, name, url, is_active, sort_order, created_at")
-      .order("sort_order")
-      .order("created_at");
+    const [{ data: servers, error }, { data: credentials, error: credentialsError }] = await Promise.all([
+      supabaseAdmin
+        .from("iptv_servers")
+        .select("id, name, url, is_active, sort_order, created_at")
+        .order("sort_order")
+        .order("created_at"),
+      supabaseAdmin
+        .from("server_credentials")
+        .select("server_id, username, password, dns"),
+    ]);
     if (error) throw error;
-    const { data: creds } = await supabaseAdmin
-      .from("server_credentials")
-      .select("id, server_id, username, password, dns, created_at")
-      .order("created_at");
+    if (credentialsError) throw credentialsError;
+
+    const credentialByServerId = new Map(
+      (credentials ?? []).map((credential) => [credential.server_id, credential]),
+    );
+
     return (servers ?? []).map((server) => ({
-      ...server,
-      credentials: (creds ?? []).filter((credential: any) => credential.server_id === server.id),
+      id: server.id,
+      name: server.name,
+      url: (server as any).url,
+      is_active: server.is_active,
+      sort_order: server.sort_order,
+      created_at: server.created_at,
+      credentials: credentialByServerId.has(server.id)
+        ? [credentialByServerId.get(server.id)]
+        : [],
     }));
   });
 
@@ -104,26 +135,75 @@ export const saveServer = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const normalizedCredentials = (data.credentials ?? []).map((credential) => ({
+      username: credential.username.trim(),
+      password: credential.password.trim(),
+      dns: credential.dns.trim(),
+    }));
+    const filledCredentials = normalizedCredentials.filter(
+      (credential) => credential.username || credential.password || credential.dns,
+    );
+    if (!data.id && filledCredentials.length === 0) {
+      throw new Error("Informe ao menos uma credencial para criar o servidor.");
+    }
+
+    const existingCredentialResult = data.id
+      ? await supabaseAdmin
+          .from("server_credentials")
+          .select("username, password, dns")
+          .eq("server_id", data.id)
+          .maybeSingle()
+      : null;
+    if (existingCredentialResult?.error) {
+      throw existingCredentialResult.error;
+    }
+
+    const existingCredential = existingCredentialResult?.data ?? null;
+    const inputCredential = filledCredentials[0] ?? null;
+    const resolvedCredential = {
+      username: inputCredential?.username || existingCredential?.username || "",
+      password: inputCredential?.password || existingCredential?.password || "",
+      dns: inputCredential?.dns || existingCredential?.dns || "",
+    };
+
+    const hasInvalidCredential = !data.id
+      ? !resolvedCredential.username || !resolvedCredential.password || !resolvedCredential.dns
+      : Boolean(inputCredential) &&
+        (!resolvedCredential.username || !resolvedCredential.password || !resolvedCredential.dns);
+    if (hasInvalidCredential) {
+      throw new Error("Preencha usuário, senha e DNS para cadastrar as credenciais do servidor.");
+    }
+
+    const nextDns = data.id
+      ? resolvedCredential.dns || existingCredential?.dns || null
+      : resolvedCredential.dns || null;
 
     let serverId = data.id;
     if (serverId) {
+      const serverPayload: {
+        name: string;
+        is_active: boolean;
+        sort_order: number;
+        url?: string;
+      } = {
+        name: data.name,
+        is_active: data.is_active,
+        sort_order: data.sort_order,
+      };
+      if (nextDns) {
+        serverPayload.url = nextDns;
+      }
       const { error } = await supabaseAdmin
         .from("iptv_servers")
-        .update({
-          name: data.name,
-          url: data.credentials[0]!.dns,
-          is_active: data.is_active,
-          sort_order: data.sort_order,
-        })
+        .update(serverPayload)
         .eq("id", serverId);
       if (error) throw error;
-      await supabaseAdmin.from("server_credentials").delete().eq("server_id", serverId);
     } else {
       const { data: created, error } = await supabaseAdmin
         .from("iptv_servers")
         .insert({
           name: data.name,
-          url: data.credentials[0]!.dns,
+          url: nextDns!,
           is_active: data.is_active,
           sort_order: data.sort_order,
           created_by: context.userId,
@@ -134,15 +214,21 @@ export const saveServer = createServerFn({ method: "POST" })
       serverId = created.id;
     }
 
-    const { error: credError } = await supabaseAdmin.from("server_credentials").insert(
-      data.credentials.map((credential) => ({
+    if (resolvedCredential.username || resolvedCredential.password || resolvedCredential.dns) {
+      const { error: deleteError } = await supabaseAdmin
+        .from("server_credentials")
+        .delete()
+        .eq("server_id", serverId);
+      if (deleteError) throw deleteError;
+
+      const { error: credError } = await supabaseAdmin.from("server_credentials").insert({
         server_id: serverId!,
-        username: credential.username,
-        password: credential.password,
-        dns: credential.dns,
-      })),
-    );
-    if (credError) throw credError;
+        username: resolvedCredential.username,
+        password: resolvedCredential.password,
+        dns: resolvedCredential.dns,
+      });
+      if (credError) throw credError;
+    }
 
     // Ações em massa para usuários
     if (data.bulk_action === "add_to_all") {
@@ -159,7 +245,24 @@ export const saveServer = createServerFn({ method: "POST" })
       await supabaseAdmin.from("user_server_access").delete().eq("server_id", serverId);
     }
 
+    void refreshServerCatalogCache(serverId!).catch((error) => {
+      console.error("Falha ao recarregar o cache do servidor", error);
+    });
+
     return { id: serverId };
+  });
+
+export const reorderServers = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => reorderServersSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertOwner(context.supabase, context.userId);
+    const { data: result, error } = await (context.supabase as any).rpc("admin_reorder_iptv_servers", {
+      p_ordered_ids: data.ids,
+    });
+
+    if (error) throw error;
+    return result;
   });
 
 export const deleteServer = createServerFn({ method: "POST" })
@@ -170,7 +273,30 @@ export const deleteServer = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("iptv_servers").delete().eq("id", data.id);
     if (error) throw error;
+    await Promise.allSettled([
+      clearServerCache(data.id),
+      clearServerPlaylistCache(data.id),
+      clearLocalImageCache(data.id),
+    ]);
     return { ok: true };
+  });
+
+export const refreshServerCache = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        clear_local_before_fetch: z.boolean().default(false),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await assertOwner(context.supabase, context.userId);
+    const result = await refreshServerCatalogCache(data.id, {
+      clearLocalBeforeFetch: data.clear_local_before_fetch,
+    });
+    return { ok: true, ...result };
   });
 
 export const testServerConnection = createServerFn({ method: "POST" })
@@ -215,6 +341,38 @@ export const listAccessUsers = createServerFn({ method: "GET" })
 
   });
 
+export const listAccessUsersPage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: unknown) => accessUsersPageSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertOwner(context.supabase, context.userId);
+    const { data: result, error } = await (context.supabase as any).rpc("admin_list_access_users", {
+      p_search: data.search,
+      p_status: data.status,
+      p_server_id: data.server_id ?? null,
+      p_plan_id: data.plan_id ?? null,
+      p_referral: data.referral,
+      p_sort_order: data.sort_order,
+      p_page: data.page,
+      p_page_size: data.page_size,
+    });
+
+    if (error) throw error;
+    return result as {
+      items: any[];
+      total: number;
+      status_counts: {
+        all: number;
+        active: number;
+        blocked: number;
+        expired: number;
+        online: number;
+      };
+      page: number;
+      page_size: number;
+    };
+  });
+
 export const createAccessUser = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => accessUserSchema.parse(input))
@@ -228,7 +386,7 @@ export const createAccessUser = createServerFn({ method: "POST" })
       email_confirm: true,
       user_metadata: { username: data.username },
     });
-    if (error || !created.user) throw new Error(error?.message ?? "Falha ao criar acesso");
+    if (error || !created.user) throw new Error(error?.message ?? "Falha ao criar acesso.");
     const newUserId = created.user.id;
 
     const { error: profileError } = await supabaseAdmin.from("profiles").insert({

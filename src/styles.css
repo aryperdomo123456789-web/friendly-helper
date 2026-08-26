@@ -272,7 +272,7 @@ body,
  * Themes definition
  * ------------------------------------------------------------------ */
 
-/* Default: AZUL (Original WebPlayer) */
+/* Default: AZUL (Original MAGOPLAYERPRO) */
 :root,
 [data-theme="azul"] {
   --radius: 0.875rem;

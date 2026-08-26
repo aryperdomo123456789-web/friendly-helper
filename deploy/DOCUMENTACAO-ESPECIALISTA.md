@@ -1,6 +1,6 @@
 # Documentacao Especialista - Deploy e Garantia de Funcionamento
 
-Este arquivo complementa a documentacao principal e deixa explicita a garantia operacional do WebPlayer.
+Este arquivo complementa a documentacao principal e deixa explicita a garantia operacional do MAGOPLAYERPRO.
 
 ## Garantia de identidade local
 

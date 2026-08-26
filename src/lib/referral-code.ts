@@ -22,7 +22,7 @@ export async function generateUniqueReferralCode(supabaseAdmin: any, prefix = "R
     if (!data) return candidate;
   }
 
-  throw new Error("Nao foi possivel gerar um link de indicacao unico");
+  throw new Error("Não foi possível gerar um link de indicação único.");
 }
 
 type ReferralPlanLike = {

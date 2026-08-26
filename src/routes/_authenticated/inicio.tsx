@@ -2,26 +2,46 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { usePlayerSession } from "@/lib/player-store";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Film, MonitorPlay, Server, Tv, Zap, CreditCard, Loader2, MessageSquare, X, Send, Image as ImageIcon } from "lucide-react";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { toast } from "sonner";
 import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createPaymentPreference, getMercadoPagoConfig } from "@/lib/payments.functions";
 import { getPlans } from "@/lib/plans.functions";
-import { getOrCreateThread, markThreadRead } from "@/lib/chat.functions";
-import { useQuery } from "@tanstack/react-query";
+import {
+  getOrCreateThread,
+  markThreadRead,
+  listSupportMessagesPage,
+  closeSupportThread,
+  respondToClosurePrompt,
+  submitSupportSatisfaction,
+} from "@/lib/chat.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { TMDBHeroCarousel } from "@/components/home/TMDBHeroCarousel";
 import { sendSupportMessage } from "@/lib/chat.functions";
+import {
+  getSupportMessageTypeMeta,
+  inferSupportMessageType,
+} from "@/lib/support-message.types";
+import { UserPageShell } from "@/components/user-shell/user-page-shell";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 
 export const Route = createFileRoute("/_authenticated/inicio")({
   head: () => ({
     meta: [
-      { title: "Inicio | WebPlayer IPTV" },
-      { name: "description", content: "Painel inicial do WebPlayer com acesso rapido ao catalogo." },
-      { property: "og:title", content: "Inicio | WebPlayer IPTV" },
+      { title: "Início" },
+      { name: "description", content: "Painel inicial com acesso rápido ao catálogo." },
+      { property: "og:title", content: "Início" },
       { property: "og:description", content: "Seu player IPTV multi-servidor." },
     ],
   }),
@@ -29,14 +49,14 @@ export const Route = createFileRoute("/_authenticated/inicio")({
 });
 
 const CARDS = [
-  { to: "/canais", label: "TV ao Vivo", desc: "Canais em tempo real", icon: Tv },
-  { to: "/filmes", label: "Filmes", desc: "Catalogo on demand", icon: Film },
-  { to: "/series", label: "Series", desc: "Temporadas e episodios", icon: MonitorPlay },
-  { to: "/servidores", label: "Servidores", desc: "Trocar de servidor", icon: Server },
+  { to: "/canais", label: "TV ao Vivo", icon: Tv },
+  { to: "/filmes", label: "Filmes", icon: Film },
+  { to: "/series", label: "Séries", icon: MonitorPlay },
+  { to: "/servidores", label: "Servidores", icon: Server },
 ] as const;
 
 function Inicio() {
-  const { profile, activeServer, isOwner, servers, authUserId } = usePlayerSession();
+  const { profile, isOwner, authUserId } = usePlayerSession();
   const search = Route.useSearch() as any;
   const navigate = useNavigate();
   const createPayment = useServerFn(createPaymentPreference);
@@ -56,7 +76,6 @@ function Inicio() {
     queryKey: ["available-plans"],
     queryFn: () => fetchPlans(),
   });
-
   const [paymentLoading, setPaymentLoading] = useState(false);
 
   const handlePay = async (planId: string) => {
@@ -75,19 +94,19 @@ function Inicio() {
 
 
   return (
-    <div className="space-y-6 min-w-0 w-full overflow-x-hidden">
+    <UserPageShell
+      title="Início"
+      description=""
+      icon={Tv}
+    >
       <TMDBHeroCarousel />
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-card p-4 lg:p-8">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">WebPlayer</p>
-        <h1 className="mt-2 text-3xl font-bold">
-          Bem-vindo, {profile?.display_name || profile?.username || (isOwner ? "Dono" : "usuario")}
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Servidor ativo:{" "}
-          <span className="font-semibold text-foreground">{activeServer?.name ?? "nenhum"}</span> ·{" "}
-          {servers.length} servidor(es) liberado(s)
-          {profile ? ` · limite de ${profile.max_connections} conexao(oes)` : ""}
+      <div className="overflow-hidden rounded-2xl border border-border bg-card px-4 py-5 lg:px-6 lg:py-6">
+        <h2 className="text-2xl font-bold">
+          Seu acesso está pronto para uso
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Atalhos rápidos para o catálogo e para a conta.
         </p>
       </div>
 
@@ -130,6 +149,8 @@ function Inicio() {
           <Link
             key={card.to}
             to={card.to}
+            preload="intent"
+            preloadDelay={80}
             className="block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <Card className="h-full transition-all hover:-translate-y-0.5 hover:border-primary/60">
@@ -139,7 +160,6 @@ function Inicio() {
                 </span>
                 <div>
                   <p className="font-semibold">{card.label}</p>
-                  <p className="text-xs text-muted-foreground">{card.desc}</p>
                 </div>
               </CardContent>
             </Card>
@@ -148,7 +168,7 @@ function Inicio() {
       </div>
 
       {!isOwner && <FloatingChat userId={(profile?.id ?? authUserId) as any} />}
-    </div>
+    </UserPageShell>
   );
 }
 
@@ -159,10 +179,47 @@ function FloatingChat({ userId }: { userId?: string }) {
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [messagesPage, setMessagesPage] = useState(1);
+  const [actionLoading, setActionLoading] = useState(false);
+  const messagesPageSize = 15;
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesPageRef = useRef(1);
+  const queryClient = useQueryClient();
   const fetchThread = useServerFn(getOrCreateThread);
+  const fetchMessagesPage = useServerFn(listSupportMessagesPage);
   const mutationMarkRead = useServerFn(markThreadRead);
   const mutationSendSupport = useServerFn(sendSupportMessage);
+
+  const messagesQuery = useQuery({
+    queryKey: ["floating-support-messages", thread?.id, messagesPage, messagesPageSize],
+    queryFn: () =>
+      fetchMessagesPage({
+        data: {
+          threadId: thread.id,
+          page: messagesPage,
+          page_size: messagesPageSize,
+        },
+      }),
+    enabled: isOpen && !!thread?.id,
+    placeholderData: (previous) => previous,
+  });
+
+  const messagesTotal = messagesQuery.data?.total ?? 0;
+  const messagesTotalPages = Math.max(1, Math.ceil(messagesTotal / messagesPageSize));
+  const messagesSafePage = Math.min(messagesPage, messagesTotalPages);
+  const messagesPaginationPages = useMemo(() => {
+    const windowSize = 5;
+    if (messagesTotalPages <= windowSize) {
+      return Array.from({ length: messagesTotalPages }, (_, index) => index + 1);
+    }
+    const start = Math.max(1, Math.min(messagesSafePage - 2, messagesTotalPages - (windowSize - 1)));
+    const end = Math.min(messagesTotalPages, start + windowSize - 1);
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [messagesSafePage, messagesTotalPages]);
+
+  useEffect(() => {
+    messagesPageRef.current = messagesPage;
+  }, [messagesPage]);
 
   useEffect(() => {
     if (!userId || !isOpen) return;
@@ -174,20 +231,10 @@ function FloatingChat({ userId }: { userId?: string }) {
         const data = await fetchThread({ data: { userId } });
         setThread(data);
         setUnread(0);
+        setMessagesPage(1);
         
         await mutationMarkRead({ data: { threadId: data['id'], isOwner: false } });
 
-        // Carregar mensagens iniciais
-        const { data: msgs, error: fetchErr } = await (supabase
-          .from('support_messages' as any)
-          .select('*')
-          .eq('thread_id', data['id'])
-          .order('created_at', { ascending: true }) as any);
-        
-        if (fetchErr) throw fetchErr;
-        if (msgs) setMessages(msgs);
-
-        // Subscrição em tempo real otimizada
         channel = supabase
           .channel(`thread_user:${data['id']}`)
           .on('postgres_changes', { 
@@ -196,18 +243,14 @@ function FloatingChat({ userId }: { userId?: string }) {
             table: 'support_messages', 
             filter: `thread_id=eq.${data['id']}` 
           }, (payload) => {
-            console.log("Nova mensagem recebida via Realtime:", payload.new);
-            setMessages(prev => {
-              // Verificação de ID para evitar duplicidade em carga alta
-              if (prev.some(m => m['id'] === payload.new['id'])) return prev;
-              return [...prev, payload.new];
-            });
-          })
-          .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-              console.log("Canal de chat assinado com sucesso.");
+            if (messagesPageRef.current === 1) {
+              setMessages(prev => {
+                if (prev.some(m => m['id'] === payload.new['id'])) return prev;
+                return [...prev, payload.new];
+              });
             }
-          });
+          })
+          .subscribe();
       } catch (err) {
         console.error("Erro ao inicializar chat:", err);
         toast.error("Erro ao carregar mensagens");
@@ -221,7 +264,18 @@ function FloatingChat({ userId }: { userId?: string }) {
         supabase.removeChannel(channel);
       }
     };
-  }, [userId, isOpen]);
+  }, [userId, isOpen, fetchThread, mutationMarkRead]);
+
+  useEffect(() => {
+    if (!thread?.id || !isOpen) return;
+    setMessages(messagesQuery.data?.items ?? []);
+  }, [messagesQuery.data, thread?.id, isOpen]);
+
+  useEffect(() => {
+    if (!thread?.id) return;
+    setMessagesPage(1);
+    queryClient.invalidateQueries({ queryKey: ["floating-support-messages", thread.id] });
+  }, [thread?.id, queryClient]);
 
   // Handle unread indicator when closed
   useEffect(() => {
@@ -264,11 +318,57 @@ function FloatingChat({ userId }: { userId?: string }) {
       }
 
       setNewMessage("");
+      setMessagesPage(1);
+      if (thread?.id) {
+        queryClient.invalidateQueries({ queryKey: ["floating-support-messages", thread.id] });
+      }
       toast.success("Mensagem enviada!");
     } catch (err: any) {
       toast.error("Erro: " + (err.message || "Falha na conexão"));
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleClosePromptYes = async () => {
+    if (!thread?.id) return;
+    setActionLoading(true);
+    try {
+      await closeSupportThread({ data: { threadId: thread.id, closedByRole: "client" } });
+      queryClient.invalidateQueries({ queryKey: ["floating-support-messages", thread.id] });
+      toast.success("Atendimento encerrado.");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao encerrar.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleClosePromptNo = async () => {
+    if (!thread?.id) return;
+    setActionLoading(true);
+    try {
+      await respondToClosurePrompt({ data: { threadId: thread.id, keepOpen: true } });
+      queryClient.invalidateQueries({ queryKey: ["floating-support-messages", thread.id] });
+      toast.success("Atendimento mantido em aberto.");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao responder.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSatisfaction = async (score: number) => {
+    if (!thread?.id) return;
+    setActionLoading(true);
+    try {
+      await submitSupportSatisfaction({ data: { threadId: thread.id, score } });
+      queryClient.invalidateQueries({ queryKey: ["floating-support-messages", thread.id] });
+      toast.success(`Avaliação registrada: ${score}/5.`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao avaliar.");
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -287,6 +387,61 @@ function FloatingChat({ userId }: { userId?: string }) {
           </div>
           
           <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-muted/30">
+            {messagesTotalPages > 1 && (
+              <div className="rounded-2xl border border-border/70 bg-background/80 p-2">
+                <div className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                  Página {messagesSafePage} de {messagesTotalPages}
+                </div>
+                <Pagination className="mx-0 w-full justify-start">
+                  <PaginationContent>
+                    <PaginationItem>
+                      <PaginationPrevious
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          setMessagesPage((current) => Math.max(1, current - 1));
+                        }}
+                        className={messagesSafePage <= 1 ? "pointer-events-none opacity-50" : ""}
+                      />
+                    </PaginationItem>
+                    {messagesPaginationPages.map((page) => (
+                      <PaginationItem key={page}>
+                        <Button
+                          variant={page === messagesSafePage ? "default" : "ghost"}
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => setMessagesPage(page)}
+                        >
+                          {page}
+                        </Button>
+                      </PaginationItem>
+                    ))}
+                    {messagesTotalPages > messagesPaginationPages[messagesPaginationPages.length - 1] && (
+                      <PaginationItem>
+                        <PaginationEllipsis />
+                      </PaginationItem>
+                    )}
+                    <PaginationItem>
+                      <PaginationNext
+                        href="#"
+                        onClick={(event) => {
+                          event.preventDefault();
+                          setMessagesPage((current) => Math.min(messagesTotalPages, current + 1));
+                        }}
+                        className={messagesSafePage >= messagesTotalPages ? "pointer-events-none opacity-50" : ""}
+                      />
+                    </PaginationItem>
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            )}
+
+            {messagesQuery.isLoading ? (
+              <div className="rounded-2xl border border-border/70 bg-background/60 p-6 text-center text-xs text-muted-foreground">
+                Carregando mensagens...
+              </div>
+            ) : null}
+
             {messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-2">
                 <div className="bg-primary/10 p-4 rounded-full">
@@ -298,13 +453,47 @@ function FloatingChat({ userId }: { userId?: string }) {
             ) : (
               messages.map(msg => {
                 const isMe = msg['sender_id'] === userId;
+                const messageType = inferSupportMessageType(msg, userId);
+                const messageMeta = getSupportMessageTypeMeta(messageType);
+                const isClosePrompt = messageType === "closure_prompt";
+                const isSatisfactionPrompt = messageType === "satisfaction_prompt";
                 return (
                   <div key={msg['id']} className={cn("chat-bubble-container flex", isMe ? "justify-end" : "justify-start")}>
                     <div className={cn(
                       "max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm",
                       isMe ? "bg-primary text-primary-foreground rounded-tr-none" : "bg-card border rounded-tl-none"
                     )}>
-                      {msg['file_url'] ? (
+                      {messageType !== "user_message" && (
+                        <div className="mb-1 flex items-center gap-1.5">
+                          <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]", messageMeta.className)}>
+                            {messageMeta.label}
+                          </span>
+                        </div>
+                      )}
+                      {isClosePrompt ? (
+                        <div className="space-y-3">
+                          <p>{msg['content']}</p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button type="button" size="sm" onClick={() => void handleClosePromptYes()} disabled={actionLoading}>
+                              Sim
+                            </Button>
+                            <Button type="button" size="sm" variant="outline" onClick={() => void handleClosePromptNo()} disabled={actionLoading}>
+                              Não
+                            </Button>
+                          </div>
+                        </div>
+                      ) : isSatisfactionPrompt ? (
+                        <div className="space-y-3">
+                          <p>{msg['content']}</p>
+                          <div className="grid grid-cols-5 gap-2">
+                            {[1, 2, 3, 4, 5].map((score) => (
+                              <Button key={score} type="button" size="sm" variant={score >= 4 ? "default" : "outline"} onClick={() => void handleSatisfaction(score)} disabled={actionLoading}>
+                                {score}
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : msg['file_url'] ? (
                         <div className="space-y-1">
                           {msg['file_type'] === 'image' ? (
                             <img src={msg['file_url']} alt="Envio" className="max-w-full rounded-lg" />

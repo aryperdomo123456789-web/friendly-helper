@@ -16,6 +16,42 @@ export const getPlans = createServerFn({ method: "GET" })
     return (data as any) as SubscriptionPlan[];
   });
 
+export const getPlansPage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { page: number; page_size: number }) =>
+    z.object({
+      page: z.number().int().min(1),
+      page_size: z.number().int().min(1).max(100),
+    }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { count, error: countError } = await context.supabase
+      .from("subscription_plans")
+      .select("id", { count: "exact", head: true });
+    if (countError) throw countError;
+
+    const total = count ?? 0;
+    const totalPages = Math.max(1, Math.ceil(total / data.page_size));
+    const page = Math.min(Math.max(data.page, 1), totalPages);
+    const from = (page - 1) * data.page_size;
+    const to = from + data.page_size - 1;
+
+    const { data: rows, error } = await context.supabase
+      .from("subscription_plans")
+      .select("*")
+      .order("price", { ascending: true })
+      .range(from, to);
+
+    if (error) throw error;
+
+    return {
+      items: (rows as any) as SubscriptionPlan[],
+      total,
+      page,
+      page_size: data.page_size,
+    };
+  });
+
 export const savePlan = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: any) => 

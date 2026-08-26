@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && node scripts/generate-legacy-css.mjs",
+    "build": "NITRO_PRESET=node_server vite build && node scripts/generate-legacy-css.mjs && node scripts/build-multiservice-entrypoints.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "build:services": "node scripts/build-multiservice-entrypoints.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "build:node": "NITRO_PRESET=node_server vite build && node scripts/generate-legacy-css.mjs",
+    "build:node": "NITRO_PRESET=node_server vite build && node scripts/generate-legacy-css.mjs && node scripts/build-multiservice-entrypoints.mjs",
     "start": "node .output/server/index.mjs"
   },
   "dependencies": {

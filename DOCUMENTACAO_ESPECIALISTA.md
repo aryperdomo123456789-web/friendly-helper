@@ -1,6 +1,6 @@
-# Documentação Especialista - WebPlayer IPTV v2.0 (High Performance & Security)
+# Documentação Especialista - MAGOPLAYERPRO IPTV v2.0 (High Performance & Security)
 
-Este documento detalha a arquitetura, segurança, e lógica de negócios do sistema WebPlayer IPTV, projetado para alta escalabilidade e implantação em servidores dedicados (Ubuntu 22/aaPanel).
+Este documento detalha a arquitetura, segurança, e lógica de negócios do sistema MAGOPLAYERPRO IPTV, projetado para alta escalabilidade e implantação em servidores dedicados (Ubuntu 22/aaPanel).
 
 ## 1. Arquitetura do Sistema
 

@@ -67,8 +67,8 @@ export const getMyAccount = createServerFn({ method: "GET" })
       .select("*")
       .eq("is_active", true);
 
-    const publicTestLinks = (testLinks ?? []).filter((link: any) => link.slug !== "dono-livre");
-    const ownerTestLinks = (testLinks ?? []).filter((link: any) => link.slug === "dono-livre");
+    const publicTestLinks = (testLinks ?? []).filter((link: any) => !link.owner_only);
+    const ownerTestLinks = (testLinks ?? []).filter((link: any) => link.owner_only);
 
     return {
       userId: context.userId,
@@ -101,7 +101,7 @@ export const updateMyAccount = createServerFn({ method: "POST" })
           .toLowerCase()
           .min(3)
           .max(40)
-          .regex(/^[a-z0-9._-]+$/, "Use apenas letras, numeros, ponto, hifen ou underline"),
+          .regex(/^[a-z0-9._-]+$/, "Use apenas letras, números, ponto, hífen ou underline"),
         display_name: z.string().trim().max(120).optional(),
         current_password: z.string().min(1).max(72),
         new_password: z.string().min(6).max(72).optional().or(z.literal("")),
@@ -113,9 +113,9 @@ export const updateMyAccount = createServerFn({ method: "POST" })
 
     const { data: current } = await supabaseAdmin.auth.admin.getUserById(context.userId);
     const currentEmail = current.user?.email;
-    if (!currentEmail) throw new Error("Conta nao encontrada");
+    if (!currentEmail) throw new Error("Conta não encontrada.");
 
-    // Confirma a senha atual antes de qualquer alteracao sensivel.
+    // Confirma a senha atual antes de qualquer alteração sensível.
     const { createClient } = await import("@supabase/supabase-js");
     const check = createClient(
       process.env["SUPABASE_URL"]!,
@@ -126,7 +126,7 @@ export const updateMyAccount = createServerFn({ method: "POST" })
       email: currentEmail,
       password: data.current_password,
     });
-    if (signInError) throw new Error("Senha atual incorreta");
+    if (signInError) throw new Error("Senha atual incorreta.");
 
     const nextEmail = `${data.username}@${SYNTHETIC_EMAIL_DOMAIN}`;
     const payload: { email?: string; password?: string; user_metadata: { username: string } } = {

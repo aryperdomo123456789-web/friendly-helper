@@ -5,12 +5,12 @@ import { DEFAULT_BRAND_IMAGE_URL } from "@/lib/config.functions";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Login do Cliente | WebPlayer IPTV" },
+      { title: "Login do Cliente" },
       {
         name: "description",
-        content: "Acesse sua conta de cliente no WebPlayer IPTV.",
+        content: "Acesse sua conta de cliente.",
       },
-      { property: "og:title", content: "Login do Cliente | WebPlayer IPTV" },
+      { property: "og:title", content: "Login do Cliente" },
       {
         property: "og:description",
         content: "Entre com suas credenciais de cliente para acessar canais, filmes e séries.",
@@ -18,10 +18,10 @@ export const Route = createFileRoute("/")({
       { property: "og:type", content: "website" },
       { property: "og:image", content: DEFAULT_BRAND_IMAGE_URL },
       { property: "og:image:secure_url", content: DEFAULT_BRAND_IMAGE_URL },
-      { property: "og:image:alt", content: "WebPlayer IPTV" },
+      { property: "og:image:alt", content: "Aplicativo IPTV" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:image", content: DEFAULT_BRAND_IMAGE_URL },
-      { name: "twitter:image:alt", content: "WebPlayer IPTV" },
+      { name: "twitter:image:alt", content: "Aplicativo IPTV" },
     ],
   }),
   component: PublicLoginPage,

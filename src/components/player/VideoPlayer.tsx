@@ -5,9 +5,10 @@ type Props = {
   url: string;
   poster?: string | null;
   title?: string;
+  kind?: "live" | "movie" | "series";
 };
 
-export function VideoPlayer({ url, poster, title }: Props) {
+export function VideoPlayer({ url, poster, title, kind }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -24,10 +25,23 @@ export function VideoPlayer({ url, poster, title }: Props) {
     const onError = () => {
       if (!destroyed) setError("Fluxo indisponivel neste momento.");
     };
+    const startPlayback = async (allowMutedFallback = false) => {
+      try {
+        await video.play();
+      } catch {
+        if (allowMutedFallback && !video.muted) {
+          video.muted = true;
+          try {
+            await video.play();
+          } catch {
+            // Mantemos o erro silencioso para não quebrar o fluxo visual.
+          }
+        }
+      }
+    };
 
     setError(null);
     setLoading(true);
-    video.preload = "auto";
     video.setAttribute("playsinline", "");
 
     const isHls = url.includes(".m3u8") || url.includes("hls=1");
@@ -41,7 +55,7 @@ export function VideoPlayer({ url, poster, title }: Props) {
         if (Hls.isSupported()) {
           let recoveries = 0;
           hls = new Hls({
-            lowLatencyMode: true,
+            lowLatencyMode: false,
             enableWorker: true,
             backBufferLength: 90,
             maxBufferLength: 30,
@@ -57,7 +71,10 @@ export function VideoPlayer({ url, poster, title }: Props) {
           });
           hls.loadSource(url);
           hls.attachMedia(video!);
-          hls.on(Hls.Events.MANIFEST_PARSED, ready);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            ready();
+            void startPlayback(kind === "live");
+          });
           hls.on(Hls.Events.LEVEL_LOADED, ready);
           hls.on(Hls.Events.ERROR, (_event, data) => {
             console.error("[player] hls", data.type, data.details, data.fatal);
@@ -76,8 +93,8 @@ export function VideoPlayer({ url, poster, title }: Props) {
             const code = (data.response as { code?: number } | undefined)?.code;
             setError(
               code === 404 || code === 502
-                ? "Canal indisponivel no servidor agora (fora do ar ou limite de conexoes em uso)."
-                : "Nao foi possivel iniciar o canal. Tente outro canal ou servidor.",
+                ? "Canal indisponível no servidor no momento (fora do ar ou com limite de conexões em uso)."
+                : "Não foi possível iniciar o canal. Tente outro canal ou servidor.",
             );
           });
           video.addEventListener("canplay", ready);
@@ -86,12 +103,13 @@ export function VideoPlayer({ url, poster, title }: Props) {
           video.addEventListener("waiting", buffer);
           video.addEventListener("stalled", buffer);
           video.addEventListener("error", onError);
+          void startPlayback(kind === "live");
           return;
         }
       }
       video!.src = url;
       video!.load();
-      void video!.play().catch(() => undefined);
+      void startPlayback(kind === "live");
       video.addEventListener("canplay", ready);
       video.addEventListener("playing", ready);
       video.addEventListener("loadeddata", ready);
@@ -123,8 +141,9 @@ export function VideoPlayer({ url, poster, title }: Props) {
         ref={videoRef}
         poster={poster ?? undefined}
         controls
+        autoPlay
         playsInline
-        preload="auto"
+        preload="metadata"
         controlsList="nodownload noplaybackrate noremoteplayback"
         disablePictureInPicture
         className="h-full w-full"

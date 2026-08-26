@@ -9,7 +9,7 @@ async function assertOwner(supabase: any, userId: string) {
     .eq("user_id", userId)
     .in("role", ["owner", "admin"]);
   if (error) throw new Error(error.message);
-  if (!data || data.length === 0) throw new Error("Acesso restrito ao dono do sistema");
+  if (!data || data.length === 0) throw new Error("Acesso restrito à área administrativa.");
 }
 
 export const getNotifications = createServerFn({ method: "GET" })

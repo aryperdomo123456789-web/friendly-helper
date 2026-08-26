@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { proxyToInternalService } from "@/lib/internal-service-proxy.server";
 
 // Public because <video>/hls.js cannot attach an Authorization header.
 // Security model: the querystring carries ONLY an AES-256-GCM ciphertext produced
@@ -8,16 +9,26 @@ export const Route = createFileRoute("/api/public/stream")({
   server: {
     handlers: {
       GET: async ({ request }) => {
+        const playerServiceUrl = process.env["STREAM_SERVICE_URL"];
+        if (playerServiceUrl) {
+          try {
+            return await proxyToInternalService(request, playerServiceUrl);
+          } catch (error) {
+            console.error("Falha ao encaminhar a rota de stream para o player dedicado", error);
+          }
+        }
+
         const { readStreamToken, looksLikePlaylist, rewritePlaylist } = await import(
           "@/lib/stream-proxy.server"
         );
         const url = new URL(request.url);
         const token = await readStreamToken(url.searchParams.get("s"));
-        if (!token) return new Response("Token invalido ou expirado", { status: 403 });
+        if (!token) return new Response("Token inválido ou expirado.", { status: 403 });
 
         const target = token.url;
         const range = request.headers.get("range");
         const expectsHls = url.searchParams.get("hls") === "1" || target.includes(".m3u8");
+        const requestSignal = request.signal;
         // Panels hand out short-lived, sometimes IP-bound redirect tokens and
         // occasionally answer 5xx while re-arming the stream. A single attempt
         // therefore fails intermittently -> retry before giving up.
@@ -25,6 +36,12 @@ export const Route = createFileRoute("/api/public/stream")({
           const controller = new AbortController();
           // Increased timeout to 60s for slow panel handshakes or complex redirects
           const timer = setTimeout(() => controller.abort(), 60_000);
+          const abortForwarded = () => controller.abort();
+          if (requestSignal.aborted) {
+            controller.abort();
+          } else {
+            requestSignal.addEventListener("abort", abortForwarded, { once: true });
+          }
           try {
             return await fetch(target, {
               redirect: "follow",
@@ -34,7 +51,6 @@ export const Route = createFileRoute("/api/public/stream")({
                 "User-Agent": "VLC/3.0.21 LibVLC/3.0.21",
                 "Accept-Encoding": "identity",
                 "Icy-MetaData": "1",
-                "Connection": "keep-alive",
                 Accept: "*/*",
                 ...(range ? { Range: range } : {}),
               },
@@ -43,6 +59,7 @@ export const Route = createFileRoute("/api/public/stream")({
             return null;
           } finally {
             clearTimeout(timer);
+            requestSignal.removeEventListener("abort", abortForwarded);
           }
         };
 
@@ -55,9 +72,10 @@ export const Route = createFileRoute("/api/public/stream")({
           if (upstream && (upstream.status === 301 || upstream.status === 302)) {
             const location = upstream.headers.get("location");
             if (location) {
-               // Follow the redirect manually once
-               const redirectRes = await fetch(location, {
-                 headers: { "User-Agent": "VLC/3.0.21 LibVLC/3.0.21", "Accept": "*/*" }
+              // Follow the redirect manually once
+              const redirectRes = await fetch(location, {
+                signal: requestSignal,
+                 headers: { "User-Agent": "VLC/3.0.21 LibVLC/3.0.21", Accept: "*/*" }
                });
                if (redirectRes.ok || redirectRes.status === 206) {
                  upstream = redirectRes;

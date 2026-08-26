@@ -51,7 +51,28 @@ create table if not exists public.server_credentials (
   username text not null,
   password text not null,
   dns text not null,
-  created_at timestamptz not null default timezone('utc'::text, now())
+  created_at timestamptz not null default timezone('utc'::text, now()),
+  unique (server_id)
+);
+
+create table if not exists public.iptv_server_cache (
+  id uuid primary key default gen_random_uuid(),
+  server_id uuid not null references public.iptv_servers(id) on delete cascade,
+  cache_key text not null,
+  payload jsonb not null default '{}'::jsonb,
+  fetched_at timestamptz not null default timezone('utc'::text, now()),
+  unique (server_id, cache_key)
+);
+
+create table if not exists public.iptv_server_m3u_cache (
+  id uuid primary key default gen_random_uuid(),
+  server_id uuid not null references public.iptv_servers(id) on delete cascade,
+  source_url text not null,
+  playlist_text text not null,
+  playlist_hash text not null,
+  item_count integer not null default 0,
+  fetched_at timestamptz not null default timezone('utc'::text, now()),
+  unique (server_id)
 );
 
 create table if not exists public.subscription_plans (
@@ -181,6 +202,10 @@ create index if not exists profiles_plan_id_idx on public.profiles(plan_id);
 create index if not exists profiles_created_by_idx on public.profiles(created_by);
 create index if not exists iptv_servers_created_by_idx on public.iptv_servers(created_by);
 create index if not exists server_credentials_server_id_idx on public.server_credentials(server_id);
+create index if not exists iptv_server_cache_server_id_idx on public.iptv_server_cache(server_id);
+create index if not exists iptv_server_cache_cache_key_idx on public.iptv_server_cache(cache_key);
+create index if not exists iptv_server_m3u_cache_server_id_idx on public.iptv_server_m3u_cache(server_id);
+create index if not exists iptv_server_m3u_cache_fetched_at_idx on public.iptv_server_m3u_cache(fetched_at desc);
 create index if not exists user_server_access_user_id_idx on public.user_server_access(user_id);
 create index if not exists user_server_access_server_id_idx on public.user_server_access(server_id);
 create index if not exists device_sessions_user_id_idx on public.device_sessions(user_id);
@@ -194,6 +219,8 @@ alter table public.app_config enable row level security;
 alter table public.user_roles enable row level security;
 alter table public.iptv_servers enable row level security;
 alter table public.server_credentials enable row level security;
+alter table public.iptv_server_cache enable row level security;
+alter table public.iptv_server_m3u_cache enable row level security;
 alter table public.subscription_plans enable row level security;
 alter table public.profiles enable row level security;
 alter table public.user_server_access enable row level security;
@@ -216,8 +243,14 @@ grant all on public.user_roles to service_role;
 grant select, insert, update, delete on public.iptv_servers to authenticated;
 grant all on public.iptv_servers to service_role;
 
-grant select, insert, update, delete on public.server_credentials to authenticated;
+revoke all on public.server_credentials from authenticated;
 grant all on public.server_credentials to service_role;
+
+revoke all on public.iptv_server_cache from anon, authenticated;
+grant all on public.iptv_server_cache to service_role;
+
+revoke all on public.iptv_server_m3u_cache from anon, authenticated;
+grant all on public.iptv_server_m3u_cache to service_role;
 
 grant select, insert, update, delete on public.subscription_plans to authenticated;
 grant all on public.subscription_plans to service_role;
@@ -282,12 +315,6 @@ using (public.has_role(auth.uid(), 'owner'::public.app_role) or public.has_role(
 with check (public.has_role(auth.uid(), 'owner'::public.app_role) or public.has_role(auth.uid(), 'admin'::public.app_role));
 
 drop policy if exists "Owners can manage credentials" on public.server_credentials;
-create policy "Owners can manage credentials"
-on public.server_credentials
-for all
-to authenticated
-using (public.has_role(auth.uid(), 'owner'::public.app_role) or public.has_role(auth.uid(), 'admin'::public.app_role))
-with check (public.has_role(auth.uid(), 'owner'::public.app_role) or public.has_role(auth.uid(), 'admin'::public.app_role));
 
 drop policy if exists "Owners can manage plans" on public.subscription_plans;
 drop policy if exists "Authenticated users can select plans" on public.subscription_plans;

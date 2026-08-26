@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { getAppConfig } from "@/lib/config.functions";
+import { APP_CONFIG_QUERY_KEY, getAppConfig } from "@/lib/config.functions";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Star, Play, Info, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "@tanstack/react-router";
+import { proxyMediaUrl } from "@/lib/media-url";
 
 interface TMDBContent {
   id: number;
@@ -29,7 +30,7 @@ export function TMDBHeroCarousel() {
   const [loading, setLoading] = useState(true);
 
   const { data: config, error: configError } = useQuery({
-    queryKey: ["app-config-public"],
+    queryKey: APP_CONFIG_QUERY_KEY,
     queryFn: () => fetchConfig(),
     staleTime: 5 * 60_000,
     retry: false,
@@ -128,7 +129,7 @@ export function TMDBHeroCarousel() {
         >
           <div className="absolute inset-0">
             <img
-              src={`https://image.tmdb.org/t/p/original${item.backdrop_path}`}
+              src={proxyMediaUrl(`https://image.tmdb.org/t/p/original${item.backdrop_path}`) ?? `https://image.tmdb.org/t/p/original${item.backdrop_path}`}
               alt={item.title || item.name || "Conteúdo TMDB"}
               className="h-full w-full object-cover object-top sm:object-center"
             />

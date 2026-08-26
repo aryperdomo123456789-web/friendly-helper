@@ -9,8 +9,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lock, User, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { DEFAULT_BRAND_IMAGE_URL, getAppConfig } from "@/lib/config.functions";
+import {
+  APP_CONFIG_QUERY_KEY,
+  DEFAULT_BRAND_IMAGE_URL,
+  getAppConfig,
+} from "@/lib/config.functions";
 import { createFirstOwner } from "@/lib/bootstrap.functions";
+import { getMySession } from "@/lib/player.functions";
 
 type LoginMode = "public" | "owner";
 
@@ -29,6 +34,7 @@ export function LoginScreen({
 }: LoginScreenProps) {
   const navigate = useNavigate();
   const fetchConfig = useServerFn(getAppConfig);
+  const fetchSession = useServerFn(getMySession);
   const [hasSession, setHasSession] = useState(false);
   const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState(initialPassword);
@@ -36,7 +42,7 @@ export function LoginScreen({
   const autoLoginAttemptedRef = useRef(false);
   const runBootstrap = useServerFn(createFirstOwner);
   const { data: appConfig } = useQuery({
-    queryKey: ["public-app-config"],
+    queryKey: APP_CONFIG_QUERY_KEY,
     queryFn: () => fetchConfig(),
   });
 
@@ -46,13 +52,20 @@ export function LoginScreen({
       if (!active) return;
       if (data.session) {
         setHasSession(true);
-        navigate({ to: "/inicio", replace: true });
+        void (async () => {
+          try {
+            const session = await fetchSession();
+            window.location.replace(session.isOwner ? "/painel" : "/inicio");
+          } catch {
+            window.location.replace("/inicio");
+          }
+        })();
       }
     });
     return () => {
       active = false;
     };
-  }, [navigate]);
+  }, [fetchSession]);
 
   useEffect(() => {
     if (initialUsername) {
@@ -85,11 +98,13 @@ export function LoginScreen({
   if (hasSession) return null;
 
   const isOwnerMode = mode === "owner";
-  const title = isOwnerMode ? "Acesso do Dono" : "WEBPLAYER";
+  const title = isOwnerMode ? "Acesso administrativo" : (appConfig?.name || "Sistema IPTV");
+  const shortName = appConfig?.short_name || appConfig?.name || "Sistema IPTV";
   const description = isOwnerMode
     ? "Entrada administrativa exclusiva do dono do sistema"
-    : "Entre com suas credenciais de acesso";
-  const telegramHandle = (appConfig?.telegram_handle || "@MagoPD").trim().replace(/^@/, "");
+    : (appConfig?.description || "Entre com suas credenciais de acesso");
+  const telegramHandle = (appConfig?.telegram_handle || "@contato").trim().replace(/^@/, "");
+  const brandImage = appConfig?.logo_url || DEFAULT_BRAND_IMAGE_URL;
 
   const submitLogin = async (loginUsername: string, loginPassword: string) => {
     if (!loginUsername || !loginPassword) {
@@ -101,13 +116,8 @@ export function LoginScreen({
     const isOwnerAlias = normalizedUsername === "dono" || normalizedUsername === "magodono";
 
     if (!isOwnerMode && isOwnerAlias) {
-      toast.info("O acesso do dono fica em /dono");
+      toast.info("O acesso administrativo fica em /dono");
       navigate({ to: "/dono", replace: true });
-      return;
-    }
-
-    if (isOwnerMode && !isOwnerAlias) {
-      toast.error("Use apenas o acesso do dono em /dono.");
       return;
     }
 
@@ -132,8 +142,16 @@ export function LoginScreen({
 
       if (error) throw error;
 
-      toast.success(isOwnerMode ? "Acesso do dono autorizado!" : "Acesso autorizado!");
-      navigate({ to: "/inicio" });
+      if (isOwnerMode) {
+        const session = await fetchSession();
+        if (!session.isOwner) {
+          await supabase.auth.signOut();
+          throw new Error("Esse acesso não possui permissão de dono.");
+        }
+      }
+
+      toast.success(isOwnerMode ? "Acesso administrativo autorizado!" : "Acesso autorizado!");
+      window.location.replace(isOwnerMode ? "/painel" : "/inicio");
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || "Erro ao acessar o sistema");
@@ -156,7 +174,7 @@ export function LoginScreen({
         <CardHeader className="space-y-1 text-center">
           <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/15 text-primary shadow-xl shadow-primary/20 overflow-hidden">
             <img
-              src={DEFAULT_BRAND_IMAGE_URL}
+              src={brandImage}
               alt="Logo"
               className="h-full w-full object-contain p-2"
             />
@@ -256,7 +274,7 @@ export function LoginScreen({
           aria-label="Abrir Telegram do sistema"
           className="text-xs font-medium text-primary/80 transition-colors hover:text-primary"
         >
-          © 2026 MagoPD · Todos os direitos reservados
+          © 2026 {shortName} · Todos os direitos reservados
         </a>
       </div>
     </div>

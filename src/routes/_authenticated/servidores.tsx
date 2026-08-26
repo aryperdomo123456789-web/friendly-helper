@@ -5,30 +5,29 @@ import { Button } from "@/components/ui/button";
 import { Check, Server } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { UserPageShell } from "@/components/user-shell/user-page-shell";
 
 export const Route = createFileRoute("/_authenticated/servidores")({
   head: () => ({
     meta: [
-      { title: "Servidores | WebPlayer IPTV" },
+      { title: "Servidores" },
       { name: "description", content: "Troque entre os servidores IPTV liberados para o seu acesso." },
-      { property: "og:title", content: "Servidores | WebPlayer IPTV" },
-      { property: "og:description", content: "Multi-servidor sem misturar catalogos." },
+      { property: "og:title", content: "Servidores" },
+      { property: "og:description", content: "Multi-servidor sem misturar catálogos." },
     ],
   }),
   component: Servidores,
 });
 
 function Servidores() {
-  const { servers, serverId, setServerId } = usePlayerSession();
+  const { servers, serverId, setServerId, preloadServerCatalog } = usePlayerSession();
 
   return (
-    <div className="space-y-5 min-w-0 w-full overflow-x-hidden">
-      <div>
-        <h1 className="text-2xl font-bold">Servidores</h1>
-        <p className="text-sm text-muted-foreground">
-          Cada servidor tem catalogo proprio. Trocar aqui recarrega canais, filmes e series.
-        </p>
-      </div>
+    <UserPageShell
+      title="Servidores"
+      description=""
+      icon={Server}
+    >
 
       {servers.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
@@ -39,7 +38,13 @@ function Servidores() {
           {servers.map((server) => {
             const active = server.id === serverId;
             return (
-              <Card key={server.id} className={cn(active && "border-primary")}>
+              <Card
+                key={server.id}
+                className={cn(active && "border-primary")}
+                onMouseEnter={() => preloadServerCatalog(server.id)}
+                onFocusCapture={() => preloadServerCatalog(server.id)}
+                tabIndex={0}
+              >
                 <CardContent className="flex items-center justify-between gap-4 p-5">
                   <div className="flex items-center gap-3">
                     <span
@@ -53,7 +58,7 @@ function Servidores() {
                     <div>
                       <p className="font-semibold">{server.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {active ? "Em uso agora" : "Disponivel"}
+                        {active ? "Em uso agora" : "Disponível"}
                       </p>
                     </div>
                   </div>
@@ -75,6 +80,6 @@ function Servidores() {
           })}
         </div>
       )}
-    </div>
+    </UserPageShell>
   );
 }

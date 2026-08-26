@@ -1,4 +1,4 @@
-# Relatório de Auditoria e Migração — WebPlayer IPTV
+# Relatório de Auditoria e Migração — MAGOPLAYERPRO IPTV
 
 ## Status do Projeto
 - **Repositório GitHub**: [friendly-helper](https://github.com/aryperdomo123456789-web/friendly-helper)

@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+  useDeferredValue,
+  startTransition,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -13,10 +22,12 @@ import { usePlayerSession } from "@/lib/player-store";
 import { getDeviceId } from "@/lib/device";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VideoPlayer } from "./VideoPlayer";
 import { ChevronLeft, Loader2, PlayCircle, Search, Tv, Info, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { proxyMediaUrl } from "@/lib/media-url";
 
 
 type Kind = "live" | "movie" | "series";
@@ -35,10 +46,10 @@ const LABEL: Record<Kind, { title: string; list: string; empty: string; search: 
     search: "Pesquisar filme...",
   },
   series: {
-    title: "Series",
-    list: "Series",
-    empty: "Nenhuma serie nesta categoria",
-    search: "Pesquisar serie...",
+    title: "Séries",
+    list: "Séries",
+    empty: "Nenhuma série nesta categoria",
+    search: "Pesquisar série...",
   },
 };
 
@@ -52,21 +63,222 @@ function MarqueeText({
   className?: string;
 }) {
   return (
-    <span className={cn("block overflow-hidden whitespace-nowrap", className)}>
-      <span
-        className={cn(
-          "wp-marquee inline-flex items-center gap-8",
-          active ? "wp-marquee-run" : "wp-marquee-run-on-hover",
-        )}
-      >
-        <span>{text}</span>
-        <span aria-hidden="true">{text}</span>
-      </span>
+    <span
+      className={cn("block overflow-hidden whitespace-nowrap text-ellipsis", className)}
+      title={text}
+    >
+      {text}
     </span>
   );
 }
 
-export function Catalog({ kind, initialSearch = "" }: { kind: Kind; initialSearch?: string }) {
+type CatalogStreamItem = {
+  id: string;
+  name: string;
+  icon: string | null;
+  ext: string | null;
+  rating: string | null;
+  category_id: string | null;
+};
+
+type CatalogCategory = {
+  category_id: string;
+  category_name: string;
+};
+
+type CatalogEpisode = {
+  id: string;
+  title: string;
+  episode_num: number;
+  ext: string;
+};
+
+function useImagePrefetch(sources: Array<string | null | undefined>, resetKey: string) {
+  const prefetchedSources = useRef(new Set<string>());
+
+  useEffect(() => {
+    prefetchedSources.current.clear();
+  }, [resetKey]);
+
+  useEffect(() => {
+    const uniqueSources = Array.from(
+      new Set(
+        sources
+          .filter((source): source is string => Boolean(source))
+          .map((source) => source.trim())
+          .filter(Boolean),
+      ),
+    ).filter((source) => !prefetchedSources.current.has(source));
+
+    if (uniqueSources.length === 0) return;
+
+    let cancelled = false;
+    const schedule =
+      typeof window !== "undefined" && "requestIdleCallback" in window
+        ? window.requestIdleCallback.bind(window)
+        : (callback: () => void) => window.setTimeout(callback, 0);
+    const cancel =
+      typeof window !== "undefined" && "cancelIdleCallback" in window
+        ? window.cancelIdleCallback.bind(window)
+        : window.clearTimeout.bind(window);
+
+    const handle = schedule(() => {
+      if (cancelled) return;
+      for (const source of uniqueSources.slice(0, 4)) {
+        const image = new Image();
+        image.decoding = "async";
+        image.src = source;
+        prefetchedSources.current.add(source);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      cancel(handle);
+    };
+  }, [sources, resetKey]);
+}
+
+const CatalogCategoryButton = memo(function CatalogCategoryButton({
+  category,
+  active,
+  onSelect,
+  onHover,
+}: {
+  category: CatalogCategory;
+  active: boolean;
+  onSelect: (categoryId: string) => void;
+  onHover: (categoryId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(category.category_id)}
+      onMouseEnter={() => onHover(category.category_id)}
+      onFocus={() => onHover(category.category_id)}
+      className={cn(
+        "w-full rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        "group",
+        active
+          ? "bg-primary/20 font-bold text-primary shadow-sm shadow-primary/10"
+          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+      )}
+    >
+      <MarqueeText text={category.category_name} active={active} className="pr-2" />
+    </button>
+  );
+});
+
+const CatalogGridCard = memo(function CatalogGridCard({
+  item,
+  kind,
+  serverId,
+  active,
+  loading,
+  priority,
+  onPrefetch,
+  onActivate,
+  onHover,
+}: {
+  item: CatalogStreamItem;
+  kind: Kind;
+  serverId: string;
+  active: boolean;
+  loading: boolean;
+  priority: boolean;
+  onPrefetch: (item: CatalogStreamItem) => void;
+  onActivate: (item: CatalogStreamItem) => void;
+  onHover?: (item: CatalogStreamItem) => void;
+}) {
+  const imageUrl = proxyMediaUrl(item.icon, serverId);
+
+  return (
+    <button
+      type="button"
+      onMouseEnter={() => onPrefetch(item)}
+      onMouseEnterCapture={() => onHover?.(item)}
+      onFocus={() => onPrefetch(item)}
+      onFocusCapture={() => onHover?.(item)}
+      onTouchStart={() => onPrefetch(item)}
+      onClick={() => onActivate(item)}
+      tabIndex={0}
+      data-tv-focus
+      aria-label={item.name}
+      className={cn(
+        "group overflow-hidden rounded-xl border border-border bg-secondary/20 text-left transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        active && "border-primary/60 shadow-lg shadow-primary/10",
+      )}
+    >
+      <div
+        className={cn(
+          "relative flex items-center justify-center overflow-hidden bg-secondary/40",
+          kind === "live" ? "aspect-video" : "aspect-[2/3]",
+        )}
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={item.name}
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : "auto"}
+            decoding="async"
+            className={cn("h-full w-full", kind === "live" ? "object-contain p-3" : "object-cover")}
+            onError={(event) => {
+              event.currentTarget.style.display = "none";
+            }}
+          />
+        ) : (
+          <Tv className="h-8 w-8 text-muted-foreground" />
+        )}
+        {loading ? (
+          <Loader2 className="absolute inset-0 m-auto h-8 w-8 animate-spin text-primary" />
+        ) : (
+          <PlayCircle className="absolute inset-0 m-auto h-9 w-9 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
+        )}
+      </div>
+      <div className="px-2 py-2 text-xs font-medium">
+        <MarqueeText text={item.name} active={active} className="line-clamp-2" />
+      </div>
+    </button>
+  );
+});
+
+const CatalogEpisodeButton = memo(function CatalogEpisodeButton({
+  episode,
+  loading,
+  onPrefetch,
+  onActivate,
+}: {
+  episode: CatalogEpisode;
+  loading: boolean;
+  onPrefetch: (episode: CatalogEpisode) => void;
+  onActivate: (episode: CatalogEpisode) => void;
+}) {
+  return (
+    <Button
+      variant="secondary"
+      className="w-full justify-start"
+      onMouseEnter={() => onPrefetch(episode)}
+      onFocus={() => onPrefetch(episode)}
+      onClick={() => onActivate(episode)}
+    >
+      {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4" />}
+      <span className="truncate">
+        {episode.episode_num}. {episode.title}
+      </span>
+    </Button>
+  );
+});
+
+export function Catalog({
+  kind,
+  initialSearch = "",
+  hideHeader = false,
+}: {
+  kind: Kind;
+  initialSearch?: string;
+  hideHeader?: boolean;
+}) {
   const { serverId, activeServer, blocked, profile } = usePlayerSession();
   const queryClient = useQueryClient();
   const deviceId = getDeviceId();
@@ -83,98 +295,47 @@ export function Catalog({ kind, initialSearch = "" }: { kind: Kind; initialSearc
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [playing, setPlaying] = useState<{ id: string; url: string; name: string; icon: string | null } | null>(null);
   const [openSeries, setOpenSeries] = useState<{ id: string; name: string } | null>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const playbackCacheKey = (item: { id: string; ext?: string | null }) => [
-    "playback-url",
-    serverId,
-    kind,
-    item.id,
-    item.ext ?? "",
-    deviceId,
-  ];
-  const playbackQueryFn = (item: { id: string; ext?: string | null; name: string; icon: string | null }) =>
-    () =>
-      fetchPlayback({
-        data: {
-          server_id: serverId!,
-          kind,
-          stream_id: item.id,
-          device_id: deviceId,
-          ...(item.ext ? { ext: item.ext } : {}),
-        },
-      });
-
-  const prefetchPlayback = (item: { id: string; name: string; icon: string | null; ext?: string | null }) => {
-    if (!serverId) return;
-    void queryClient.prefetchQuery({
-      queryKey: playbackCacheKey(item),
-      queryFn: playbackQueryFn(item),
-      staleTime: 24 * 60 * 60 * 1000,
-    });
-  };
-
-
-  useEffect(() => {
-    setCategoryId(null);
-    setCatTerm("");
-    setTerm(initialSearch);
-    setPlaying(null);
-    setOpenSeries(null);
-    // Limpar cache de streams ao trocar de servidor ou tipo para evitar bootstrap duplicado
-    queryClient.invalidateQueries({ queryKey: ["streams"] });
-  }, [kind, serverId, initialSearch, queryClient]);
-
-  useEffect(() => {
-    setTerm(initialSearch);
-  }, [initialSearch]);
-
-
-  const categories = useQuery({
-    queryKey: ["categories", kind, serverId],
-    queryFn: () => fetchCategories({ data: { server_id: serverId!, kind } }),
-    enabled: Boolean(serverId),
-    retry: 1,
-    staleTime: 10 * 60_000,
+  const [pageSize, setPageSize] = useState<Record<Kind, 12 | 24 | 48>>({
+    live: 24,
+    movie: 24,
+    series: 24,
   });
-
-  const searchAll = Boolean(initialSearch.trim());
-  const activeCategory = searchAll ? null : categoryId ?? categories.data?.[0]?.category_id ?? null;
-
-  const streams = useQuery({
-    queryKey: ["streams", kind, serverId, activeCategory],
-    queryFn: () =>
-      fetchStreams({
-        data: {
-          server_id: serverId!,
-          kind,
-          ...(activeCategory ? { category_id: activeCategory } : {}),
-        },
-      }),
-    enabled: Boolean(serverId) && (kind === "live" ? Boolean(activeCategory) : true),
-    staleTime: 5 * 60_000,
+  const [currentPage, setCurrentPage] = useState<Record<Kind, number>>({
+    live: 1,
+    movie: 1,
+    series: 1,
   });
+  const [episodePageSize, setEpisodePageSize] = useState<Record<string, 6 | 12 | 24>>({});
+  const [episodePage, setEpisodePage] = useState<Record<string, number>>({});
+  const deferredCatTerm = useDeferredValue(catTerm);
+  const deferredTerm = useDeferredValue(term);
+  const playbackCacheKey = useCallback(
+    (item: { id: string; ext?: string | null }) => [
+      "playback-url",
+      serverId,
+      kind,
+      item.id,
+      item.ext ?? "",
+      deviceId,
+    ],
+    [serverId, kind, deviceId],
+  );
+  const playbackQueryFn = useCallback(
+    (item: { id: string; ext?: string | null; name: string; icon: string | null }) =>
+      () =>
+        fetchPlayback({
+          data: {
+            server_id: serverId!,
+            kind,
+            stream_id: item.id,
+            device_id: deviceId,
+            ...(item.ext ? { ext: item.ext } : {}),
+          },
+        }),
+    [fetchPlayback, serverId, kind, deviceId],
+  );
 
-  const seriesInfo = useQuery({
-    queryKey: ["series-info", serverId, openSeries?.id],
-    queryFn: () => fetchSeries({ data: { server_id: serverId!, series_id: openSeries!.id } }),
-    enabled: Boolean(serverId && openSeries?.id),
-  });
-
-  const visibleCategories = useMemo(() => {
-    const list = categories.data ?? [];
-    if (!catTerm.trim()) return list;
-    const needle = catTerm.trim().toLowerCase();
-    return list.filter((item) => item.category_name.toLowerCase().includes(needle));
-  }, [categories.data, catTerm]);
-
-  const filtered = useMemo(() => {
-    const list = streams.data ?? [];
-    if (!term.trim()) return list;
-    const needle = term.trim().toLowerCase();
-    return list.filter((item) => item.name.toLowerCase().includes(needle));
-  }, [streams.data, term]);
-
-  const play = async (item: {
+  const play = useCallback(async (item: {
     id: string;
     name: string;
     icon: string | null;
@@ -203,18 +364,288 @@ export function Catalog({ kind, initialSearch = "" }: { kind: Kind; initialSearc
           <div className="flex flex-col gap-1">
             <span className="font-bold">Acesso em uso!</span>
             <span>{msg}</span>
-            <span className="text-[10px] opacity-80 italic">Sugestao: Faca logout em outros dispositivos ou fale com o suporte para aumentar seu limite.</span>
+            <span className="text-[10px] opacity-80 italic">Sugestão: faça logout em outros dispositivos ou fale com o suporte para aumentar seu limite.</span>
           </div>,
           { duration: 6000 }
         );
       } else {
-        toast.error(msg || "Nao foi possivel abrir o conteudo");
+        toast.error(msg || "Não foi possível abrir o conteúdo");
       }
     } finally {
 
       setLoadingId(null);
     }
-  };
+  }, [queryClient, playbackCacheKey, playbackQueryFn]);
+
+  const prefetchPlayback = useCallback((item: { id: string; name: string; icon: string | null; ext?: string | null }) => {
+    if (!serverId) return;
+    void queryClient.prefetchQuery({
+      queryKey: playbackCacheKey(item),
+      queryFn: playbackQueryFn(item),
+      staleTime: 24 * 60 * 60 * 1000,
+    });
+  }, [queryClient, serverId, playbackCacheKey, playbackQueryFn]);
+
+  const prefetchCategoryStreams = useCallback((targetCategoryId: string) => {
+    if (!serverId || !targetCategoryId) return;
+    void queryClient.prefetchQuery({
+      queryKey: ["streams", kind, serverId, targetCategoryId],
+      queryFn: () =>
+        fetchStreams({
+          data: {
+            server_id: serverId,
+            kind,
+            category_id: targetCategoryId,
+          },
+        }),
+      staleTime: 5 * 60_000,
+    });
+  }, [queryClient, serverId, kind, fetchStreams]);
+
+  const prefetchSeriesInfo = useCallback((series: { id: string; name: string }) => {
+    if (!serverId || kind !== "series") return;
+    void queryClient.prefetchQuery({
+      queryKey: ["series-info", serverId, series.id],
+      queryFn: () => fetchSeries({ data: { server_id: serverId, series_id: series.id } }),
+      staleTime: 10 * 60_000,
+    });
+  }, [queryClient, serverId, kind, fetchSeries]);
+
+  const activateCatalogItem = useCallback((item: { id: string; name: string; icon: string | null; ext?: string | null }) => {
+    if (kind === "series") {
+      setOpenSeries({ id: item.id, name: item.name });
+      return;
+    }
+    void play(item);
+  }, [kind, play]);
+
+  const prefetchEpisodePlayback = useCallback((episode: CatalogEpisode) => {
+    const seriesName = openSeries?.name ?? "";
+    prefetchPlayback({
+      id: episode.id,
+      name: `${seriesName} - ${episode.episode_num}. ${episode.title}`,
+      icon: null,
+      ext: episode.ext,
+    });
+  }, [openSeries?.name, prefetchPlayback]);
+
+  const activateEpisode = useCallback((episode: CatalogEpisode) => {
+    if (!openSeries) return;
+    void play({
+      id: episode.id,
+      name: `${openSeries.name} - ${episode.episode_num}. ${episode.title}`,
+      icon: null,
+      ext: episode.ext,
+    });
+  }, [openSeries, play]);
+
+  const selectCategory = useCallback((categoryId: string) => {
+    startTransition(() => {
+      setCategoryId(categoryId);
+      setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
+    });
+    if (typeof window !== "undefined" && window.innerWidth < 1024) {
+      const listArea = document.getElementById("wp-items-area");
+      if (listArea) listArea.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [kind]);
+
+
+  useEffect(() => {
+    setCategoryId(null);
+    setCatTerm("");
+    setTerm(initialSearch);
+    setPlaying(null);
+    setOpenSeries(null);
+    setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
+    setEpisodePage({});
+  }, [kind, serverId, initialSearch, queryClient]);
+
+  useEffect(() => {
+    setTerm(initialSearch);
+  }, [initialSearch]);
+
+
+  const categories = useQuery({
+    queryKey: ["categories", kind, serverId],
+    queryFn: () => fetchCategories({ data: { server_id: serverId!, kind } }),
+    enabled: Boolean(serverId),
+    retry: 1,
+    staleTime: 10 * 60_000,
+    placeholderData: (previous) => previous,
+  });
+
+  const searchAll = Boolean(initialSearch.trim());
+  const activeCategory = searchAll ? null : categoryId ?? categories.data?.[0]?.category_id ?? null;
+
+  const streams = useQuery({
+    queryKey: ["streams", kind, serverId, activeCategory],
+    queryFn: () =>
+      fetchStreams({
+        data: {
+          server_id: serverId!,
+          kind,
+          ...(activeCategory ? { category_id: activeCategory } : {}),
+        },
+    }),
+    enabled: Boolean(serverId) && (kind === "live" ? Boolean(activeCategory) : true),
+    retry: 1,
+    staleTime: 5 * 60_000,
+    placeholderData: (previous) => previous,
+  });
+
+  const seriesInfo = useQuery({
+    queryKey: ["series-info", serverId, openSeries?.id],
+    queryFn: () => fetchSeries({ data: { server_id: serverId!, series_id: openSeries!.id } }),
+    enabled: Boolean(serverId && openSeries?.id),
+    retry: 1,
+    placeholderData: (previous) => previous,
+  });
+
+  useEffect(() => {
+    if (!openSeries?.id) return;
+    setEpisodePage((pages) => ({ ...pages, [openSeries.id]: 1 }));
+  }, [openSeries?.id]);
+
+  const visibleCategories = useMemo(() => {
+    const list = categories.data ?? [];
+    if (!deferredCatTerm.trim()) return list;
+    const needle = deferredCatTerm.trim().toLowerCase();
+    return list.filter((item) => item.category_name.toLowerCase().includes(needle));
+  }, [categories.data, deferredCatTerm]);
+
+  useEffect(() => {
+    if (!serverId || categories.isLoading || categories.isError) return;
+    const warmTargets = visibleCategories.slice(0, 2);
+    for (const category of warmTargets) {
+      if (category.category_id === activeCategory) continue;
+      prefetchCategoryStreams(category.category_id);
+    }
+  }, [serverId, categories.isLoading, categories.isError, visibleCategories, activeCategory, prefetchCategoryStreams]);
+
+  const filtered = useMemo(() => {
+    const list = streams.data ?? [];
+    if (!deferredTerm.trim()) return list;
+    const needle = deferredTerm.trim().toLowerCase();
+    return list.filter((item) => item.name.toLowerCase().includes(needle));
+  }, [streams.data, deferredTerm]);
+
+  const currentEpisodeGroups = useMemo(() => {
+    const seasons = seriesInfo.data?.seasons ?? [];
+    return seasons.map((season) => {
+      const size = episodePageSize[season.season] ?? 12;
+      const total = season.episodes.length;
+      const totalPagesForSeason = Math.max(1, Math.ceil(total / size));
+      const safeSeasonPage = Math.min(episodePage[season.season] ?? 1, totalPagesForSeason);
+      const start = total === 0 ? 0 : (safeSeasonPage - 1) * size + 1;
+      const end = Math.min(safeSeasonPage * size, total);
+      const pages = (() => {
+        const windowSize = 5;
+        if (totalPagesForSeason <= windowSize) {
+          return Array.from({ length: totalPagesForSeason }, (_, index) => index + 1);
+        }
+        const startPage = Math.max(1, Math.min(safeSeasonPage - 2, totalPagesForSeason - (windowSize - 1)));
+        const endPage = Math.min(totalPagesForSeason, startPage + windowSize - 1);
+        return Array.from({ length: endPage - startPage + 1 }, (_, index) => startPage + index);
+      })();
+
+      return {
+        season,
+        size,
+        total,
+        totalPagesForSeason,
+        safeSeasonPage,
+        start,
+        end,
+        pages,
+        items: season.episodes.slice((safeSeasonPage - 1) * size, safeSeasonPage * size),
+      };
+    });
+  }, [episodePage, episodePageSize, seriesInfo.data?.seasons]);
+
+  useEffect(() => {
+    setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
+  }, [kind, activeCategory, term, activeServer?.id]);
+
+  const totalItems = filtered.length;
+  const activePageSize = pageSize[kind];
+  const totalPages = Math.max(1, Math.ceil(totalItems / activePageSize));
+  const safePage = Math.min(currentPage[kind], totalPages);
+  const pageStart = totalItems === 0 ? 0 : (safePage - 1) * activePageSize + 1;
+  const pageEnd = Math.min(safePage * activePageSize, totalItems);
+  const paginatedItems = useMemo(
+    () => filtered.slice((safePage - 1) * activePageSize, safePage * activePageSize),
+    [filtered, safePage, activePageSize],
+  );
+  const warmPlaybackItems = useMemo(() => paginatedItems.slice(0, kind === "live" ? 3 : 4), [kind, paginatedItems]);
+  const pageImageSources = useMemo(
+    () => paginatedItems.slice(0, 4).map((item) => proxyMediaUrl(item.icon, serverId)),
+    [paginatedItems, serverId],
+  );
+  const paginationPages = useMemo(() => {
+    const windowSize = 5;
+    if (totalPages <= windowSize) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const start = Math.max(1, Math.min(safePage - 2, totalPages - (windowSize - 1)));
+    const end = Math.min(totalPages, start + windowSize - 1);
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  }, [safePage, totalPages]);
+
+  useEffect(() => {
+    if (currentPage[kind] > totalPages) {
+      setCurrentPage((pages) => ({ ...pages, [kind]: totalPages }));
+    }
+  }, [currentPage, kind, totalPages]);
+
+  useImagePrefetch(pageImageSources, `${serverId ?? "no-server"}:${kind}`);
+
+  useEffect(() => {
+    if (!serverId || openSeries || streams.isLoading || streams.isError) return;
+    if (!warmPlaybackItems.length) return;
+
+    for (const item of warmPlaybackItems) {
+      if (kind === "series") {
+        prefetchSeriesInfo({ id: item.id, name: item.name });
+      } else {
+        prefetchPlayback(item);
+      }
+    }
+  }, [
+    serverId,
+    kind,
+    openSeries,
+    streams.isLoading,
+    streams.isError,
+    warmPlaybackItems,
+    prefetchPlayback,
+    prefetchSeriesInfo,
+  ]);
+
+  const visibleEpisodes = useMemo(
+    () =>
+      openSeries
+        ? currentEpisodeGroups.flatMap(({ items }) => items).slice(0, 4)
+        : [],
+    [currentEpisodeGroups, openSeries],
+  );
+
+  useEffect(() => {
+    if (!openSeries || !serverId || seriesInfo.isLoading || seriesInfo.isError) return;
+    if (!visibleEpisodes.length) return;
+
+    for (const episode of visibleEpisodes) {
+      prefetchEpisodePlayback(episode);
+    }
+  }, [
+    openSeries,
+    serverId,
+    seriesInfo.isLoading,
+    seriesInfo.isError,
+    visibleEpisodes,
+    prefetchEpisodePlayback,
+  ]);
 
   if (!serverId) {
     return (
@@ -250,25 +681,19 @@ export function Catalog({ kind, initialSearch = "" }: { kind: Kind; initialSearc
         </div>
       )}
 
-      <div className="flex flex-none flex-col gap-1 px-1 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="truncate text-xl font-bold sm:text-2xl flex items-center gap-2">
-            {LABEL[kind].title}
-            {profile && profile.max_connections > 1 && (
-              <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full font-normal">
-                {profile.max_connections} Telas
-              </span>
-            )}
-          </h1>
-          <p className="truncate text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider">
-            Servidor: <span className="text-primary font-bold">{activeServer?.name ?? "-"}</span>
-          </p>
+      {!hideHeader ? (
+        <div className="flex flex-none flex-col gap-1 px-1 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-bold sm:text-2xl">
+              {LABEL[kind].title}
+            </h1>
+          </div>
         </div>
-      </div>
+      ) : null}
 
 
       {/* Layout do legado: categorias | lista | player sempre na tela */}
-      <div className="grid flex-1 min-h-0 min-w-0 gap-4 lg:grid-cols-[290px_minmax(0,0.95fr)_minmax(300px,360px)]">
+      <div className="grid flex-1 min-h-0 min-w-0 gap-4 lg:grid-cols-[284px_minmax(0,1.14fr)_minmax(360px,420px)] xl:grid-cols-[284px_minmax(0,1.22fr)_minmax(340px,400px)]">
         <aside className="flex h-full min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-2">
           <p className="px-2 pb-2 text-sm font-semibold">Categorias</p>
           <div className="relative px-1 pb-2">
@@ -285,34 +710,19 @@ export function Catalog({ kind, initialSearch = "" }: { kind: Kind; initialSearc
               <div className="flex justify-center p-6">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
               </div>
+            ) : categories.isError ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                Não foi possível carregar as categorias.
+              </div>
             ) : (
               visibleCategories.map((category) => (
-                <button
+                <CatalogCategoryButton
                   key={category.category_id}
-                  type="button"
-                  onClick={() => {
-                    setCategoryId(category.category_id);
-                    // No mobile, apos selecionar categoria, dar um pequeno scroll para a lista de itens
-                    if (window.innerWidth < 1024) {
-                      const listArea = document.getElementById("wp-items-area");
-                      if (listArea) listArea.scrollIntoView({ behavior: "smooth", block: "start" });
-                    }
-                  }}
-                  className={cn(
-                    "w-full rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                    "group",
-                    activeCategory === category.category_id
-                      ? "bg-primary/20 font-bold text-primary shadow-sm shadow-primary/10"
-
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                  )}
-                >
-                  <MarqueeText
-                    text={category.category_name}
-                    active={activeCategory === category.category_id}
-                    className="pr-2"
-                  />
-                </button>
+                  category={category}
+                  active={activeCategory === category.category_id}
+                  onSelect={selectCategory}
+                  onHover={prefetchCategoryStreams}
+                />
               ))
             )}
             {!categories.isLoading && visibleCategories.length === 0 ? (
@@ -340,56 +750,175 @@ export function Catalog({ kind, initialSearch = "" }: { kind: Kind; initialSearc
               </div>
               <div className="wp-scroll flex-1 min-h-0 space-y-3 overflow-y-auto px-1 pb-4">
 
-                {seriesInfo.isLoading ? (
+                {seriesInfo.isLoading && !seriesInfo.data ? (
                   <div className="flex justify-center p-8">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : seriesInfo.isError ? (
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                    Não foi possível carregar os episódios desta série.
+                    <div className="pt-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 border-destructive/30 text-destructive hover:bg-destructive/20"
+                        onClick={() => void seriesInfo.refetch()}
+                      >
+                        Tentar novamente
+                      </Button>
+                    </div>
                   </div>
                 ) : (
                   <>
                     {seriesInfo.data?.info?.plot ? (
                       <p className="text-xs text-muted-foreground">{seriesInfo.data.info.plot}</p>
                     ) : null}
-                    {(seriesInfo.data?.seasons ?? []).map((season) => (
-                      <div key={season.season} className="space-y-1">
-                        <p className="text-xs font-semibold text-primary">
-                          Temporada {season.season}
-                        </p>
-                        {season.episodes.map((episode) => (
-                          <Button
-                            key={episode.id}
-                            variant="secondary"
-                            className="w-full justify-start"
-                            onMouseEnter={() => prefetchPlayback({
-                              id: episode.id,
-                              name: `${openSeries.name} - ${episode.episode_num}. ${episode.title}`,
-                              icon: null,
-                              ext: episode.ext,
-                            })}
-                            onFocus={() => prefetchPlayback({
-                              id: episode.id,
-                              name: `${openSeries.name} - ${episode.episode_num}. ${episode.title}`,
-                              icon: null,
-                              ext: episode.ext,
-                            })}
-                            onClick={() =>
-                              void play({
-                                id: episode.id,
-                                name: `${openSeries.name} - ${episode.episode_num}. ${episode.title}`,
-                                icon: null,
-                                ext: episode.ext,
-                              })
-                            }
-                          >
-                            {loadingId === episode.id ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <PlayCircle className="mr-2 h-4 w-4" />
-                            )}
-                            <span className="truncate">
-                              {episode.episode_num}. {episode.title}
-                            </span>
-                          </Button>
-                        ))}
+                    {seriesInfo.isFetching && seriesInfo.data ? (
+                      <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] text-primary">
+                        Atualizando temporadas e episódios...
+                      </div>
+                    ) : null}
+                    {currentEpisodeGroups.map(({ season, size, total, totalPagesForSeason, safeSeasonPage, start, end, pages, items }) => (
+                      <div key={season.season} className="space-y-2 rounded-xl border border-border/60 bg-secondary/10 p-2">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-primary">
+                            Temporada {season.season}
+                          </p>
+                          <div className="text-[10px] text-muted-foreground">
+                            Mostrando <span className="font-bold text-primary">{start}</span> a{" "}
+                            <span className="font-bold text-primary">{end}</span> de{" "}
+                            <span className="font-bold">{total}</span> episódios
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="w-[140px]">
+                            <Select
+                              value={String(size)}
+                              onValueChange={(value) =>
+                                startTransition(() => {
+                                  setEpisodePageSize((sizes) => ({
+                                    ...sizes,
+                                    [season.season]: Number(value) as 6 | 12 | 24,
+                                  }));
+                                  setEpisodePage((pagesMap) => ({
+                                    ...pagesMap,
+                                    [season.season]: 1,
+                                  }));
+                                })
+                              }
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue placeholder="12" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {[6, 12, 24].map((value) => (
+                                  <SelectItem key={value} value={String(value)}>
+                                    {value} por página
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {totalPagesForSeason > 1 ? (
+                            <div className="flex flex-wrap items-center gap-1">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-2.5 text-[10px]"
+                                onClick={() =>
+                                  startTransition(() =>
+                                    setEpisodePage((pagesMap) => ({ ...pagesMap, [season.season]: 1 })),
+                                  )
+                                }
+                                disabled={safeSeasonPage === 1}
+                              >
+                                Primeira
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-2.5 text-[10px]"
+                                onClick={() =>
+                                  startTransition(() =>
+                                    setEpisodePage((pagesMap) => ({
+                                      ...pagesMap,
+                                      [season.season]: Math.max(1, (pagesMap[season.season] ?? 1) - 1),
+                                    })),
+                                  )
+                                }
+                                disabled={safeSeasonPage === 1}
+                              >
+                                Anterior
+                              </Button>
+                              {pages.map((page) => (
+                                <Button
+                                  key={page}
+                                  type="button"
+                                  size="sm"
+                                  variant={page === safeSeasonPage ? "default" : "outline"}
+                                  className="h-8 min-w-8 px-2.5 text-[10px]"
+                                  onClick={() =>
+                                    startTransition(() =>
+                                      setEpisodePage((pagesMap) => ({ ...pagesMap, [season.season]: page })),
+                                    )
+                                  }
+                                >
+                                  {page}
+                                </Button>
+                              ))}
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-2.5 text-[10px]"
+                                onClick={() =>
+                                  startTransition(() =>
+                                    setEpisodePage((pagesMap) => ({
+                                      ...pagesMap,
+                                      [season.season]: Math.min(
+                                        totalPagesForSeason,
+                                        (pagesMap[season.season] ?? 1) + 1,
+                                      ),
+                                    })),
+                                  )
+                                }
+                                disabled={safeSeasonPage === totalPagesForSeason}
+                              >
+                                Próxima
+                              </Button>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-2.5 text-[10px]"
+                                onClick={() =>
+                                  startTransition(() =>
+                                    setEpisodePage((pagesMap) => ({
+                                      ...pagesMap,
+                                      [season.season]: totalPagesForSeason,
+                                    })),
+                                  )
+                                }
+                                disabled={safeSeasonPage === totalPagesForSeason}
+                              >
+                                Última
+                              </Button>
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="space-y-1">
+                          {items.map((episode) => (
+                            <CatalogEpisodeButton
+                              key={episode.id}
+                              episode={episode}
+                              loading={loadingId === episode.id}
+                              onPrefetch={prefetchEpisodePlayback}
+                              onActivate={activateEpisode}
+                            />
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </>
@@ -408,96 +937,187 @@ export function Catalog({ kind, initialSearch = "" }: { kind: Kind; initialSearc
                   className="h-9 pl-9"
                 />
               </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 px-1 pb-2">
+                <div className="text-xs text-muted-foreground">
+                  Mostrando <span className="font-bold text-primary">{pageStart}</span> a{" "}
+                  <span className="font-bold text-primary">{pageEnd}</span> de{" "}
+                  <span className="font-bold">{totalItems}</span> itens
+                </div>
+                <div className="w-[150px]">
+                    <Select
+                    value={String(activePageSize)}
+                    onValueChange={(value) =>
+                      startTransition(() => {
+                        setPageSize((pages) => ({ ...pages, [kind]: Number(value) as 12 | 24 | 48 }));
+                        setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
+                      })
+                    }
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="24" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[12, 24, 48].map((value) => (
+                        <SelectItem key={value} value={String(value)}>
+                          {value} por página
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div id="wp-items-area" className="wp-scroll flex-1 min-h-0 overflow-y-auto px-1 pb-4">
-                {streams.isLoading ? (
+                {streams.isLoading && !streams.data ? (
                   <div className="flex justify-center p-16">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : streams.isError && !streams.data?.length ? (
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+                    Não foi possível carregar os conteúdos deste servidor no momento.
+                    <div className="pt-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 border-destructive/30 text-destructive hover:bg-destructive/20"
+                        onClick={() => void streams.refetch()}
+                      >
+                        Tentar novamente
+                      </Button>
+                    </div>
                   </div>
                 ) : filtered.length === 0 ? (
                   <p className="p-8 text-center text-sm text-muted-foreground">
                     {LABEL[kind].empty}
                   </p>
                 ) : (
-                  <div
-                    className={cn(
-                      "grid gap-2",
-                      kind === "live"
-                        ? "grid-cols-2 xl:grid-cols-3"
-                        : "grid-cols-2 xl:grid-cols-4",
-                    )}
-                  >
-                    {filtered.slice(0, 400).map((item) => {
-                      const isActiveItem = kind !== "series" && playing?.id === item.id;
+                  <div className="space-y-2">
+                    {streams.isFetching ? (
+                      <div className="rounded-lg border border-primary/15 bg-primary/5 px-3 py-2 text-[11px] text-primary">
+                        Atualizando catálogo...
+                      </div>
+                    ) : null}
+                    <div
+                      className={cn(
+                        "grid gap-2 transition-opacity duration-150",
+                        kind === "live"
+                          ? "grid-cols-2 xl:grid-cols-3"
+                          : "grid-cols-2 xl:grid-cols-4",
+                        streams.isFetching && streams.data?.length ? "opacity-80" : "opacity-100",
+                      )}
+                    >
+                      {paginatedItems.map((item, index) => {
+                        const isActiveItem = kind !== "series" && playing?.id === item.id;
 
-                      return (
-                      <button
-                        key={`${item.id}-${item.name}`}
-                        type="button"
-                        onMouseEnter={() => prefetchPlayback(item)}
-                        onFocus={() => prefetchPlayback(item)}
-                        onTouchStart={() => prefetchPlayback(item)}
-                        onClick={() =>
-                          kind === "series"
-                            ? setOpenSeries({ id: item.id, name: item.name })
-                            : void play(item)
-                        }
-                        tabIndex={0}
-                        data-tv-focus
-                        aria-label={item.name}
-                        className={cn(
-                          "group overflow-hidden rounded-xl border border-border bg-secondary/20 text-left transition-all hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-lg hover:shadow-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                          isActiveItem && "border-primary/60 shadow-lg shadow-primary/10",
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            "relative flex items-center justify-center overflow-hidden bg-secondary/40",
-                            kind === "live" ? "aspect-video" : "aspect-[2/3]",
-                          )}
-                        >
-                          {item.icon ? (
-                            <img
-                              src={item.icon}
-                              alt={item.name}
-                              loading="lazy"
-                              className={cn(
-                                "h-full w-full",
-                                kind === "live" ? "object-contain p-3" : "object-cover",
-                              )}
-                              onError={(event) => {
-                                event.currentTarget.style.display = "none";
-                              }}
+                        return (
+                            <CatalogGridCard
+                              key={`${item.id}-${item.name}`}
+                              item={item}
+                              kind={kind}
+                              serverId={serverId}
+                              active={isActiveItem}
+                              loading={loadingId === item.id}
+                              priority={index < 4}
+                              onPrefetch={prefetchPlayback}
+                              onActivate={activateCatalogItem}
+                              onHover={kind === "series" ? prefetchSeriesInfo : undefined}
                             />
-                          ) : (
-                            <Tv className="h-8 w-8 text-muted-foreground" />
-                          )}
-                          {loadingId === item.id ? (
-                            <Loader2 className="absolute inset-0 m-auto h-8 w-8 animate-spin text-primary" />
-                          ) : (
-                            <PlayCircle className="absolute inset-0 m-auto h-9 w-9 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
-                          )}
-                        </div>
-                        <div className="px-2 py-2 text-xs font-medium">
-                          <MarqueeText
-                            text={item.name}
-                            active={isActiveItem}
-                            className="line-clamp-2"
-                          />
-                        </div>
-                      </button>
-                      );
-                    })}
+                          );
+                        })}
+                    </div>
                   </div>
                 )}
               </div>
+              {totalPages > 1 ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-1 pt-3">
+                  <div className="text-xs text-muted-foreground">
+                    Página <span className="font-semibold text-foreground">{safePage}</span> de{" "}
+                    <span className="font-semibold text-foreground">{totalPages}</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => startTransition(() => setCurrentPage((pages) => ({ ...pages, [kind]: 1 })))}
+                      disabled={safePage === 1}
+                    >
+                      Primeira
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() =>
+                        startTransition(() =>
+                          setCurrentPage((pages) => ({
+                            ...pages,
+                            [kind]: Math.max(1, pages[kind] - 1),
+                          })),
+                        )
+                      }
+                      disabled={safePage === 1}
+                    >
+                      Anterior
+                    </Button>
+
+                    {paginationPages.map((page) => (
+                      <Button
+                        key={page}
+                        type="button"
+                        size="sm"
+                        variant={page === safePage ? "default" : "outline"}
+                        className="h-8 min-w-9 px-3 text-xs"
+                        onClick={() => startTransition(() => setCurrentPage((pages) => ({ ...pages, [kind]: page })))}
+                      >
+                        {page}
+                      </Button>
+                    ))}
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() =>
+                        startTransition(() =>
+                          setCurrentPage((pages) => ({
+                            ...pages,
+                            [kind]: Math.min(totalPages, pages[kind] + 1),
+                          })),
+                        )
+                      }
+                      disabled={safePage === totalPages}
+                    >
+                      Próxima
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 text-xs"
+                      onClick={() => startTransition(() => setCurrentPage((pages) => ({ ...pages, [kind]: totalPages })))}
+                      disabled={safePage === totalPages}
+                    >
+                      Última
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </>
           )}
         </section>
 
-        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start lg:w-full lg:max-w-[380px] lg:justify-self-end">
+        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start lg:w-full lg:max-w-[420px] xl:max-w-[400px] lg:justify-self-end">
           {playing ? (
             <div className="space-y-2">
-              <VideoPlayer url={playing.url} poster={playing.icon} title={playing.name} />
+              <VideoPlayer
+                url={playing.url}
+                poster={proxyMediaUrl(playing.icon, serverId) ?? playing.icon}
+                title={playing.name}
+                kind={kind}
+              />
               <p className="truncate text-sm font-semibold">{playing.name}</p>
               
               {/* EPG / Metadata Area */}
@@ -513,10 +1133,10 @@ export function Catalog({ kind, initialSearch = "" }: { kind: Kind; initialSearc
             <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card text-center">
               <PlayCircle className="h-10 w-10 text-primary/50" />
               <p className="text-sm font-semibold">
-                {kind === "live" ? "Selecione um canal" : "Selecione um conteudo"}
+                {kind === "live" ? "Selecione um canal" : "Selecione um conteúdo"}
               </p>
               <p className="px-6 text-xs text-muted-foreground">
-                O player abre aqui do lado, igual ao WebPlayer original.
+                O player abre aqui ao lado, com navegação integrada.
               </p>
             </div>
           )}
@@ -546,6 +1166,7 @@ function PlayerInfo({
     queryFn: () => fetchEPG({ data: { server_id: serverId!, stream_id: streamId } }),
     enabled: kind === "live" && !!serverId && !!streamId,
     staleTime: 60_000,
+    placeholderData: (previous) => previous,
   });
 
   const tmdb = useQuery({
@@ -553,6 +1174,7 @@ function PlayerInfo({
     queryFn: () => fetchTMDB({ data: { kind: kind as "movie" | "series", name } }),
     enabled: (kind === "movie" || kind === "series") && !!name,
     staleTime: 24 * 60 * 60 * 1000,
+    placeholderData: (previous) => previous,
   });
 
   if (kind === "live") {
@@ -585,7 +1207,9 @@ function PlayerInfo({
   if (tmdb.data) {
     const data = tmdb.data;
     const rating = data.vote_average ? Math.round(data.vote_average * 10) / 10 : null;
-    const posterUrl = data.poster_path ? `https://image.tmdb.org/t/p/w300${data.poster_path}` : null;
+    const posterUrl = data.poster_path
+      ? proxyMediaUrl(`https://image.tmdb.org/t/p/w300${data.poster_path}`)
+      : null;
 
     
     return (

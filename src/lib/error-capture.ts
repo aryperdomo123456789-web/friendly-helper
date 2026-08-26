@@ -4,6 +4,19 @@
 let lastCapturedError: { error: unknown; at: number } | undefined;
 const TTL_MS = 5_000;
 
+export const MAGO_RUNTIME_ERROR_EVENT = "mago:runtime-error";
+export const MAGO_RUNTIME_CLEAR_EVENT = "mago:runtime-error-clear";
+
+export type CapturedRuntimeErrorDetail = {
+  id: string;
+  at: number;
+  origin: "server" | "worker" | "client" | "unknown";
+  mechanism: "manual" | "onerror" | "unhandledrejection" | "react_error_boundary" | "console_error";
+  severity: "error" | "warning" | "info";
+  summary: string;
+  message: string;
+};
+
 function record(error: unknown) {
   lastCapturedError = { error, at: Date.now() };
 }
@@ -45,8 +58,93 @@ function safeStringify(value: unknown): string {
   }
 }
 
+function normalizeRuntimeErrorText(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  if (/^<!doctype html/i.test(trimmed) || /^<html[\s>]/i.test(trimmed)) {
+    return "Resposta HTML inesperada";
+  }
+  if (trimmed.startsWith("<")) {
+    return "Resposta inesperada";
+  }
+  return value;
+}
+
 function isErrorLike(value: unknown): value is Error {
   return value instanceof Error;
+}
+
+function inferOrigin(
+  error: unknown,
+  summary: string,
+  mechanism: CapturedRuntimeErrorDetail["mechanism"],
+): CapturedRuntimeErrorDetail["origin"] {
+  const normalized = `${summary}\n${error instanceof Error ? error.stack || "" : ""}`.toLowerCase();
+
+  if (
+    normalized.includes("download-worker") ||
+    normalized.includes("worker/") ||
+    normalized.includes("[download-worker]")
+  ) {
+    return "worker";
+  }
+
+  if (
+    normalized.includes("src/server.ts") ||
+    normalized.includes("server.ts") ||
+    normalized.includes("src/routes/api/")
+  ) {
+    return "server";
+  }
+
+  if (
+    mechanism === "react_error_boundary" ||
+    normalized.includes("src/components/") ||
+    normalized.includes("src/routes/")
+  ) {
+    return "client";
+  }
+
+  return "unknown";
+}
+
+function createCapturedErrorDetail(
+  error: unknown,
+  mechanism: CapturedRuntimeErrorDetail["mechanism"],
+): CapturedRuntimeErrorDetail {
+  const summary = normalizeRuntimeErrorText(describeError(error));
+  const rawMessage = error instanceof Error ? error.message || summary : typeof error === "string" ? error : summary;
+  const message = normalizeRuntimeErrorText(rawMessage);
+  const id =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  return {
+    id,
+    at: Date.now(),
+    origin: inferOrigin(error, summary, mechanism),
+    mechanism,
+    severity: "error",
+    summary,
+    message,
+  };
+}
+
+function emitCapturedError(error: unknown, mechanism: CapturedRuntimeErrorDetail["mechanism"]) {
+  if (typeof globalThis.dispatchEvent !== "function" || typeof globalThis.CustomEvent !== "function") {
+    return;
+  }
+
+  try {
+    globalThis.dispatchEvent(
+      new CustomEvent<CapturedRuntimeErrorDetail>(MAGO_RUNTIME_ERROR_EVENT, {
+        detail: createCapturedErrorDetail(error, mechanism),
+      }),
+    );
+  } catch {
+    // Best effort only: runtime monitoring must never interfere with the app flow.
+  }
 }
 
 // Wrap console.error so errors logged by any layer — including h3's internal
@@ -57,16 +155,23 @@ console.error = (...args: unknown[]) => {
   const expanded = args.map((arg) => {
     if (!isErrorLike(arg)) return arg;
     record(arg);
+    emitCapturedError(arg, "console_error");
     return describeError(arg);
   });
   originalConsoleError(...expanded);
 };
 
 if (typeof globalThis.addEventListener === "function") {
-  globalThis.addEventListener("error", (event) => record((event as ErrorEvent).error ?? event));
-  globalThis.addEventListener("unhandledrejection", (event) =>
-    record((event as PromiseRejectionEvent).reason),
-  );
+  globalThis.addEventListener("error", (event) => {
+    const error = (event as ErrorEvent).error ?? event;
+    record(error);
+    emitCapturedError(error, "onerror");
+  });
+  globalThis.addEventListener("unhandledrejection", (event) => {
+    const error = (event as PromiseRejectionEvent).reason;
+    record(error);
+    emitCapturedError(error, "unhandledrejection");
+  });
 }
 
 export function consumeLastCapturedError(): unknown {

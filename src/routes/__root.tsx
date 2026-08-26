@@ -9,11 +9,16 @@ import {
 } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, type ReactNode } from "react";
-import { DEFAULT_BRAND_IMAGE_URL, getAppConfig } from "../lib/config.functions";
+import {
+  APP_CONFIG_QUERY_KEY,
+  DEFAULT_BRAND_IMAGE_URL,
+  getAppConfig,
+} from "../lib/config.functions";
 import { useGlobalRemoteNavigation } from "../lib/remote-navigation";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { RuntimeErrorMonitor } from "@/components/ui/runtime-error-monitor";
 
 const LEGACY_CSS_BOOTSTRAP = `
 (function () {
@@ -98,19 +103,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       meta: [
         { charSet: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
-        { title: "WebPlayer IPTV" },
-        { name: "description", content: "O melhor player IPTV multi-servidor." },
-        { name: "author", content: "WebPlayer" },
-        { property: "og:title", content: "WebPlayer IPTV" },
-        { property: "og:description", content: "O melhor player IPTV multi-servidor." },
+        { title: "Aplicativo IPTV" },
+        { name: "description", content: "Aplicativo IPTV multi-servidor." },
+        { name: "author", content: "Sistema" },
+        { property: "og:title", content: "Aplicativo IPTV" },
+        { property: "og:description", content: "Aplicativo IPTV multi-servidor." },
         { property: "og:type", content: "website" },
         { property: "og:image", content: DEFAULT_BRAND_IMAGE_URL },
         { property: "og:image:secure_url", content: DEFAULT_BRAND_IMAGE_URL },
-        { property: "og:image:alt", content: "WebPlayer IPTV" },
+        { property: "og:image:alt", content: "Aplicativo IPTV" },
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:site", content: "@Lovable" },
+        { name: "twitter:site", content: "@app" },
         { name: "twitter:image", content: DEFAULT_BRAND_IMAGE_URL },
-        { name: "twitter:image:alt", content: "WebPlayer IPTV" },
+        { name: "twitter:image:alt", content: "Aplicativo IPTV" },
         { name: "theme-color", content: "#05070b" },
         { name: "apple-mobile-web-app-capable", content: "yes" },
         { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
@@ -141,6 +146,7 @@ function RootShell({ children }: { children: ReactNode }) {
       <body>
         {children}
         <Scripts />
+        <RuntimeErrorMonitor />
       </body>
     </html>
   );
@@ -150,7 +156,7 @@ function ThemeApplier() {
   const fetchConfig = useServerFn(getAppConfig);
 
   const { data: config } = useQuery({
-    queryKey: ["app-config-public"],
+    queryKey: APP_CONFIG_QUERY_KEY,
     queryFn: () => fetchConfig(),
     staleTime: 5 * 60_000,
   });
@@ -168,8 +174,57 @@ function ThemeApplier() {
         link.rel = "icon";
         head.appendChild(link);
       }
-      link.href = DEFAULT_BRAND_IMAGE_URL;
+      link.href = config?.favicon_url || config?.logo_small_url || config?.logo_url || DEFAULT_BRAND_IMAGE_URL;
     }
+
+    const primary = config?.theme?.primary || "#3ba0ff";
+    const background = config?.theme?.bg || "#05070b";
+    const brandName = config?.short_name || config?.name || "Sistema IPTV";
+    const description = config?.description || "Aplicativo IPTV multi-servidor.";
+    const luminance = (() => {
+      const hex = primary.replace("#", "");
+      if (hex.length !== 6) return 0.2;
+      const r = Number.parseInt(hex.slice(0, 2), 16) / 255;
+      const g = Number.parseInt(hex.slice(2, 4), 16) / 255;
+      const b = Number.parseInt(hex.slice(4, 6), 16) / 255;
+      const linear = [r, g, b].map((value) => (
+        value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+      ));
+      return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+    })();
+    const primaryForeground = luminance > 0.45 ? "#05070b" : "#ffffff";
+
+    document.documentElement.style.setProperty("--background", background);
+    document.documentElement.style.setProperty("--primary", primary);
+    document.documentElement.style.setProperty("--primary-foreground", primaryForeground);
+    document.documentElement.style.setProperty("--sidebar-primary", primary);
+    document.documentElement.style.setProperty("--sidebar-primary-foreground", primaryForeground);
+    document.documentElement.style.setProperty("--ring", primary);
+    document.documentElement.style.setProperty("--theme-color", primary);
+
+    document.title = `${document.title.replace(/\s*\|.*$/, "").trim()} | ${brandName}`;
+
+    const themeColorMeta = document.querySelector("meta[name='theme-color']");
+    if (themeColorMeta) {
+      themeColorMeta.setAttribute("content", primary);
+    }
+
+    const upsertMeta = (selector: string, attr: "name" | "property", key: string, value: string) => {
+      let meta = document.querySelector<HTMLMetaElement>(selector);
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.setAttribute(attr, key);
+        document.head.appendChild(meta);
+      }
+      meta.setAttribute("content", value);
+    };
+
+    upsertMeta("meta[name='description']", "name", "description", description);
+    upsertMeta("meta[name='author']", "name", "author", brandName);
+    upsertMeta("meta[property='og:title']", "property", "og:title", `${document.title}`);
+    upsertMeta("meta[property='og:description']", "property", "og:description", description);
+    upsertMeta("meta[property='og:image:alt']", "property", "og:image:alt", brandName);
+    upsertMeta("meta[name='twitter:image:alt']", "name", "twitter:image:alt", brandName);
   }, [config]);
 
   return null;
@@ -178,6 +233,63 @@ function ThemeApplier() {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   useGlobalRemoteNavigation();
+
+  useEffect(() => {
+    const reloadFlagKey = "wp-chunk-reload-once";
+    sessionStorage.removeItem(reloadFlagKey);
+
+    const shouldReloadForChunkError = (value: unknown) => {
+      const message =
+        typeof value === "string"
+          ? value.toLowerCase()
+          : value instanceof Error
+            ? `${value.name}: ${value.message}`.toLowerCase()
+            : "";
+
+      if (!message) return false;
+      return (
+        message.includes("failed to fetch dynamically imported module") ||
+        message.includes("importing a module script failed") ||
+        message.includes("chunkloaderror") ||
+        message.includes("vite:preloaderror")
+      );
+    };
+
+    const triggerSafeReload = () => {
+      if (sessionStorage.getItem(reloadFlagKey) === "1") return;
+      sessionStorage.setItem(reloadFlagKey, "1");
+      window.location.reload();
+    };
+
+    const onVitePreloadError = (event: Event) => {
+      event.preventDefault();
+      triggerSafeReload();
+    };
+
+    const onWindowError = (event: ErrorEvent) => {
+      if (shouldReloadForChunkError(event.error ?? event.message)) {
+        event.preventDefault();
+        triggerSafeReload();
+      }
+    };
+
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (shouldReloadForChunkError(event.reason)) {
+        event.preventDefault();
+        triggerSafeReload();
+      }
+    };
+
+    window.addEventListener("vite:preloadError", onVitePreloadError);
+    window.addEventListener("error", onWindowError);
+    window.addEventListener("unhandledrejection", onUnhandledRejection);
+
+    return () => {
+      window.removeEventListener("vite:preloadError", onVitePreloadError);
+      window.removeEventListener("error", onWindowError);
+      window.removeEventListener("unhandledrejection", onUnhandledRejection);
+    };
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

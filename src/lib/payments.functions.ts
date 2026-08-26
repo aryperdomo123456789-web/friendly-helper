@@ -1,8 +1,10 @@
-
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createServerFn } from "@tanstack/react-start";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getAppConfig, updateAppConfig } from "./config.functions";
+import { recordAuditLog, upsertPaymentRecord } from "./payments-tracking.functions";
 
 export const getMercadoPagoConfig = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -11,44 +13,63 @@ export const getMercadoPagoConfig = createServerFn({ method: "GET" })
     return {
       mp_access_token: (config as any).mp_access_token || "",
       mp_public_key: (config as any).mp_public_key || "",
+      mp_webhook_secret: (config as any).mp_webhook_secret || "",
       mp_enabled: (config as any).mp_enabled || false,
     };
   });
 
 export const updateMercadoPagoConfig = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: any) => 
-    z.object({
-      mp_access_token: z.string(),
-      mp_public_key: z.string(),
-      mp_enabled: z.boolean(),
-    }).parse(input)
+  .validator((input: any) =>
+    z
+      .object({
+        mp_access_token: z.string(),
+        mp_public_key: z.string(),
+        mp_webhook_secret: z.string().optional().default(""),
+        mp_enabled: z.boolean(),
+      })
+      .parse(input),
   )
   .handler(async ({ data }) => {
     const config = await getAppConfig();
     await updateAppConfig({
       data: {
         ...config,
-        ...data
-      }
+        ...data,
+      },
     });
     return { success: true };
   });
 
 export const createPaymentPreference = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: any) => 
-    z.object({
-      planId: z.string().uuid(),
-    }).parse(input)
+  .validator((input: any) =>
+    z
+      .object({
+        planId: z.string().uuid(),
+      })
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const config = await getAppConfig() as any;
-    
+    const config = (await getAppConfig()) as any;
+    const externalReference = JSON.stringify({ userId: context.userId, planId: data.planId });
+
     // MODO TESTE: Se não houver token, permite ativação direta para teste de bonificação
     if (!config.mp_access_token || !config.mp_enabled) {
-      console.log("Modo Teste: Simulando pagamento aprovado para teste de fluxo.");
+      console.log("Modo de teste: simulando pagamento aprovado para validação do fluxo.");
+      await recordAuditLog({
+        actor_user_id: context.userId,
+        target_user_id: context.userId,
+        action: "payment.simulation.started",
+        entity_type: "payment",
+        entity_id: null,
+        details: {
+          planId: data.planId,
+          provider: "internal-test-mode",
+        },
+        source: "system",
+      });
       return { simulate_success: true, planId: data.planId };
     }
 
@@ -66,43 +87,69 @@ export const createPaymentPreference = createServerFn({ method: "POST" })
       .eq("id", context.userId)
       .single();
 
-    // Create Mercado Pago Preference
-    // Note: In a real app, we would use the Mercado Pago SDK here.
-    // Since we are in a serverless worker, we use the REST API.
+    // Cria a preferência no Mercado Pago via API REST.
     const response = await fetch("https://api.mercadopago.com/checkout/preferences", {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${config.mp_access_token}`,
+        Authorization: `Bearer ${config.mp_access_token}`,
         "Content-Type": "application/json",
+        "X-Idempotency-Key": randomUUID(),
       },
       body: JSON.stringify({
         items: [
           {
-            title: `Plano ${plan.name} - WEBPLAYER`,
+            title: `Plano ${plan.name} - ${config.name || "Sistema IPTV"}`,
             unit_price: Number(plan.price),
             quantity: 1,
             currency_id: "BRL",
-          }
+          },
         ],
         payer: {
           email: `${profile?.username}@iptv.local`,
         },
-        external_reference: JSON.stringify({ userId: context.userId, planId: plan.id }),
+        external_reference: externalReference,
         back_urls: {
-          success: `${config.base_url || 'http://localhost:8080'}/inicio?payment=success`,
-          failure: `${config.base_url || 'http://localhost:8080'}/inicio?payment=failure`,
-          pending: `${config.base_url || 'http://localhost:8080'}/inicio?payment=pending`,
+          success: `${config.base_url || "http://localhost:8080"}/inicio?payment=success`,
+          failure: `${config.base_url || "http://localhost:8080"}/inicio?payment=failure`,
+          pending: `${config.base_url || "http://localhost:8080"}/inicio?payment=pending`,
         },
         auto_return: "approved",
-        notification_url: `${config.base_url || 'http://localhost:8080'}/api/public/mercadopago-webhook`,
+        notification_url: `${config.base_url || "http://localhost:8080"}/api/public/mercadopago-webhook`,
       }),
     });
 
     const preference = await response.json();
     if (!response.ok) {
-      console.error("MP Error:", preference);
-      throw new Error("Erro ao criar preferência de pagamento.");
+      console.error("Erro do Mercado Pago:", preference);
+      throw new Error("Erro ao criar a preferência de pagamento.");
     }
 
-    return { init_point: preference.init_point };
+    const paymentRecord = await upsertPaymentRecord({
+      user_id: context.userId,
+      plan_id: plan.id,
+      provider: "mercadopago",
+      provider_preference_id: preference.id ?? null,
+      external_reference: externalReference,
+      status: "pending",
+      amount: Number(plan.price),
+      currency: "BRL",
+    });
+
+    await recordAuditLog({
+      actor_user_id: context.userId,
+      target_user_id: context.userId,
+      action: "payment.preference.created",
+      entity_type: "payment",
+      entity_id: paymentRecord?.id ?? null,
+      details: {
+        planId: plan.id,
+        amount: Number(plan.price),
+        currency: "BRL",
+        provider: "mercadopago",
+        provider_preference_id: preference.id ?? null,
+      },
+      source: "mercadopago",
+    });
+
+    return { init_point: preference.sandbox_init_point || preference.init_point };
   });

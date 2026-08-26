@@ -45,8 +45,7 @@ export const Route = createFileRoute("/teste/$slug")({
           new URL(request.url).pathname.split("/").filter(Boolean).at(-1) ||
           "teste";
 
-        const fingerprint =
-          fingerprintFromForm || deriveServerFingerprint(request, slug, referralCode);
+        const fingerprint = fingerprintFromForm || deriveServerFingerprint(request);
 
         const result = await createTestUser({
           data: { slug, fingerprint, referral_code: referralCode },
@@ -71,16 +70,16 @@ export const Route = createFileRoute("/teste/$slug")({
   component: TestePublico,
 });
 
-function deriveServerFingerprint(request: Request, slug: string, referralCode: string | null) {
+function deriveServerFingerprint(request: Request) {
   const headers = request.headers;
   const raw = [
     headers.get("user-agent") ?? "",
     headers.get("accept-language") ?? "",
     headers.get("x-forwarded-for") ?? headers.get("x-real-ip") ?? "",
     headers.get("sec-ch-ua") ?? "",
+    headers.get("sec-ch-ua-mobile") ?? "",
     headers.get("sec-ch-ua-platform") ?? "",
-    slug,
-    referralCode ?? "",
+    headers.get("sec-ch-ua-model") ?? "",
   ].join("|");
 
   let hash = 0;
@@ -118,6 +117,7 @@ function TestePublico() {
   useEffect(() => {
     const currentFingerprint = getFingerprint();
     setFingerprint(currentFingerprint);
+    setBlocked(false);
 
     const checkStatus = async () => {
       if (!currentFingerprint) return;
@@ -129,27 +129,95 @@ function TestePublico() {
       }
     };
     checkStatus();
-  }, []);
+  }, [mutationCheckDevice, slug]);
 
   const getFingerprint = () => {
     if (typeof window === 'undefined') return '';
     const data = [
-      navigator.userAgent,
-      screen.width,
-      screen.height,
-      navigator.language,
-      new Date().getTimezoneOffset(),
+      "v2",
+      navigator.language || "",
+      navigator.languages?.join(",") || "",
+      Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+      screen.width || 0,
+      screen.height || 0,
+      screen.availWidth || 0,
+      screen.availHeight || 0,
+      screen.colorDepth || 0,
+      screen.pixelDepth || 0,
+      window.devicePixelRatio || 1,
       navigator.hardwareConcurrency || 0,
+      (navigator as Navigator & { deviceMemory?: number }).deviceMemory || 0,
+      navigator.maxTouchPoints || 0,
+      navigator.platform || "",
+      navigator.vendor || "",
+      window.matchMedia?.("(pointer: coarse)")?.matches ? "coarse" : "fine",
+      window.matchMedia?.("(hover: none)")?.matches ? "no-hover" : "hover",
+      getCanvasFingerprint(),
+      getWebglFingerprint(),
     ].join("|");
-    
-    // Simple hash function
+
+    return hashString(data);
+  };
+
+  const hashString = (value: string) => {
     let hash = 0;
-    for (let i = 0; i < data.length; i++) {
-      const char = data.charCodeAt(i);
+    for (let i = 0; i < value.length; i++) {
+      const char = value.charCodeAt(i);
       hash = ((hash << 5) - hash) + char;
       hash = hash & hash; // Convert to 32bit integer
     }
-    return Math.abs(hash).toString(16);
+    return Math.abs(hash).toString(16).padStart(8, "0");
+  };
+
+  const getCanvasFingerprint = () => {
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 240;
+      canvas.height = 80;
+      const context = canvas.getContext("2d");
+      if (!context) return "no-canvas";
+
+      context.textBaseline = "top";
+      context.font = "16px Arial";
+      context.fillStyle = "#0f172a";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#f8fafc";
+      context.fillText("mago-device-id", 12, 12);
+      context.fillStyle = "#38bdf8";
+      context.fillText("fingerprint", 12, 34);
+      context.strokeStyle = "#e2e8f0";
+      context.beginPath();
+      context.arc(180, 40, 18, 0, Math.PI * 2);
+      context.stroke();
+
+      return hashString(canvas.toDataURL());
+    } catch {
+      return "canvas-error";
+    }
+  };
+
+  const getWebglFingerprint = () => {
+    try {
+      const canvas = document.createElement("canvas");
+      const gl =
+        (canvas.getContext("webgl") ||
+          canvas.getContext("experimental-webgl")) as WebGLRenderingContext | null;
+
+      if (!gl) return "no-webgl";
+
+      const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+      const vendor = debugInfo
+        ? gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL)
+        : gl.getParameter(gl.VENDOR);
+      const renderer = debugInfo
+        ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+        : gl.getParameter(gl.RENDERER);
+      const version = gl.getParameter(gl.VERSION);
+
+      return hashString([vendor, renderer, version].join("|"));
+    } catch {
+      return "webgl-error";
+    }
   };
 
   const handleCreateTest = async (event?: FormEvent<HTMLFormElement>) => {
@@ -195,7 +263,7 @@ function TestePublico() {
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-primary to-blue-600 rounded-2xl blur opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200 animate-tilt"></div>
             <div className="relative w-20 h-20 bg-black rounded-2xl flex items-center justify-center border border-white/10">
-              <Tv className="w-10 h-10 text-primary drop-shadow-[0_0_8px_rgba(var(--primary),0.8)]" />
+              <Tv className="w-10 h-10 text-primary drop-shadow-[0_0_8px_var(--primary)]" />
             </div>
           </div>
           <div className="text-center space-y-1">
@@ -251,7 +319,7 @@ function TestePublico() {
                   type="submit"
                   disabled={loading || blocked}
                   variant={blocked ? "destructive" : "default"}
-                  className={`relative z-10 w-full h-16 text-xl font-black rounded-2xl transition-all duration-300 transform active:scale-95 ${!blocked ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_rgba(var(--primary),0.3)]' : ''}`}
+                  className={`relative z-10 w-full h-16 text-xl font-black rounded-2xl transition-all duration-300 transform active:scale-95 ${!blocked ? 'bg-primary hover:bg-primary/90 text-primary-foreground shadow-[0_0_20px_var(--primary)]' : ''}`}
                 >
                   {loading ? (
                     <div className="flex items-center gap-3">
@@ -342,7 +410,7 @@ function TestePublico() {
                   <Button
                     asChild
                     data-tv-focus
-                    className="w-full h-16 font-black text-lg gap-3 rounded-2xl bg-gradient-to-r from-primary to-blue-600 hover:scale-[1.02] transition-transform shadow-[0_0_30px_-5px_rgba(var(--primary),0.5)]"
+                    className="w-full h-16 font-black text-lg gap-3 rounded-2xl bg-gradient-to-r from-primary to-blue-600 hover:scale-[1.02] transition-transform shadow-[0_0_30px_-5px_var(--primary)]"
                   >
                     <Link to="/" search={{ username: credentials.username, password: credentials.password, auto: "1" }}>
                       ACESSAR MAGO PLAYER PRO <ExternalLink className="h-5 w-5" />

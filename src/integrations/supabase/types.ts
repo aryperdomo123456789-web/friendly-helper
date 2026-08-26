@@ -217,7 +217,9 @@ export type Database = {
           file_type: string | null
           file_url: string | null
           id: string
+          metadata: Json
           sender_id: string | null
+          message_type: string
           thread_id: string
         }
         Insert: {
@@ -226,7 +228,9 @@ export type Database = {
           file_type?: string | null
           file_url?: string | null
           id?: string
+          metadata?: Json
           sender_id?: string | null
+          message_type?: string
           thread_id: string
         }
         Update: {
@@ -235,7 +239,9 @@ export type Database = {
           file_type?: string | null
           file_url?: string | null
           id?: string
+          metadata?: Json
           sender_id?: string | null
+          message_type?: string
           thread_id?: string
         }
         Relationships: [
@@ -250,33 +256,66 @@ export type Database = {
       }
       support_threads: {
         Row: {
+          closed_at: string | null
+          closed_by_role: string | null
+          closed_by_user_id: string | null
+          closure_prompt_at: string | null
           created_at: string
           id: string
           last_message: string | null
           last_message_at: string
+          last_owner_message_at: string | null
+          last_user_message_at: string | null
           status: string
+          protocol: string | null
+          satisfaction_note: string | null
+          satisfaction_requested_at: string | null
+          satisfaction_score: number | null
+          satisfaction_submitted_at: string | null
           unread_count_owner: number
           unread_count_user: number
           updated_at: string
           user_id: string
         }
         Insert: {
+          closed_at?: string | null
+          closed_by_role?: string | null
+          closed_by_user_id?: string | null
+          closure_prompt_at?: string | null
           created_at?: string
           id?: string
           last_message?: string | null
           last_message_at?: string
+          last_owner_message_at?: string | null
+          last_user_message_at?: string | null
           status?: string
+          protocol?: string | null
+          satisfaction_note?: string | null
+          satisfaction_requested_at?: string | null
+          satisfaction_score?: number | null
+          satisfaction_submitted_at?: string | null
           unread_count_owner?: number
           unread_count_user?: number
           updated_at?: string
           user_id: string
         }
         Update: {
+          closed_at?: string | null
+          closed_by_role?: string | null
+          closed_by_user_id?: string | null
+          closure_prompt_at?: string | null
           created_at?: string
           id?: string
           last_message?: string | null
           last_message_at?: string
+          last_owner_message_at?: string | null
+          last_user_message_at?: string | null
           status?: string
+          protocol?: string | null
+          satisfaction_note?: string | null
+          satisfaction_requested_at?: string | null
+          satisfaction_score?: number | null
+          satisfaction_submitted_at?: string | null
           unread_count_owner?: number
           unread_count_user?: number
           updated_at?: string

@@ -3,18 +3,21 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { resolveReferralSourceSlug } from "./referral";
 import { ensureUserReferralCode } from "./referral-code";
+import { recordAuditLog } from "./payments-tracking.functions";
 
 export const simulatePaymentSuccess = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => 
-    z.object({
-      userId: z.string().uuid(),
-      planId: z.string().uuid(),
-    }).parse(input)
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        userId: z.string().uuid(),
+        planId: z.string().uuid(),
+      })
+      .parse(input),
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    
+
     // Buscar perfil para ver indicação
     const { data: userProfile } = await supabaseAdmin
       .from("profiles")
@@ -30,10 +33,15 @@ export const simulatePaymentSuccess = createServerFn({ method: "POST" })
       .eq("id", data.planId)
       .single();
 
-    if (!plan) throw new Error("Plano não encontrado");
+    if (!plan) throw new Error("Plano não encontrado.");
 
     const newExpiry = new Date();
-    const factor = plan.duration_unit === 'minutes' ? 60 * 1000 : plan.duration_unit === 'hours' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+    const factor =
+      plan.duration_unit === "minutes"
+        ? 60 * 1000
+        : plan.duration_unit === "hours"
+          ? 60 * 60 * 1000
+          : 24 * 60 * 60 * 1000;
     const msToAdd = plan.duration_value * factor;
     newExpiry.setTime(newExpiry.getTime() + msToAdd);
 
@@ -43,13 +51,26 @@ export const simulatePaymentSuccess = createServerFn({ method: "POST" })
         plan_id: data.planId,
         max_connections: plan.max_connections,
         expires_at: newExpiry.toISOString(),
-        is_active: true
+        is_active: true,
       })
       .eq("id", data.userId);
 
     await ensureUserReferralCode(supabaseAdmin, data.userId, plan);
 
-    // Lógica de Bônus (Copiada do Webhook para o Teste Prático)
+    await recordAuditLog({
+      actor_user_id: data.userId,
+      target_user_id: data.userId,
+      action: "payment.simulated.applied",
+      entity_type: "payment",
+      entity_id: null,
+      details: {
+        planId: data.planId,
+        provider: "internal-test-mode",
+      },
+      source: "system",
+    });
+
+    // Reaproveita a mesma lógica de bônus usada no webhook.
     if (userProfile?.referred_by_id) {
       let bonusDays = 0;
       const linkSlug = resolveReferralSourceSlug({
@@ -64,10 +85,16 @@ export const simulatePaymentSuccess = createServerFn({ method: "POST" })
           .select("bonus_days_monthly, bonus_days_quarterly")
           .eq("slug", linkSlug)
           .maybeSingle();
-        
+
         if (link) {
-          const planDays = plan.duration_unit === 'days' ? plan.duration_value : (plan.duration_unit === 'hours' ? plan.duration_value / 24 : plan.duration_value / 1440);
-          bonusDays = planDays > 30 ? (link.bonus_days_quarterly ?? 30) : (link.bonus_days_monthly ?? 15);
+          const planDays =
+            plan.duration_unit === "days"
+              ? plan.duration_value
+              : plan.duration_unit === "hours"
+                ? plan.duration_value / 24
+                : plan.duration_value / 1440;
+          bonusDays =
+            planDays > 30 ? (link.bonus_days_quarterly ?? 30) : (link.bonus_days_monthly ?? 15);
         }
       }
 
@@ -77,12 +104,12 @@ export const simulatePaymentSuccess = createServerFn({ method: "POST" })
           .select("expires_at")
           .eq("id", userProfile.referred_by_id)
           .single();
-        
+
         if (referrer) {
           const currentRefExpiry = referrer.expires_at ? new Date(referrer.expires_at) : new Date();
           const baseDate = currentRefExpiry > new Date() ? currentRefExpiry : new Date();
           const newRefExpiry = new Date(baseDate.getTime() + bonusDays * 24 * 60 * 60 * 1000);
-          
+
           await supabaseAdmin
             .from("profiles")
             .update({ expires_at: newRefExpiry.toISOString() })

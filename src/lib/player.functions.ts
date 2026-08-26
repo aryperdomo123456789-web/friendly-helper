@@ -2,59 +2,168 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getAppConfig } from "./config.functions";
+import {
+  readServerCache,
+  readServerPlaylistCache,
+  serverCatalogCacheKey,
+  writeServerCache,
+} from "./iptv-cache.server";
+import { parsePlaylistCatalog } from "./iptv-playlist.server";
 
 type Kind = "live" | "movie" | "series";
 
 const kindSchema = z.enum(["live", "movie", "series"]);
+const streamCacheMap: Record<Kind, { categories: string; streams: string }> = {
+  live: { categories: "get_live_categories", streams: "get_live_streams" },
+  movie: { categories: "get_vod_categories", streams: "get_vod_streams" },
+  series: { categories: "get_series_categories", streams: "get_series" },
+};
+
+type ResolvedAccess = {
+  credential: {
+    dns: string;
+    username: string;
+    password: string;
+    dnsPool: string[];
+  };
+  server: {
+    id: string;
+    name: string;
+    is_active: boolean;
+  };
+  isOwner: boolean;
+};
+
+const RESOLVE_ACCESS_TTL_MS = 15_000;
+const resolveAccessCache = new Map<string, { expiresAt: number; value: ResolvedAccess }>();
+const resolveAccessPending = new Map<string, Promise<ResolvedAccess>>();
+
+function normalizeStreams(
+  result: Array<{
+    num?: number;
+    name: string;
+    stream_id?: number;
+    series_id?: number;
+    M_ID?: number | string;
+    m_id?: number | string;
+    stream_icon?: string;
+    cover?: string;
+    container_extension?: string;
+    rating?: string;
+    category_id?: string;
+    epg_channel_id?: string;
+  }>,
+) {
+  return result
+    .slice(0, 4000)
+    .map((item) => ({
+      id: String(item.stream_id ?? item.series_id ?? item.num ?? item.M_ID ?? item.m_id ?? ""),
+      name: item.name,
+      icon: item.stream_icon || item.cover || null,
+      ext: item.container_extension ?? null,
+      rating: item.rating ?? null,
+      category_id: item.category_id ?? null,
+    }))
+    .filter((item) => Boolean(item.id) && Boolean(item.name));
+}
+
+function normalizeCategoryValue(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function isCategoryScoped<T extends { category_id: string | null }>(items: T[], categoryId: string) {
+  if (!items.length) return false;
+  const target = normalizeCategoryValue(categoryId);
+  if (!target) return false;
+
+  const categories = new Set(
+    items
+      .map((item) => normalizeCategoryValue(item.category_id))
+      .filter(Boolean),
+  );
+
+  return categories.size === 1 && categories.has(target);
+}
 
 async function resolveAccess(userId: string, serverId: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-  const [{ data: profile }, { data: roles }] = await Promise.all([
-    supabaseAdmin
-      .from("profiles")
-      .select("id, username, max_connections, expires_at, is_active")
-      .eq("id", userId)
-      .maybeSingle(),
-    supabaseAdmin.from("user_roles").select("role").eq("user_id", userId),
-  ]);
-  const isOwner =
-    !profile || !!roles?.some((r: any) => r.role === "owner" || r.role === "admin");
-  if (profile && !isOwner) {
-    if (!profile.is_active) throw new Error("Acesso desativado. Fale com o suporte.");
-    if (profile.expires_at && new Date(profile.expires_at).getTime() < Date.now()) {
-      throw new Error("Acesso expirado. Renove com o suporte.");
-    }
-    const { count } = await supabaseAdmin
-      .from("user_server_access")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", userId)
-      .eq("server_id", serverId);
-    if (!count) throw new Error("Servidor nao liberado para este acesso");
+  const cacheKey = `${userId}:${serverId}`;
+  const cached = resolveAccessCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
   }
 
+  const pending = resolveAccessPending.get(cacheKey);
+  if (pending) {
+    return pending;
+  }
 
-  const { data: server } = await supabaseAdmin
-    .from("iptv_servers")
-    .select("id, name, is_active")
-    .eq("id", serverId)
-    .maybeSingle();
-  if (!server || !server.is_active) throw new Error("Servidor indisponivel");
+  const promise = (async () => {
+    const [{ data: profile }, { data: roles }] = await Promise.all([
+      supabaseAdmin
+        .from("profiles")
+        .select("id, username, max_connections, expires_at, is_active")
+        .eq("id", userId)
+        .maybeSingle(),
+      supabaseAdmin.from("user_roles").select("role").eq("user_id", userId),
+    ]);
+    const isOwner =
+      !profile || !!roles?.some((r: any) => r.role === "owner" || r.role === "admin");
+    if (profile && !isOwner) {
+      if (!profile.is_active) throw new Error("Acesso desativado. Fale com o suporte.");
+      if (profile.expires_at && new Date(profile.expires_at).getTime() < Date.now()) {
+        throw new Error("Acesso expirado. Renove com o suporte.");
+      }
+      const { count } = await supabaseAdmin
+        .from("user_server_access")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("server_id", serverId);
+      if (!count) throw new Error("Servidor não liberado para este acesso.");
+    }
 
-  const { data: creds } = await supabaseAdmin
-    .from("server_credentials")
-    .select("username, password, dns")
-    .eq("server_id", serverId)
-    .order("created_at");
-  const first = creds?.[0];
-  if (!first) throw new Error("Servidor sem credenciais cadastradas");
-  // Failover: alguns DNS do servidor podem responder 404/offline.
-  const credential = {
-    ...first,
-    dnsPool: (creds ?? []).map((c: any) => c.dns).filter(Boolean),
-  };
+    const { data: server } = await supabaseAdmin
+      .from("iptv_servers")
+      .select("id, name, is_active")
+      .eq("id", serverId)
+      .maybeSingle();
+    if (!server || !server.is_active) throw new Error("Servidor indisponível.");
 
-  return { credential, server, isOwner };
+    const { data: creds } = await supabaseAdmin
+      .from("server_credentials")
+      .select("username, password, dns")
+      .eq("server_id", serverId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    const first = creds?.[0];
+    if (!first) throw new Error("Servidor sem credenciais cadastradas.");
+
+    const value: ResolvedAccess = {
+      credential: {
+        ...first,
+        dnsPool: (creds ?? []).map((c: any) => c.dns).filter(Boolean),
+      },
+      server: {
+        id: server.id,
+        name: server.name,
+        is_active: server.is_active,
+      },
+      isOwner,
+    };
+
+    resolveAccessCache.set(cacheKey, {
+      expiresAt: Date.now() + RESOLVE_ACCESS_TTL_MS,
+      value,
+    });
+    return value;
+  })();
+
+  resolveAccessPending.set(cacheKey, promise);
+  try {
+    return await promise;
+  } finally {
+    resolveAccessPending.delete(cacheKey);
+  }
 }
 
 export const getMySession = createServerFn({ method: "GET" })
@@ -116,7 +225,7 @@ export const heartbeat = createServerFn({ method: "POST" })
       .maybeSingle();
     if (!profile) return { ok: true, limit: null as number | null };
 
-    if (!profile.is_active) throw new Error("Acesso desativado");
+    if (!profile.is_active) throw new Error("Acesso desativado.");
     const expired = profile.expires_at && new Date(profile.expires_at).getTime() < Date.now();
     
     const cutoff = new Date(Date.now() - 3 * 60 * 1000).toISOString();
@@ -134,7 +243,7 @@ export const heartbeat = createServerFn({ method: "POST" })
     const known = (active ?? []).some((row: any) => row.device_id === data.device_id);
     if (!known && (active ?? []).length >= profile.max_connections) {
       throw new Error(
-        `Limite de ${profile.max_connections} conexao(oes) simultanea(s) atingido neste acesso`,
+        `Limite de ${profile.max_connections} conexões simultâneas atingido neste acesso.`,
       );
     }
 
@@ -151,6 +260,31 @@ export const heartbeat = createServerFn({ method: "POST" })
     return { ok: true, limit: profile.max_connections, expired: Boolean(expired) };
   });
 
+async function hydrateCatalogFromPlaylist(serverId: string, kind: Kind, categoryId?: string) {
+  const playlist = await readServerPlaylistCache(serverId);
+  if (!playlist?.playlist_text) return null;
+
+  const catalog = parsePlaylistCatalog(playlist.playlist_text);
+  const payload = categoryId
+    ? {
+        categories: catalog[kind].categories,
+        streams: catalog[kind].streams.filter((item) => item.category_id === categoryId),
+      }
+    : catalog[kind];
+  if (!payload.categories.length && !payload.streams.length) return null;
+
+  const categoryCacheKey = serverCatalogCacheKey(kind, "categories");
+  const streamCacheKey = serverCatalogCacheKey(kind, "streams", categoryId ?? "all");
+  await writeServerCache(serverId, categoryCacheKey, payload.categories);
+  await writeServerCache(
+    serverId,
+    streamCacheKey,
+    payload.streams.map(({ kind: _kind, ...stream }) => stream),
+  );
+
+  return payload;
+}
+
 export const getCategories = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
@@ -158,17 +292,31 @@ export const getCategories = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { credential } = await resolveAccess(context.userId, data.server_id);
-    const { xtreamCall } = await import("./xtream.server");
-    const action: Record<Kind, string> = {
-      live: "get_live_categories",
-      movie: "get_vod_categories",
-      series: "get_series_categories",
-    };
-    const result = await xtreamCall<Array<{ category_id: string; category_name: string }>>(
-      credential,
-      { action: action[data.kind] },
+    const cacheKey = serverCatalogCacheKey(data.kind, "categories");
+    const cached = await readServerCache<Array<{ category_id: string; category_name: string }>>(
+      data.server_id,
+      cacheKey,
     );
-    return Array.isArray(result) ? result : [];
+    if (cached && !cached.stale) {
+      const payload = Array.isArray(cached.payload) ? cached.payload : [];
+      if (payload.length > 0) return payload;
+    }
+
+    const { xtreamCall } = await import("./xtream.server");
+    try {
+      const result = await xtreamCall<Array<{ category_id: string; category_name: string }>>(
+        credential,
+        { action: streamCacheMap[data.kind].categories },
+      );
+      const normalized = Array.isArray(result) ? result : [];
+      await writeServerCache(data.server_id, cacheKey, normalized);
+      return normalized;
+    } catch (error) {
+      const playlistFallback = await hydrateCatalogFromPlaylist(data.server_id, data.kind);
+      if (playlistFallback) return playlistFallback.categories;
+      if (cached) return Array.isArray(cached.payload) ? cached.payload : [];
+      throw error;
+    }
   });
 
 export const getStreams = createServerFn({ method: "POST" })
@@ -178,41 +326,112 @@ export const getStreams = createServerFn({ method: "POST" })
       .object({
         server_id: z.string().uuid(),
         kind: kindSchema,
-        category_id: z.string().max(40).optional(),
+        category_id: z.string().optional(),
       })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { credential } = await resolveAccess(context.userId, data.server_id);
-    const { xtreamCall } = await import("./xtream.server");
-    const action: Record<Kind, string> = {
-      live: "get_live_streams",
-      movie: "get_vod_streams",
-      series: "get_series",
-    };
-    const result = await xtreamCall<
+    const cacheKey = serverCatalogCacheKey(data.kind, "streams", data.category_id ?? "all");
+    const cached = await readServerCache<
       Array<{
-        num?: number;
+        id: string;
         name: string;
-        stream_id?: number;
-        series_id?: number;
-        stream_icon?: string;
-        cover?: string;
-        container_extension?: string;
-        rating?: string;
-        category_id?: string;
-        epg_channel_id?: string;
+        icon: string | null;
+        ext: string | null;
+        rating: string | null;
+        category_id: string | null;
       }>
-    >(credential, { action: action[data.kind], category_id: data.category_id });
-    if (!Array.isArray(result)) return [];
-    return result.slice(0, 4000).map((item) => ({
-      id: String(item.stream_id ?? item.series_id ?? ""),
-      name: item.name,
-      icon: item.stream_icon || item.cover || null,
-      ext: item.container_extension ?? null,
-      rating: item.rating ?? null,
-      category_id: item.category_id ?? null,
-    }));
+    >(data.server_id, cacheKey);
+
+    if (cached && !cached.stale) {
+      const list = Array.isArray(cached.payload) ? cached.payload : [];
+      if (!data.category_id) {
+        if (list.length > 0) return list;
+      } else if (isCategoryScoped(list, data.category_id)) {
+        const filtered = list.filter((item) => item.category_id === data.category_id);
+        if (filtered.length > 0) return filtered;
+      }
+    }
+
+    if (data.category_id) {
+      const playlistFallback = await hydrateCatalogFromPlaylist(data.server_id, data.kind, data.category_id);
+      if (playlistFallback) {
+        return playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream);
+      }
+    }
+
+    const { xtreamCall } = await import("./xtream.server");
+    try {
+      const result = await xtreamCall<
+        Array<{
+          num?: number;
+          name: string;
+          stream_id?: number;
+          series_id?: number;
+          M_ID?: number | string;
+          m_id?: number | string;
+          stream_icon?: string;
+          cover?: string;
+          container_extension?: string;
+          rating?: string;
+          category_id?: string;
+          epg_channel_id?: string;
+        }>
+      >(credential, {
+        action: streamCacheMap[data.kind].streams,
+        ...(data.category_id ? { category_id: data.category_id } : {}),
+      });
+      const normalized = Array.isArray(result) ? normalizeStreams(result) : [];
+      if (normalized.length > 0) {
+        if (data.category_id && !isCategoryScoped(normalized, data.category_id)) {
+          const playlistFallback = await hydrateCatalogFromPlaylist(data.server_id, data.kind, data.category_id);
+          if (playlistFallback) {
+            return playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream);
+          }
+        }
+        await writeServerCache(data.server_id, cacheKey, normalized);
+        return normalized;
+      }
+
+      if (data.category_id) {
+        const fullResult = await xtreamCall<
+        Array<{
+          num?: number;
+          name: string;
+          stream_id?: number;
+          series_id?: number;
+          M_ID?: number | string;
+          m_id?: number | string;
+          stream_icon?: string;
+          cover?: string;
+          container_extension?: string;
+          rating?: string;
+          category_id?: string;
+            epg_channel_id?: string;
+          }>
+        >(credential, { action: streamCacheMap[data.kind].streams });
+        const fullNormalized = Array.isArray(fullResult) ? normalizeStreams(fullResult) : [];
+        const filtered = fullNormalized.filter((item) => item.category_id === data.category_id);
+        if (filtered.length > 0) {
+          await writeServerCache(data.server_id, cacheKey, filtered);
+          return filtered;
+        }
+      }
+
+      await writeServerCache(data.server_id, cacheKey, normalized);
+      return normalized;
+    } catch (error) {
+      const playlistFallback = await hydrateCatalogFromPlaylist(data.server_id, data.kind, data.category_id);
+      if (playlistFallback) {
+        return playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream);
+      }
+      if (cached) {
+        const list = Array.isArray(cached.payload) ? cached.payload : [];
+        return list;
+      }
+      throw error;
+    }
   });
 
 export const getSeriesInfo = createServerFn({ method: "POST" })
@@ -222,6 +441,21 @@ export const getSeriesInfo = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { credential } = await resolveAccess(context.userId, data.server_id);
+    const cacheKey = serverCatalogCacheKey("series", "series-info", data.series_id);
+    const cached = await readServerCache<{
+      info: { name?: string; plot?: string; cover?: string; genre?: string; releaseDate?: string };
+      seasons: Array<{
+        season: string;
+        episodes: Array<{
+          id: string;
+          title: string;
+          episode_num: number;
+          ext: string;
+        }>;
+      }>;
+    }>(data.server_id, cacheKey);
+    if (cached) return cached.payload;
+
     const { xtreamCall } = await import("./xtream.server");
     const result = await xtreamCall<{
       info?: { name?: string; plot?: string; cover?: string; genre?: string; releaseDate?: string };
@@ -230,18 +464,21 @@ export const getSeriesInfo = createServerFn({ method: "POST" })
         Array<{ id: string; title: string; episode_num: number; container_extension?: string }>
       >;
     }>(credential, { action: "get_series_info", series_id: data.series_id });
-    return {
-      info: result.info ?? {},
-      seasons: Object.entries(result.episodes ?? {}).map(([season, episodes]) => ({
+    const episodesBySeason = result?.episodes && typeof result.episodes === "object" ? result.episodes : {};
+    const payload = {
+      info: result?.info ?? {},
+      seasons: Object.entries(episodesBySeason).map(([season, episodes]) => ({
         season,
         episodes: (episodes ?? []).map((episode) => ({
           id: String(episode.id),
           title: episode.title,
           episode_num: episode.episode_num,
           ext: episode.container_extension ?? "mp4",
-        })),
+          })),
       })),
     };
+    await writeServerCache(data.server_id, cacheKey, payload);
+    return payload;
   });
 
 export const getVodInfo = createServerFn({ method: "POST" })
@@ -251,16 +488,26 @@ export const getVodInfo = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { credential } = await resolveAccess(context.userId, data.server_id);
+    const cacheKey = serverCatalogCacheKey("movie", "vod-info", data.vod_id);
+    const cached = await readServerCache<{
+      info: { plot?: string; movie_image?: string; genre?: string; releasedate?: string; duration?: string; rating?: string };
+      name: string;
+      ext: string;
+    }>(data.server_id, cacheKey);
+    if (cached) return cached.payload;
+
     const { xtreamCall } = await import("./xtream.server");
     const result = await xtreamCall<{
       info?: { plot?: string; movie_image?: string; genre?: string; releasedate?: string; duration?: string; rating?: string };
       movie_data?: { name?: string; container_extension?: string };
     }>(credential, { action: "get_vod_info", vod_id: data.vod_id });
-    return {
+    const payload = {
       info: result.info ?? {},
       name: result.movie_data?.name ?? "",
       ext: result.movie_data?.container_extension ?? "mp4",
     };
+    await writeServerCache(data.server_id, cacheKey, payload);
+    return payload;
   });
 
 export const getPlaybackUrl = createServerFn({ method: "POST" })
@@ -298,7 +545,7 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
         .eq("user_id", context.userId);
       const known = (active ?? []).some((row: any) => row.device_id === data.device_id);
       if (!known && (active ?? []).length >= profile.max_connections) {
-        throw new Error(`Limite de ${profile.max_connections} conexao(oes) simultanea(s) atingido`);
+        throw new Error(`Limite de ${profile.max_connections} conexões simultâneas atingido.`);
       }
       await supabaseAdmin.from("device_sessions").upsert(
         {
@@ -330,6 +577,18 @@ export const getChannelEPG = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { credential } = await resolveAccess(context.userId, data.server_id);
+    const cacheKey = serverCatalogCacheKey("live", "epg", data.stream_id);
+    const cached = await readServerCache<
+      Array<{
+        title: string;
+        description: string;
+        start: string;
+        end: string;
+        start_timestamp: string;
+        stop_timestamp: string;
+      }>
+    >(data.server_id, cacheKey);
+    if (cached && !cached.stale) return cached.payload;
     const { xtreamCall } = await import("./xtream.server");
 
     // Tenta obter o EPG curto que a Xtream fornece
@@ -355,7 +614,7 @@ export const getChannelEPG = createServerFn({ method: "POST" })
     };
 
     if (result && 'epg_listings' in result && Array.isArray(result.epg_listings) && result.epg_listings.length > 0) {
-      return result.epg_listings.map((item) => ({
+      const payload = result.epg_listings.map((item) => ({
         title: decode(item.title),
         description: decode(item.description),
         start: item.start,
@@ -363,6 +622,8 @@ export const getChannelEPG = createServerFn({ method: "POST" })
         start_timestamp: item.start_timestamp,
         stop_timestamp: item.stop_timestamp,
       }));
+      await writeServerCache(data.server_id, cacheKey, payload);
+      return payload;
     }
 
     // Fallback: Sistema Inteligente de EPG.
@@ -380,11 +641,20 @@ export const getChannelEPG = createServerFn({ method: "POST" })
           console.log(`Buscando EPG inteligente para: ${channelName}`);
         }
       } catch (e) {
-        console.error("Erro no EPG Inteligente:", e);
+        console.error("Erro no EPG inteligente:", e);
       }
     }
 
-    return [];
+    const payload: Array<{
+      title: string;
+      description: string;
+      start: string;
+      end: string;
+      start_timestamp: string;
+      stop_timestamp: string;
+    }> = [];
+    await writeServerCache(data.server_id, cacheKey, payload);
+    return payload;
   });
 
 async function fetchTMDB(apiKey: string, type: "movie" | "tv", query: string, year?: string) {
@@ -400,7 +670,7 @@ async function fetchTMDB(apiKey: string, type: "movie" | "tv", query: string, ye
       return await detailRes.json();
     }
   } catch (e) {
-    console.error("TMDB Fetch Error:", e);
+    console.error("Erro ao consultar o TMDB:", e);
   }
   return null;
 }

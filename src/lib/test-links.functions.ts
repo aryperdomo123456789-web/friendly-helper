@@ -11,7 +11,11 @@ async function assertOwner(supabase: any, userId: string) {
     .eq("user_id", userId)
     .in("role", ["owner", "admin"]);
   if (error) throw new Error(error.message);
-  if (!data || data.length === 0) throw new Error("Acesso restrito ao dono do sistema");
+  if (!data || data.length === 0) throw new Error("Acesso restrito à área administrativa.");
+}
+
+function shouldBypassDeviceTracking(link: any) {
+  return Boolean(link?.allow_repeat_device || link?.owner_only || link?.slug === "dono-livre");
 }
 
 export const checkDeviceBlocked = createServerFn({ method: "POST" })
@@ -23,16 +27,13 @@ export const checkDeviceBlocked = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    if (data.slug === "dono-livre") {
-      return { blocked: false };
-    }
     const { data: link } = await (supabaseAdmin as any)
       .from("test_links")
-      .select("*")
+      .select("slug, owner_only, allow_repeat_device")
       .eq("slug", data.slug)
       .maybeSingle();
 
-    if (link?.allow_repeat_device) {
+    if (shouldBypassDeviceTracking(link)) {
       return { blocked: false };
     }
 
@@ -71,6 +72,57 @@ export const listTestLinks = createServerFn({ method: "GET" })
 
   });
 
+export const listTestLinksPage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: { page: number; page_size: number }) =>
+    z.object({
+      page: z.number().int().min(1),
+      page_size: z.number().int().min(1).max(100),
+    }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await assertOwner(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    const { count, error: countError } = await supabaseAdmin
+      .from("test_links")
+      .select("id", { count: "exact", head: true });
+    if (countError) throw countError;
+
+    const total = count ?? 0;
+    const totalPages = Math.max(1, Math.ceil(total / data.page_size));
+    const page = Math.min(Math.max(data.page, 1), totalPages);
+    const from = (page - 1) * data.page_size;
+    const to = from + data.page_size - 1;
+
+    const { data: rows, error } = await (supabaseAdmin as any)
+      .from("test_links")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+
+    const creatorIds = [...new Set((rows ?? []).map((l: any) => l.created_by_id).filter(Boolean))];
+    let profileMap = new Map<string, any>();
+    if (creatorIds.length) {
+      const { data: profiles } = await (supabaseAdmin as any)
+        .from("profiles")
+        .select("id, username, display_name")
+        .in("id", creatorIds);
+      profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+    }
+
+    return {
+      items: (rows ?? []).map((link: any) => ({
+        ...link,
+        profile: link.created_by_id ? profileMap.get(link.created_by_id) ?? null : null,
+      })),
+      total,
+      page,
+      page_size: data.page_size,
+    };
+  });
+
 export const saveTestLink = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => 
@@ -95,6 +147,8 @@ export const saveTestLink = createServerFn({ method: "POST" })
       duration_minutes: data.duration_minutes,
       max_connections: data.max_connections,
       is_active: data.is_active,
+      owner_only: data.owner_only,
+      allow_repeat_device: data.allow_repeat_device,
       bonus_days_monthly: data.bonus_days_monthly,
       bonus_days_quarterly: data.bonus_days_quarterly,
       description: data.description,
@@ -167,9 +221,9 @@ export const createTestUser = createServerFn({ method: "POST" })
       .eq("is_active", true)
       .maybeSingle();
     
-    if (linkError || !link) throw new Error("Link de teste inválido ou inativo");
+    if (linkError || !link) throw new Error("Link de teste inválido ou inativo.");
 
-    if (link.slug !== "dono-livre") {
+    if (!shouldBypassDeviceTracking(link)) {
       // Check if device fingerprint was already used
       const { data: existingDevice } = await (supabaseAdmin as any)
         .from("test_device_tracking")
@@ -194,7 +248,7 @@ export const createTestUser = createServerFn({ method: "POST" })
         if (trackError.code === '23505') {
           throw new Error("Este dispositivo já foi utilizado para gerar um teste.");
         }
-        throw new Error("Erro ao validar dispositivo. Tente novamente.");
+        throw new Error("Erro ao validar o dispositivo. Tente novamente.");
       }
     }
 
@@ -216,7 +270,7 @@ export const createTestUser = createServerFn({ method: "POST" })
         referral_source_code: data.referral_code ?? null,
       },
     });
-    if (error || !created.user) throw new Error(error?.message ?? "Falha ao criar teste");
+    if (error || !created.user) throw new Error(error?.message ?? "Falha ao criar teste.");
     
     const newUserId = created.user.id;
 

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyAccount, updateMyAccount } from "@/lib/account.functions";
@@ -16,16 +16,17 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { copyToClipboard } from "@/lib/clipboard";
+import { UserPageShell } from "@/components/user-shell/user-page-shell";
 
 export const Route = createFileRoute("/_authenticated/conta")({
   head: () => ({
     meta: [
-      { title: "Minha Conta | WebPlayer IPTV" },
+      { title: "Minha Conta" },
       {
         name: "description",
-        content: "Gerencie seu plano, conexões e credenciais de acesso ao WebPlayer IPTV.",
+        content: "Gerencie seu plano, conexões e credenciais de acesso.",
       },
-      { property: "og:title", content: "Minha Conta | WebPlayer IPTV" },
+      { property: "og:title", content: "Minha Conta" },
       { property: "og:description", content: "Gerencie seu plano e credenciais de acesso." },
     ],
   }),
@@ -50,9 +51,12 @@ function ContaPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [planLoading, setPlanLoading] = useState<string | null>(null);
+  const initializedAccountId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!account.data) return;
+    if (!account.data?.userId) return;
+    if (initializedAccountId.current === account.data.userId) return;
+    initializedAccountId.current = account.data.userId;
     setUsername(account.data.username);
     setDisplayName(account.data.display_name ?? "");
   }, [account.data]);
@@ -60,7 +64,7 @@ function ContaPage() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (newPassword && newPassword !== confirmPassword) {
-      toast.error("A nova senha e a confirmacao nao sao iguais");
+      toast.error("A nova senha e a confirmação não são iguais");
       return;
     }
     setLoading(true);
@@ -79,6 +83,7 @@ function ContaPage() {
         password: newPassword || currentPassword,
       });
       toast.success("Dados de acesso atualizados com sucesso!");
+      setUsername(result.username);
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -96,9 +101,9 @@ function ContaPage() {
       const result = await mpPreference({ data: { planId } });
       
       if ((result as any).simulate_success) {
-        toast.info("Modo Teste: simulando ativação sem Mercado Pago...");
+        toast.info("Modo de teste: simulando ativação sem Mercado Pago...");
         if (!account.data?.userId) {
-          throw new Error("Conta nao carregada para simulacao");
+          throw new Error("Conta não carregada para simulação");
         }
         await runSimulation({ 
           data: { 
@@ -106,7 +111,7 @@ function ContaPage() {
             planId 
           } 
         });
-        toast.success("Plano ativado e bônus processado (se houver indicação)!");
+        toast.success("Plano ativado e bônus processado, quando aplicável!");
         void account.refetch();
         return;
       }
@@ -140,8 +145,8 @@ function ContaPage() {
       toast.success("Link de indicação copiado!");
       setCopyNotice("Link de indicação copiado!");
     } else {
-      toast.error("Nao foi possivel copiar o link.");
-      setCopyNotice("Nao foi possivel copiar o link.");
+      toast.error("Não foi possível copiar o link.");
+      setCopyNotice("Não foi possível copiar o link.");
     }
   };
 
@@ -167,11 +172,12 @@ function ContaPage() {
   const expiresDate = account.data?.expires_at ? new Date(account.data.expires_at) : null;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 pb-20">
-      <div className="flex flex-col gap-2">
-        <h1 className="text-4xl font-black tracking-tighter uppercase italic text-primary">Minha Conta</h1>
-        <p className="text-muted-foreground font-medium">Gerencie seu plano, indicações e segurança.</p>
-      </div>
+    <UserPageShell
+      className="mx-auto max-w-4xl pb-20"
+      title="Minha Conta"
+      description=""
+      icon={UserCog}
+    >
 
       <div className="grid gap-6 md:grid-cols-3">
         {/* Card do Plano Atual */}
@@ -181,7 +187,7 @@ function ContaPage() {
           </div>
           <CardHeader>
             <CardTitle className="text-xl font-bold flex items-center gap-2">
-              Meu Plano
+              Meu plano
             </CardTitle>
             <CardDescription>Status da sua assinatura</CardDescription>
           </CardHeader>
@@ -212,7 +218,7 @@ function ContaPage() {
         <Card className="md:col-span-2 border-primary/10 bg-card">
           <CardHeader>
             <CardTitle className="text-xl font-bold flex items-center gap-2">
-              <LinkIcon className="h-5 w-5 text-primary" /> Programa de Indicação
+              <LinkIcon className="h-5 w-5 text-primary" /> Programa de indicação
             </CardTitle>
             <CardDescription>Indique amigos e ganhe dias extras ou descontos.</CardDescription>
           </CardHeader>
@@ -233,7 +239,7 @@ function ContaPage() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-black uppercase tracking-[0.3em] text-primary">Link exclusivo do dono</p>
-                      <Badge variant="secondary" className="text-[9px] uppercase font-bold">Somente Dono</Badge>
+                      <Badge variant="secondary" className="text-[9px] uppercase font-bold">Somente o dono</Badge>
                     </div>
                     <div className="grid gap-4">
                       {ownerReferralLinks.map((link: any) => {
@@ -262,8 +268,8 @@ function ContaPage() {
                                     toast.success("Link de indicação copiado!");
                                     setCopyNotice("Link de indicação copiado!");
                                   } else {
-                                    toast.error("Nao foi possivel copiar o link.");
-                                    setCopyNotice("Nao foi possivel copiar o link.");
+                                    toast.error("Não foi possível copiar o link.");
+                                    setCopyNotice("Não foi possível copiar o link.");
                                   }
                                   setCopyingLink((current) => (current === link.slug ? null : current));
                                 }}
@@ -309,8 +315,8 @@ function ContaPage() {
                                     toast.success("Link de indicação copiado!");
                                     setCopyNotice("Link de indicação copiado!");
                                   } else {
-                                    toast.error("Nao foi possivel copiar o link.");
-                                    setCopyNotice("Nao foi possivel copiar o link.");
+                                    toast.error("Não foi possível copiar o link.");
+                                    setCopyNotice("Não foi possível copiar o link.");
                                   }
                                   setCopyingLink((current) => (current === link.slug ? null : current));
                                 }}
@@ -357,7 +363,7 @@ function ContaPage() {
       {/* Seção de Planos e Upgrade */}
       <section className="space-y-4">
         <h2 className="text-2xl font-black tracking-tighter uppercase italic text-primary flex items-center gap-2">
-          <CreditCard className="h-6 w-6" /> Planos Disponíveis
+          <CreditCard className="h-6 w-6" /> Planos disponíveis
         </h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {availablePlans.map((plan: any) => {
@@ -403,9 +409,9 @@ function ContaPage() {
                     {planLoading === plan.id ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : isCurrent ? (
-                      "Plano Ativo"
+                      "Plano ativo"
                     ) : (
-                      "Assinar Agora"
+                      "Assinar agora"
                     )}
                   </Button>
                 </CardFooter>
@@ -419,7 +425,7 @@ function ContaPage() {
       <Card className="border-primary/10">
         <CardHeader>
           <CardTitle className="text-2xl font-black tracking-tighter uppercase italic flex items-center gap-2">
-            <UserCog className="h-6 w-6 text-primary" /> Segurança da Conta
+            <UserCog className="h-6 w-6 text-primary" /> Segurança da conta
           </CardTitle>
           <CardDescription>Gerencie seu usuário e altere sua senha de acesso.</CardDescription>
         </CardHeader>
@@ -427,9 +433,11 @@ function ContaPage() {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid gap-6 sm:grid-cols-2">
               <div className="grid gap-2">
-                <Label htmlFor="conta-username" className="text-xs uppercase font-bold tracking-widest">Usuário de Acesso</Label>
+                <Label htmlFor="conta-username" className="text-xs uppercase font-bold tracking-widest">Usuário de acesso</Label>
                 <Input
                   id="conta-username"
+                  name="account_username"
+                  autoComplete="off"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   className="bg-muted/30"
@@ -437,9 +445,11 @@ function ContaPage() {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="conta-display" className="text-xs uppercase font-bold tracking-widest">Nome de Exibição</Label>
+                <Label htmlFor="conta-display" className="text-xs uppercase font-bold tracking-widest">Nome de exibição</Label>
                 <Input
                   id="conta-display"
+                  name="account_display_name"
+                  autoComplete="off"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Seu nome no sistema"
@@ -452,10 +462,12 @@ function ContaPage() {
 
             <div className="grid gap-6">
               <div className="grid gap-2">
-                <Label htmlFor="conta-current" className="text-xs uppercase font-bold tracking-widest text-primary">Senha Atual</Label>
+                <Label htmlFor="conta-current" className="text-xs uppercase font-bold tracking-widest text-primary">Senha atual</Label>
                 <Input
                   id="conta-current"
                   type="password"
+                  name="account_current_password"
+                  autoComplete="current-password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   className="bg-muted/30"
@@ -465,21 +477,25 @@ function ContaPage() {
               </div>
               <div className="grid gap-6 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor="conta-new" className="text-xs uppercase font-bold tracking-widest">Nova Senha</Label>
+                  <Label htmlFor="conta-new" className="text-xs uppercase font-bold tracking-widest">Nova senha</Label>
                   <Input
                     id="conta-new"
                     type="password"
+                    name="account_new_password"
+                    autoComplete="new-password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="bg-muted/30"
-                    placeholder="Mínimo 6 caracteres"
+                    placeholder="Mínimo de 6 caracteres"
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="conta-confirm" className="text-xs uppercase font-bold tracking-widest">Confirmar Nova Senha</Label>
+                  <Label htmlFor="conta-confirm" className="text-xs uppercase font-bold tracking-widest">Confirmar nova senha</Label>
                   <Input
                     id="conta-confirm"
                     type="password"
+                    name="account_confirm_password"
+                    autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="bg-muted/30"
@@ -495,7 +511,7 @@ function ContaPage() {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </UserPageShell>
   );
 }
 

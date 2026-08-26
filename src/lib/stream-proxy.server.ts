@@ -43,7 +43,7 @@ async function aesKey(): Promise<CryptoKey> {
     keyPromise = (async () => {
       const secret = process.env["STREAM_PROXY_SECRET"];
       if (!secret || secret.length < 16) {
-        throw new Error("STREAM_PROXY_SECRET ausente ou fraco no ambiente do servidor");
+        throw new Error("STREAM_PROXY_SECRET ausente ou fraco no ambiente do servidor.");
       }
       const material = await crypto.subtle.digest("SHA-256", TEXT.encode(secret));
       return crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, [

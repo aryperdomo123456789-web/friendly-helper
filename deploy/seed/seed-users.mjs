@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * WEBPLAYER — seed de usuarios no backend proprio.
+ * MAGOPLAYERPRO — seed de usuarios no backend proprio.
  *
  * O que faz:
  *  1. cria os usuarios em auth.users (email sintetico <username>@iptv.local)

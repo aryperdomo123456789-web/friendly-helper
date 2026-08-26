@@ -1,4 +1,4 @@
-// Server-only Xtream Codes API client (same protocol the PHP WebPlayer uses).
+// Server-only Xtream Codes API client (same protocol used by the IPTV backend).
 
 export type XtreamCreds = {
   dns: string;
@@ -8,7 +8,7 @@ export type XtreamCreds = {
   dnsPool?: string[];
 };
 
-function normalizeDns(dns: string): string {
+export function normalizeDns(dns: string): string {
   let base = dns.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(base)) base = `http://${base}`;
   return base;
@@ -37,7 +37,7 @@ async function xtreamCallOnce<T>(
   try {
     const response = await fetch(buildPlayerApiUrl(creds, params), {
       signal: controller.signal,
-      headers: { "User-Agent": "Lovable-WebPlayer/1.0" },
+      headers: { "User-Agent": "IPTV-System/1.0" },
     });
     if (!response.ok) {
       throw new Error(`Servidor respondeu ${response.status}`);
@@ -46,7 +46,7 @@ async function xtreamCallOnce<T>(
     try {
       return JSON.parse(text) as T;
     } catch {
-      throw new Error("Resposta invalida do servidor IPTV");
+      throw new Error("Resposta inválida do servidor IPTV.");
     }
   } finally {
     clearTimeout(timer);
@@ -56,7 +56,7 @@ async function xtreamCallOnce<T>(
 export async function xtreamCall<T>(
   creds: XtreamCreds,
   params: Record<string, string | undefined>,
-  timeoutMs = 15000,
+  timeoutMs = 10000,
 ): Promise<T> {
   const candidates = Array.from(
     new Set([creds.dns, ...(creds.dnsPool ?? [])].filter(Boolean)),
@@ -71,9 +71,9 @@ export async function xtreamCall<T>(
   }
   throw lastError instanceof Error
     ? new Error(
-        `Servidor IPTV indisponivel (${lastError.message}). Verifique DNS, usuario e senha no painel.`,
+        `Servidor IPTV indisponível (${lastError.message}). Verifique DNS, usuário e senha no painel.`,
       )
-    : new Error("Servidor IPTV indisponivel");
+    : new Error("Servidor IPTV indisponível.");
 }
 
 
@@ -107,7 +107,7 @@ export async function testCredentials(creds: XtreamCreds): Promise<{
     }>(creds, {}, 12000);
     const info = data.user_info;
     if (!info || info.auth !== 1) {
-      return { ok: false, message: "Usuario ou senha recusados pelo servidor" };
+      return { ok: false, message: "Usuário ou senha recusados pelo servidor." };
     }
     return {
       ok: true,
@@ -116,6 +116,6 @@ export async function testCredentials(creds: XtreamCreds): Promise<{
       maxConnections: info.max_connections ?? null,
     };
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : "Falha na conexao" };
+    return { ok: false, message: error instanceof Error ? error.message : "Falha na conexão." };
   }
 }

@@ -35,7 +35,7 @@ export const createFirstOwner = createServerFn({ method: "POST" })
       .from("user_roles")
       .select("id", { count: "exact", head: true })
       .eq("role", "owner");
-    if ((count ?? 0) > 0) throw new Error("O acesso dono ja existe neste sistema");
+    if ((count ?? 0) > 0) throw new Error("O acesso administrativo já existe neste sistema.");
 
     const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
       email: `${data.username}@${SYNTHETIC_EMAIL_DOMAIN}`,
@@ -43,7 +43,8 @@ export const createFirstOwner = createServerFn({ method: "POST" })
       email_confirm: true,
       user_metadata: { username: data.username, role: "owner" },
     });
-    if (error || !created.user) throw new Error(error?.message ?? "Falha ao criar acesso dono");
+    if (error || !created.user)
+      throw new Error(error?.message ?? "Falha ao criar acesso administrativo.");
     const ownReferralCode = await generateUniqueReferralCode(supabaseAdmin);
 
     const { error: roleError } = await supabaseAdmin
@@ -57,7 +58,7 @@ export const createFirstOwner = createServerFn({ method: "POST" })
     const { error: profileError } = await supabaseAdmin.from("profiles").insert({
       id: created.user.id,
       username: data.username,
-      display_name: "Dono",
+      display_name: "Administrador",
       max_connections: 10,
       is_active: true,
       referral_code: ownReferralCode,
