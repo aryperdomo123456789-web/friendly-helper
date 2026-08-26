@@ -45,6 +45,7 @@ export function VideoPlayer({
   const sendTelemetry = useServerFn(recordPlaybackTelemetry);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -53,6 +54,7 @@ export function VideoPlayer({
     let destroyed = false;
     let hls: import("hls.js").default | null = null;
     let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+    let startupTimer: ReturnType<typeof setTimeout> | null = null;
     let recoveryAttempts = 0;
     let hasStartedPlaying = false;
     let fallbackIndex = 0;
@@ -84,18 +86,25 @@ export function VideoPlayer({
       return details;
     };
 
+    const clearStartupTimer = () => {
+      if (startupTimer) clearTimeout(startupTimer);
+      startupTimer = null;
+    };
+
     const ready = () => {
       if (!destroyed) setLoading(false);
     };
 
     const onFirstFrame = () => {
       if (destroyed) return;
+      clearStartupTimer();
       telemetry.markFirstFrame(currentDetails());
       ready();
     };
 
     const onPlaying = () => {
       if (destroyed) return;
+      clearStartupTimer();
       hasStartedPlaying = true;
       telemetry.markBufferEnd(currentDetails());
       if (!hasReportedPlaying) {
@@ -152,6 +161,20 @@ export function VideoPlayer({
     let tryNextFallback = (_reason: string) => false;
 
     const startSource = async (sourceUrl: string) => {
+      clearStartupTimer();
+      startupTimer = setTimeout(() => {
+        if (destroyed || hasStartedPlaying) return;
+        telemetry.record("fatal_error", {
+          error_code: "startup_timeout",
+          fatal: true,
+          reason: "first_frame_timeout",
+          ...currentDetails(),
+        });
+        setLoading(false);
+        if (tryNextFallback("startup_timeout")) return;
+        setError("O canal demorou para iniciar. Tente novamente ou escolha outro portal.");
+      }, 20_000);
+
       const isHls = sourceUrl.includes(".m3u8") || sourceUrl.includes("hls=1");
       const nativeHls = video.canPlayType("application/vnd.apple.mpegurl") !== "";
 
@@ -244,6 +267,7 @@ export function VideoPlayer({
       fallbackIndex += 1;
       recoveryAttempts = 0;
       hasNativeError = false;
+      clearStartupTimer();
       telemetry.record("format_fallback", {
         recovery_attempt: fallbackIndex,
         reason,
@@ -267,6 +291,7 @@ export function VideoPlayer({
 
     const onNativeError = () => {
       if (destroyed) return;
+      clearStartupTimer();
       hasNativeError = true;
       telemetry.record("fatal_error", {
         error_code: "native_media_error",
@@ -298,6 +323,7 @@ export function VideoPlayer({
 
     void start().catch(() => {
       if (destroyed) return;
+      clearStartupTimer();
       telemetry.record("fatal_error", {
         error_code: "player_initialization_error",
         fatal: true,
@@ -309,6 +335,7 @@ export function VideoPlayer({
     return () => {
       destroyed = true;
       if (recoveryTimer) clearTimeout(recoveryTimer);
+      clearStartupTimer();
       video.removeEventListener("loadeddata", onFirstFrame);
       video.removeEventListener("canplay", ready);
       video.removeEventListener("playing", onPlaying);
@@ -323,7 +350,7 @@ export function VideoPlayer({
       video.load();
       void telemetry.destroy("component_unmount");
     };
-  }, [fallbackUrls, kind, sendTelemetry, serverId, url]);
+  }, [fallbackUrls, kind, retryNonce, sendTelemetry, serverId, url]);
 
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-2xl">
@@ -353,6 +380,13 @@ export function VideoPlayer({
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/80 p-6 text-center">
           <p className="text-sm font-medium text-destructive">{error}</p>
           {title ? <p className="text-xs text-muted-foreground">{title}</p> : null}
+          <button
+            type="button"
+            className="mt-2 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted"
+            onClick={() => setRetryNonce((value) => value + 1)}
+          >
+            Tentar novamente
+          </button>
         </div>
       ) : null}
     </div>
