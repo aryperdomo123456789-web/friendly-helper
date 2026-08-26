@@ -102,3 +102,9 @@ O fixture verificou cleanup, encerramento de loading, no máximo um fallback, re
 ## Logout na aba Conta
 
 A aba Conta recebeu um botão explícito **Sair da conta** para usuários comuns. A ação reutiliza o encerramento de queries, limpeza do cache React Query, `supabase.auth.signOut()` e navegação para a tela pública. Após o deploy, o botão foi localizado no DOM real e o logout foi confirmado visualmente pelo retorno à tela pública de login. Nenhum dado, permissão, assinatura, sessão de outro dispositivo ou configuração de produção foi alterado.
+
+## Rodada controlada de Portais 1 e 2 e entitlement de laboratório
+
+A simulação isolada de falha transitória de segmento continuou aprovada pelo fixture R1–R10 e pela suíte oficial. Nos testes reais, Portal 1 foi selecionado e o catálogo de categorias carregou, porém as categorias visitadas não ofereceram itens reproduzíveis; nenhuma tentativa de playback foi iniciada. Portal 2 foi selecionado e permaneceu em uso no seletor, mas a rota TV ao Vivo informou que não havia servidor liberado para aquela sessão; igualmente, nenhum playback foi iniciado. Esses resultados são inconclusivos para a saúde do player e foram mantidos separados de falhas de origem.
+
+Para o laboratório, foi criado snapshot protegido do registro antes da mudança e aplicado exclusivamente `profiles.max_connections = 20` ao usuário de teste. O painel do dono recarregou mostrando `0 / 20`, e a consulta de verificação confirmou o valor 20. Nenhum outro usuário, plano, servidor, permissão, pagamento ou sessão foi alterado.
