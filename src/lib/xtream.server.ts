@@ -1,6 +1,7 @@
 // Server-only Xtream Codes API client (same protocol used by the IPTV backend).
 
 import { MAX_XTREAM_RESPONSE_BYTES, readResponseTextWithLimit } from "./response-limit.server";
+import { normalizeStreamExtension } from "./stream-format";
 
 export type XtreamCreds = {
   dns: string;
@@ -87,7 +88,7 @@ export function buildStreamUrl(
   ext = "m3u8",
 ): string {
   const base = normalizeDns(creds.dns);
-  const safeExt = kind === "live" ? "m3u8" : ext || "mp4";
+  const safeExt = normalizeStreamExtension(kind, ext);
   return `${base}/${kind}/${encodeURIComponent(creds.username)}/${encodeURIComponent(
     creds.password,
   )}/${streamId}.${safeExt}`;

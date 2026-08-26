@@ -612,10 +612,10 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
       reference: data.server_id,
       ttlSeconds: playbackTtlSeconds,
     });
-    const isHls = direct.endsWith(".m3u8") || direct.includes("m3u8");
-    // For live channels, force HLS mode if the URL structure suggests it
-    const forceHls = data.kind === "live" && !direct.includes("ext=ts");
-    return { url: (isHls || forceHls) ? `${proxied}&hls=1` : proxied };
+    const isHls = /\.m3u8(?:$|[?#])/i.test(direct);
+    // Só força HLS para live quando o builder não selecionou explicitamente TS.
+    const forceHls = data.kind === "live" && !/\.ts(?:$|[?#])/i.test(direct);
+    return { url: isHls || forceHls ? `${proxied}&hls=1` : proxied };
   });
 
 const playbackTelemetryEventSchema = z.object({
