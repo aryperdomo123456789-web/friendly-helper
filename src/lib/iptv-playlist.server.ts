@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import { normalizeDns, type XtreamCreds } from "./xtream.server";
+import { MAX_PLAYLIST_TEXT_BYTES, readResponseTextWithLimit } from "./response-limit.server";
 
 type Kind = "live" | "movie" | "series";
 
@@ -128,7 +129,7 @@ async function fetchTextWithTimeout(url: string, timeoutMs: number): Promise<str
     if (!response.ok) {
       throw new Error(`Playlist respondeu ${response.status}`);
     }
-    return await response.text();
+    return await readResponseTextWithLimit(response, MAX_PLAYLIST_TEXT_BYTES, "Playlist M3U");
   } finally {
     clearTimeout(timer);
   }
@@ -205,7 +206,10 @@ export function parsePlaylistCatalog(playlistText: string): PlaylistCatalog {
     // - qualquer outro caso cai como live, incluindo /live/ e .ts
     const kind = detectKindFromUrl(line);
     const groupName = sanitizeCategoryName(
-      pendingEntry.meta["group-title"] ?? pendingEntry.meta["group_title"] ?? pendingEntry.meta["group"] ?? "",
+      pendingEntry.meta["group-title"] ??
+        pendingEntry.meta["group_title"] ??
+        pendingEntry.meta["group"] ??
+        "",
     );
     const categoryId = groupName;
 
@@ -219,12 +223,18 @@ export function parsePlaylistCatalog(playlistText: string): PlaylistCatalog {
 
     catalog[kind].streams.push({
       id: detectId(kind, line),
-      name: normalizeText(
-        pendingEntry.meta["tvg-name"] ?? pendingEntry.meta["tvg_name"] ?? pendingEntry.displayName,
-      ) || "Conteúdo",
-      icon: normalizeText(
-        pendingEntry.meta["tvg-logo"] ?? pendingEntry.meta["tvg_logo"] ?? pendingEntry.meta["logo"],
-      ) || null,
+      name:
+        normalizeText(
+          pendingEntry.meta["tvg-name"] ??
+            pendingEntry.meta["tvg_name"] ??
+            pendingEntry.displayName,
+        ) || "Conteúdo",
+      icon:
+        normalizeText(
+          pendingEntry.meta["tvg-logo"] ??
+            pendingEntry.meta["tvg_logo"] ??
+            pendingEntry.meta["logo"],
+        ) || null,
       ext: detectExt(line),
       rating: null,
       category_id: categoryId,
@@ -242,15 +252,22 @@ export function parsePlaylistCatalog(playlistText: string): PlaylistCatalog {
 }
 
 export function countPlaylistItems(playlistText: string) {
-  return playlistText
-    .split(/\r?\n/)
-    .filter((line) => line.trim().startsWith("#EXTINF:")).length;
+  return playlistText.split(/\r?\n/).filter((line) => line.trim().startsWith("#EXTINF:")).length;
 }
 
 export function createEmptyPlaylistCatalog(): PlaylistCatalog {
   return {
-    live: { categories: [...EMPTY_CATALOG.live.categories], streams: [...EMPTY_CATALOG.live.streams] },
-    movie: { categories: [...EMPTY_CATALOG.movie.categories], streams: [...EMPTY_CATALOG.movie.streams] },
-    series: { categories: [...EMPTY_CATALOG.series.categories], streams: [...EMPTY_CATALOG.series.streams] },
+    live: {
+      categories: [...EMPTY_CATALOG.live.categories],
+      streams: [...EMPTY_CATALOG.live.streams],
+    },
+    movie: {
+      categories: [...EMPTY_CATALOG.movie.categories],
+      streams: [...EMPTY_CATALOG.movie.streams],
+    },
+    series: {
+      categories: [...EMPTY_CATALOG.series.categories],
+      streams: [...EMPTY_CATALOG.series.streams],
+    },
   };
 }

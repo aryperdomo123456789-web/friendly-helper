@@ -3,6 +3,7 @@ import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/prom
 import { dirname, join } from "node:path";
 
 import type { PlaylistSnapshot } from "./iptv-playlist.server";
+import { MAX_PLAYLIST_TEXT_BYTES } from "./response-limit.server";
 
 const LOCAL_CACHE_ROOT =
   process.env["MAGO_SERVER_FILESYSTEM_CACHE_DIR"]?.trim() ||
@@ -91,7 +92,8 @@ async function readJsonFile<T>(filePath: string): Promise<T | null> {
 function isMeaningfulPayload(value: unknown) {
   if (Array.isArray(value)) return value.length > 0;
   if (typeof value === "string") return value.trim().length > 0;
-  if (value && typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0;
+  if (value && typeof value === "object")
+    return Object.keys(value as Record<string, unknown>).length > 0;
   return value !== null && value !== undefined;
 }
 
@@ -104,13 +106,24 @@ async function tryReadDiskCache<T>(serverId: string, cacheKey: string) {
   return { payload: diskEntry.payload, fetchedAt: diskEntry.fetched_at, stale };
 }
 
-async function tryReadDiskPlaylist(serverId: string) {
-  const playlist = await readJsonFile<PlaylistSnapshot>(getPlaylistJsonPath(serverId));
+async function tryReadDiskPlaylistAtPath(filePath: string) {
+  try {
+    const stats = await stat(filePath);
+    if (stats.size > MAX_PLAYLIST_TEXT_BYTES * 2) return null;
+  } catch {
+    return null;
+  }
+
+  const playlist = await readJsonFile<PlaylistSnapshot>(filePath);
   if (!playlist?.playlist_text?.trim()) return null;
 
   const fetchedAt = new Date(playlist.fetched_at).getTime();
   const stale = Number.isNaN(fetchedAt) ? true : Date.now() - fetchedAt > 12 * 60 * 60 * 1000;
   return { ...playlist, stale };
+}
+
+async function tryReadDiskPlaylist(serverId: string) {
+  return tryReadDiskPlaylistAtPath(getPlaylistJsonPath(serverId));
 }
 
 async function cleanupServerDirectory(serverDir: string) {
@@ -175,7 +188,9 @@ export async function readLocalServerCache<T>(serverId: string, cacheKey: string
   const current = await tryReadDiskCache<T>(serverId, cacheKey);
   if (current) return current;
 
-  const legacyEntry = await readJsonFile<DiskCacheEntry<T>>(join(getLegacyServerDir(serverId), "catalog", cacheFileName(cacheKey)));
+  const legacyEntry = await readJsonFile<DiskCacheEntry<T>>(
+    join(getLegacyServerDir(serverId), "catalog", cacheFileName(cacheKey)),
+  );
   if (!legacyEntry || !isMeaningfulPayload(legacyEntry.payload)) return null;
 
   const fetchedAt = new Date(legacyEntry.fetched_at).getTime();
@@ -183,7 +198,12 @@ export async function readLocalServerCache<T>(serverId: string, cacheKey: string
   return { payload: legacyEntry.payload, fetchedAt: legacyEntry.fetched_at, stale };
 }
 
-export async function writeLocalServerCache<T>(serverId: string, cacheKey: string, payload: T, fetchedAt = new Date().toISOString()) {
+export async function writeLocalServerCache<T>(
+  serverId: string,
+  cacheKey: string,
+  payload: T,
+  fetchedAt = new Date().toISOString(),
+) {
   const diskEntry: DiskCacheEntry<T> = {
     server_id: serverId,
     cache_key: cacheKey,
@@ -214,12 +234,7 @@ export async function readLocalServerPlaylist(serverId: string) {
   const current = await tryReadDiskPlaylist(serverId);
   if (current) return current;
 
-  const legacyPlaylist = await readJsonFile<PlaylistSnapshot>(join(getLegacyServerDir(serverId), "playlist.json"));
-  if (!legacyPlaylist?.playlist_text?.trim()) return null;
-
-  const fetchedAt = new Date(legacyPlaylist.fetched_at).getTime();
-  const stale = Number.isNaN(fetchedAt) ? true : Date.now() - fetchedAt > 12 * 60 * 60 * 1000;
-  return { ...legacyPlaylist, stale };
+  return tryReadDiskPlaylistAtPath(join(getLegacyServerDir(serverId), "playlist.json"));
 }
 
 export async function writeLocalServerPlaylist(serverId: string, snapshot: PlaylistSnapshot) {

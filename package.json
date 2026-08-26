@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "build:services": "node scripts/build-multiservice-entrypoints.mjs",
     "lint": "eslint .",
-    "test:worker": "node --experimental-strip-types --test scripts/worker-scheduler.test.ts",
+    "test:worker": "node --experimental-strip-types --test scripts/worker-scheduler.test.ts scripts/response-limit.test.ts",
     "format": "prettier --write .",
     "build:node": "NITRO_PRESET=node_server vite build && node scripts/generate-legacy-css.mjs && node scripts/build-multiservice-entrypoints.mjs",
     "start": "node .output/server/index.mjs"

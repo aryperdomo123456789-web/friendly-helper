@@ -1,5 +1,7 @@
 // Server-only Xtream Codes API client (same protocol used by the IPTV backend).
 
+import { MAX_XTREAM_RESPONSE_BYTES, readResponseTextWithLimit } from "./response-limit.server";
+
 export type XtreamCreds = {
   dns: string;
   username: string;
@@ -42,7 +44,11 @@ async function xtreamCallOnce<T>(
     if (!response.ok) {
       throw new Error(`Servidor respondeu ${response.status}`);
     }
-    const text = await response.text();
+    const text = await readResponseTextWithLimit(
+      response,
+      MAX_XTREAM_RESPONSE_BYTES,
+      "Resposta Xtream",
+    );
     try {
       return JSON.parse(text) as T;
     } catch {
@@ -58,9 +64,7 @@ export async function xtreamCall<T>(
   params: Record<string, string | undefined>,
   timeoutMs = 10000,
 ): Promise<T> {
-  const candidates = Array.from(
-    new Set([creds.dns, ...(creds.dnsPool ?? [])].filter(Boolean)),
-  );
+  const candidates = Array.from(new Set([creds.dns, ...(creds.dnsPool ?? [])].filter(Boolean)));
   let lastError: unknown;
   for (const dns of candidates) {
     try {
@@ -75,7 +79,6 @@ export async function xtreamCall<T>(
       )
     : new Error("Servidor IPTV indisponível.");
 }
-
 
 export function buildStreamUrl(
   creds: XtreamCreds,
