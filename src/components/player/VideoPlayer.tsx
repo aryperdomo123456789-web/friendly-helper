@@ -54,6 +54,7 @@ export function VideoPlayer({
     let hls: import("hls.js").default | null = null;
     let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
     let recoveryAttempts = 0;
+    let hasStartedPlaying = false;
     let fallbackIndex = 0;
     let hasNativeError = false;
     let hasReportedPlaying = false;
