@@ -10,22 +10,18 @@ import {
   markThreadRead,
   getOrCreateThread,
   sendSupportMessage,
+  sendSupportOwnerMessage,
+  sendSupportAttachment,
   listSupportMessagesPage,
   closeSupportThread,
   respondToClosurePrompt,
   submitSupportSatisfaction,
   getSupportStats,
+  updateSupportThreadOperations,
 } from "@/lib/chat.functions";
-import {
-  getSupportMessageTypeMeta,
-  inferSupportMessageType,
-} from "@/lib/support-message.types";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { getSupportMessageTypeMeta, inferSupportMessageType } from "@/lib/support-message.types";
+import { getSupportStatusMeta } from "@/lib/chat-policy";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -46,6 +42,7 @@ import {
   Clock3,
   BadgeCheck,
   History,
+  Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -60,6 +57,17 @@ import {
 } from "@/components/ui/pagination";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+type SupportPriority = "low" | "normal" | "high" | "urgent";
+type SupportCategory =
+  "general" | "access" | "billing" | "playback" | "catalog" | "technical" | "other";
 
 export const Route = createFileRoute("/_authenticated/suporte")({
   head: () => ({
@@ -78,27 +86,43 @@ function SuportePage() {
   const fetchMyThreads = useServerFn(listMySupportThreads);
   const mutationMarkRead = useServerFn(markThreadRead);
   const fetchOrCreateThread = useServerFn(getOrCreateThread);
-  const mutationCloseThread = useServerFn(closeSupportThread);
-  const mutationRespondClosePrompt = useServerFn(respondToClosurePrompt);
-  const mutationSubmitSatisfaction = useServerFn(submitSupportSatisfaction);
   const fetchSupportStats = useServerFn(getSupportStats);
   const [threadsPage, setThreadsPage] = useState(1);
   const threadsPageSize = 10;
   const [ownerView, setOwnerView] = useState<"atendimento" | "estatisticas">("atendimento");
+  const [ownerSearch, setOwnerSearch] = useState("");
+  const [ownerStatus, setOwnerStatus] = useState<
+    "all" | "open" | "pending_support" | "pending_customer" | "closed"
+  >("all");
+  const [ownerPriority, setOwnerPriority] = useState<"all" | SupportPriority>("all");
 
   const threads = useQuery({
-    queryKey: ["support-threads-page", threadsPage, threadsPageSize],
+    queryKey: [
+      "support-threads-page",
+      threadsPage,
+      threadsPageSize,
+      ownerStatus,
+      ownerPriority,
+      ownerSearch,
+    ],
     queryFn: () =>
       fetchThreadsPage({
         data: {
           page: threadsPage,
           page_size: threadsPageSize,
+          ...(ownerStatus !== "all" ? { status: ownerStatus } : {}),
+          ...(ownerPriority !== "all" ? { priority: ownerPriority } : {}),
+          ...(ownerSearch.trim() ? { search: ownerSearch.trim() } : {}),
         },
       }),
     enabled: isOwner,
     refetchInterval: 10000,
     placeholderData: (previous) => previous,
   });
+
+  useEffect(() => {
+    setThreadsPage(1);
+  }, [ownerSearch, ownerStatus, ownerPriority]);
 
   const threadsTotal = threads.data?.total ?? 0;
   const threadsTotalPages = Math.max(1, Math.ceil(threadsTotal / threadsPageSize));
@@ -186,7 +210,10 @@ function SuportePage() {
     >
       {isOwner ? (
         <div className="space-y-5">
-          <Tabs value={ownerView} onValueChange={(value) => setOwnerView(value as typeof ownerView)}>
+          <Tabs
+            value={ownerView}
+            onValueChange={(value) => setOwnerView(value as typeof ownerView)}
+          >
             <TabsList className="grid h-11 w-full max-w-xl grid-cols-2 bg-muted/40">
               <TabsTrigger value="atendimento" className="text-sm font-semibold">
                 Atendimento
@@ -206,15 +233,63 @@ function SuportePage() {
                       <MessageSquare className="h-5 w-5" /> Conversas
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
-                      {threadsTotal === 0 ? "Nenhuma conversa ativa." : `Página ${threadsSafePage} de ${threadsTotalPages}`}
+                      {threadsTotal === 0
+                        ? "Nenhuma conversa ativa."
+                        : `Página ${threadsSafePage} de ${threadsTotalPages}`}
                     </p>
+                    <div className="space-y-2 pt-2">
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          value={ownerSearch}
+                          onChange={(event) => setOwnerSearch(event.target.value)}
+                          placeholder="Buscar por protocolo"
+                          className="h-9 pl-9 bg-background/60"
+                          aria-label="Buscar conversa por protocolo"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Select
+                          value={ownerStatus}
+                          onValueChange={(value) => setOwnerStatus(value as typeof ownerStatus)}
+                        >
+                          <SelectTrigger aria-label="Filtrar por status">
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todos os status</SelectItem>
+                            <SelectItem value="pending_support">Aguardando suporte</SelectItem>
+                            <SelectItem value="pending_customer">Aguardando cliente</SelectItem>
+                            <SelectItem value="open">Aberto</SelectItem>
+                            <SelectItem value="closed">Fechado</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={ownerPriority}
+                          onValueChange={(value) => setOwnerPriority(value as typeof ownerPriority)}
+                        >
+                          <SelectTrigger aria-label="Filtrar por prioridade">
+                            <SelectValue placeholder="Prioridade" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Todas prioridades</SelectItem>
+                            <SelectItem value="urgent">Urgente</SelectItem>
+                            <SelectItem value="high">Alta</SelectItem>
+                            <SelectItem value="normal">Normal</SelectItem>
+                            <SelectItem value="low">Baixa</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
                   </div>
                 </CardHeader>
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                   {threads.isLoading ? (
                     <div className="p-4 text-center">Carregando...</div>
                   ) : (threads.data?.items ?? []).length === 0 ? (
-                    <div className="p-4 text-center text-muted-foreground text-sm italic">Nenhuma conversa ativa.</div>
+                    <div className="p-4 text-center text-muted-foreground text-sm italic">
+                      Nenhuma conversa ativa.
+                    </div>
                   ) : (
                     threads.data?.items.map((item: any) => (
                       <button
@@ -227,7 +302,8 @@ function SuportePage() {
                         data-tv-focus
                         className={cn(
                           "w-full p-4 text-left hover:bg-primary/10 border-b border-sidebar-border transition-all flex items-center justify-between group",
-                          selectedThread?.id === item.id && "bg-primary/20 border-l-4 border-l-primary"
+                          selectedThread?.id === item.id &&
+                            "bg-primary/20 border-l-4 border-l-primary",
                         )}
                       >
                         <div className="min-w-0 flex-1">
@@ -235,8 +311,11 @@ function SuportePage() {
                             <div className="font-bold truncate text-sm group-hover:text-primary transition-colors">
                               {item.profile?.display_name || item.profile?.username || "Usuário"}
                             </div>
-                            <Badge variant={item.status === "closed" ? "secondary" : "default"} className="text-[9px] uppercase">
-                              {item.status === "closed" ? "Fechado" : "Aberto"}
+                            <Badge
+                              variant={item.status === "closed" ? "secondary" : "default"}
+                              className="text-[9px] uppercase"
+                            >
+                              {getSupportStatusMeta(item.status).label}
                             </Badge>
                           </div>
                           <div className="text-[11px] text-muted-foreground truncate opacity-70">
@@ -279,7 +358,9 @@ function SuportePage() {
                             </Button>
                           </PaginationItem>
                         ))}
-                        {threadsTotalPages > threadsPaginationPages[threadsPaginationPages.length - 1] && (
+                        {threadsTotalPages >
+                          (threadsPaginationPages[threadsPaginationPages.length - 1] ??
+                            threadsSafePage) && (
                           <PaginationItem>
                             <PaginationEllipsis />
                           </PaginationItem>
@@ -291,7 +372,11 @@ function SuportePage() {
                               event.preventDefault();
                               setThreadsPage((current) => Math.min(threadsTotalPages, current + 1));
                             }}
-                            className={threadsSafePage >= threadsTotalPages ? "pointer-events-none opacity-50" : ""}
+                            className={
+                              threadsSafePage >= threadsTotalPages
+                                ? "pointer-events-none opacity-50"
+                                : ""
+                            }
                           />
                         </PaginationItem>
                       </PaginationContent>
@@ -314,7 +399,9 @@ function SuportePage() {
                     </div>
                     <div>
                       <p className="font-bold text-lg">Central de Atendimento</p>
-                      <p className="text-sm opacity-60">Selecione um cliente ao lado para iniciar o suporte.</p>
+                      <p className="text-sm opacity-60">
+                        Selecione um cliente ao lado para iniciar o suporte.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -330,22 +417,34 @@ function SuportePage() {
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
                   <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Totais</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+                      Totais
+                    </p>
                     <div className="mt-3 grid grid-cols-2 gap-3">
                       <div>
                         <p className="text-xs text-muted-foreground">Aberto</p>
-                        <p className="text-2xl font-black text-foreground">{statsQuery.data?.open_threads ?? 0}</p>
+                        <p className="text-2xl font-black text-foreground">
+                          {statsQuery.data?.open_threads ?? 0}
+                        </p>
                       </div>
                       <div>
                         <p className="text-xs text-muted-foreground">Fechado</p>
-                        <p className="text-2xl font-black text-foreground">{statsQuery.data?.closed_threads ?? 0}</p>
+                        <p className="text-2xl font-black text-foreground">
+                          {statsQuery.data?.closed_threads ?? 0}
+                        </p>
                       </div>
                     </div>
                   </div>
-                    <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
-                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">Satisfação</p>
-                    <p className="mt-2 text-3xl font-black text-primary">{satisfactionAverage.toFixed(2)}</p>
-                    <p className="text-xs text-muted-foreground">Base: {statsQuery.data?.satisfaction_count ?? 0} avaliação(ões)</p>
+                  <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground">
+                      Satisfação
+                    </p>
+                    <p className="mt-2 text-3xl font-black text-primary">
+                      {satisfactionAverage.toFixed(2)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Base: {statsQuery.data?.satisfaction_count ?? 0} avaliação(ões)
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -357,11 +456,21 @@ function SuportePage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-5">
-                  {(statsQuery.data?.distribution ?? [1, 2, 3, 4, 5].map((score) => ({ score, count: 0 }))).map((item: any) => (
-                    <div key={item.score} className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                  {(
+                    statsQuery.data?.distribution ??
+                    [1, 2, 3, 4, 5].map((score) => ({ score, count: 0 }))
+                  ).map((item: any) => (
+                    <div
+                      key={item.score}
+                      className="rounded-2xl border border-border/70 bg-background/70 p-4"
+                    >
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">Nota {item.score}</p>
-                        <Badge variant="secondary" className="text-[10px]">{item.count}</Badge>
+                        <p className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">
+                          Nota {item.score}
+                        </p>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {item.count}
+                        </Badge>
                       </div>
                       <p className="mt-3 text-3xl font-black">{item.count}</p>
                       <p className="text-xs text-muted-foreground">Resultados registrados</p>
@@ -381,7 +490,9 @@ function SuportePage() {
                   <History className="h-5 w-5" /> Meu histórico
                 </CardTitle>
                 <p className="text-xs text-muted-foreground">
-                  {myThreadsQuery.isLoading ? "Carregando histórico..." : `${(myThreadsQuery.data ?? []).length} atendimento(s) encontrados`}
+                  {myThreadsQuery.isLoading
+                    ? "Carregando histórico..."
+                    : `${(myThreadsQuery.data ?? []).length} atendimento(s) encontrados`}
                 </p>
               </div>
             </CardHeader>
@@ -389,7 +500,9 @@ function SuportePage() {
               {myThreadsQuery.isLoading ? (
                 <div className="p-4 text-center">Carregando...</div>
               ) : (myThreadsQuery.data ?? []).length === 0 ? (
-                <div className="p-4 text-center text-muted-foreground text-sm italic">Nenhum atendimento encontrado.</div>
+                <div className="p-4 text-center text-muted-foreground text-sm italic">
+                  Nenhum atendimento encontrado.
+                </div>
               ) : (
                 (myThreadsQuery.data ?? []).map((item: any) => (
                   <button
@@ -401,7 +514,7 @@ function SuportePage() {
                     data-tv-focus
                     className={cn(
                       "w-full p-4 text-left hover:bg-primary/10 border-b border-sidebar-border transition-all flex items-center justify-between group",
-                      selectedThread?.id === item.id && "bg-primary/20 border-l-4 border-l-primary"
+                      selectedThread?.id === item.id && "bg-primary/20 border-l-4 border-l-primary",
                     )}
                   >
                     <div className="min-w-0 flex-1">
@@ -409,8 +522,11 @@ function SuportePage() {
                         <div className="font-bold truncate text-sm group-hover:text-primary transition-colors">
                           {item.protocol ? `#${item.protocol}` : "Atendimento"}
                         </div>
-                        <Badge variant={item.status === "closed" ? "secondary" : "default"} className="text-[9px] uppercase">
-                          {item.status === "closed" ? "Fechado" : "Aberto"}
+                        <Badge
+                          variant={item.status === "closed" ? "secondary" : "default"}
+                          className="text-[9px] uppercase"
+                        >
+                          {getSupportStatusMeta(item.status).label}
                         </Badge>
                       </div>
                       <div className="text-[11px] text-muted-foreground truncate opacity-70">
@@ -442,7 +558,9 @@ function SuportePage() {
                 </div>
                 <div>
                   <p className="font-bold text-lg">Histórico de suporte</p>
-                  <p className="text-sm opacity-60">Selecione um protocolo para ver o atendimento completo.</p>
+                  <p className="text-sm opacity-60">
+                    Selecione um protocolo para ver o atendimento completo.
+                  </p>
                 </div>
               </div>
             )}
@@ -453,26 +571,51 @@ function SuportePage() {
   );
 }
 
-function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => void; isOwner: boolean }) {
+function ChatWindow({
+  thread,
+  onClose,
+  isOwner,
+}: {
+  thread: any;
+  onClose: () => void;
+  isOwner: boolean;
+}) {
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const pendingMessageIdRef = useRef<string | null>(null);
   const [closing, setClosing] = useState(false);
   const [threadStatus, setThreadStatus] = useState(thread.status ?? "open");
-  const [threadSatisfaction, setThreadSatisfaction] = useState<number | null>(thread.satisfaction_score ?? null);
+  const [threadPriority, setThreadPriority] = useState<SupportPriority>(
+    thread.priority ?? "normal",
+  );
+  const [threadCategory, setThreadCategory] = useState<SupportCategory>(
+    thread.category ?? "general",
+  );
+  const [threadSatisfaction, setThreadSatisfaction] = useState<number | null>(
+    thread.satisfaction_score ?? null,
+  );
   const [messagesPage, setMessagesPage] = useState(1);
   const messagesPageSize = 25;
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fetchMessagesPage = useServerFn(listSupportMessagesPage);
   const mutationSendSupport = useServerFn(sendSupportMessage);
+  const mutationSendOwnerSupport = useServerFn(sendSupportOwnerMessage);
+  const mutationSendAttachment = useServerFn(sendSupportAttachment);
+  const mutationUpdateThreadOperations = useServerFn(updateSupportThreadOperations);
+  const mutationCloseThread = useServerFn(closeSupportThread);
+  const mutationRespondClosePrompt = useServerFn(respondToClosurePrompt);
+  const mutationSubmitSatisfaction = useServerFn(submitSupportSatisfaction);
   const [closeConfirm, setCloseConfirm] = useState(false);
 
   useEffect(() => {
     setThreadStatus(thread.status ?? "open");
+    setThreadPriority(thread.priority ?? "normal");
+    setThreadCategory(thread.category ?? "general");
     setThreadSatisfaction(thread.satisfaction_score ?? null);
-  }, [thread.id, thread.status, thread.satisfaction_score]);
+  }, [thread.id, thread.status, thread.priority, thread.category, thread.satisfaction_score]);
 
   const messagesQuery = useQuery({
     queryKey: ["support-messages-page", thread.id, messagesPage, messagesPageSize],
@@ -495,7 +638,10 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
     if (messagesTotalPages <= windowSize) {
       return Array.from({ length: messagesTotalPages }, (_, index) => index + 1);
     }
-    const start = Math.max(1, Math.min(messagesSafePage - 2, messagesTotalPages - (windowSize - 1)));
+    const start = Math.max(
+      1,
+      Math.min(messagesSafePage - 2, messagesTotalPages - (windowSize - 1)),
+    );
     const end = Math.min(messagesTotalPages, start + windowSize - 1);
     return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   }, [messagesSafePage, messagesTotalPages]);
@@ -543,57 +689,44 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
     if (!messageToSend.trim()) return;
 
     setSending(true);
+    const clientMessageId = pendingMessageIdRef.current ?? crypto.randomUUID();
+    pendingMessageIdRef.current = clientMessageId;
 
     try {
       if (isOwner) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-
-        const { data: configData } = await supabase.from("app_config").select("config").maybeSingle();
-        const config = (configData?.config as any) || {};
-        const attendantName = config.support_attendant_name || "Suporte";
-        const content = `${attendantName}: ${messageToSend}`;
-
-        const { data: msgData, error } = await supabase
-          .from("support_messages")
-          .insert([{
-            thread_id: thread.id,
-            sender_id: session.user.id,
-            content,
-            message_type: "support_reply",
-          }])
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        const { error: updateError } = await supabase
-          .from("support_threads")
-          .update({
-            last_message: messageToSend,
-            last_message_at: new Date().toISOString(),
-            last_owner_message_at: new Date().toISOString(),
-            unread_count_user: (thread.unread_count_user || 0) + 1,
-          })
-          .eq("id", thread.id);
-
-        if (updateError) console.error("Erro ao atualizar thread:", updateError);
-
+        const msgData = await mutationSendOwnerSupport({
+          data: {
+            threadId: thread.id,
+            content: messageToSend,
+            clientMessageId,
+          },
+        });
         if (msgData) {
-          setMessages((prev) => [...prev, msgData]);
+          setMessages((prev) =>
+            prev.some((message) => message.id === msgData.id) ? prev : [...prev, msgData],
+          );
         }
       } else {
         const result = await mutationSendSupport({
-          data: { content: messageToSend },
+          data: { content: messageToSend, clientMessageId },
         });
 
         if (result?.userMessage) {
-          setMessages((prev) => [...prev, result.userMessage]);
+          setMessages((prev) =>
+            prev.some((message) => message.id === result.userMessage.id)
+              ? prev
+              : [...prev, result.userMessage],
+          );
         }
         if (result?.autoReply) {
-          setMessages((prev) => [...prev, result.autoReply]);
+          setMessages((prev) =>
+            prev.some((message) => message.id === result.autoReply.id)
+              ? prev
+              : [...prev, result.autoReply],
+          );
         }
       }
+      pendingMessageIdRef.current = null;
       setNewMessage("");
       setMessagesPage(1);
       queryClient.invalidateQueries({ queryKey: ["support-messages-page", thread.id] });
@@ -647,6 +780,30 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
     }
   };
 
+  const handleOperationUpdate = async (input: {
+    priority?: SupportPriority;
+    category?: SupportCategory;
+  }) => {
+    const previous = { priority: threadPriority, category: threadCategory };
+    if (input.priority) setThreadPriority(input.priority);
+    if (input.category) setThreadCategory(input.category);
+
+    try {
+      await mutationUpdateThreadOperations({
+        data: {
+          threadId: thread.id,
+          ...input,
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["support-threads-page"] });
+      toast.success("Dados operacionais atualizados.");
+    } catch (err: any) {
+      setThreadPriority(previous.priority);
+      setThreadCategory(previous.category);
+      toast.error("Erro ao atualizar atendimento: " + err.message);
+    }
+  };
+
   const handleSatisfaction = async (score: number) => {
     setClosing(true);
     try {
@@ -679,40 +836,57 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const fileType = file.type.startsWith("image/")
+      ? "image"
+      : file.type.startsWith("audio/")
+        ? "audio"
+        : null;
+    if (!fileType) {
+      toast.error("Envie somente imagem ou áudio.");
+      e.target.value = "";
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("O arquivo deve ter no máximo 10 MB.");
+      e.target.value = "";
+      return;
+    }
+
     setSending(true);
     try {
-      const fileExt = file.name.split(".").pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `chat/${thread.id}/${fileName}`;
-
+      const fileExt =
+        file.name
+          .split(".")
+          .pop()
+          ?.toLowerCase()
+          .replace(/[^a-z0-9]/g, "")
+          .slice(0, 8) || "bin";
+      const filePath = `chat/${thread.id}/${crypto.randomUUID()}.${fileExt}`;
+      const clientMessageId = crypto.randomUUID();
       const { error: uploadError } = await supabase.storage
         .from("chat-files-v2")
-        .upload(filePath, file);
-
+        .upload(filePath, file, { contentType: file.type, upsert: false });
       if (uploadError) throw uploadError;
 
-      const { data: signed, error: signErr } = await supabase.storage
-        .from("chat-files-v2")
-        .createSignedUrl(filePath, 60 * 60 * 24 * 365);
-      if (signErr) throw signErr;
-      const publicUrl = signed.signedUrl;
-
-      const fileType = file.type.startsWith("image/") ? "image" : file.type.startsWith("audio/") ? "audio" : "file";
-
-      const { data: { session } } = await supabase.auth.getSession();
-      await supabase.from("support_messages").insert([{
-        thread_id: thread.id,
-        sender_id: session?.user.id || null,
-        file_url: publicUrl,
-        file_type: fileType,
-        content: `Enviou um ${fileType}`,
-        message_type: "support_reply",
-      }]);
-
+      const message = await mutationSendAttachment({
+        data: {
+          threadId: thread.id,
+          path: filePath,
+          fileType,
+          clientMessageId,
+        },
+      });
+      setMessages((prev) =>
+        prev.some((item) => item.id === message.id) ? prev : [...prev, message],
+      );
+      queryClient.invalidateQueries({ queryKey: ["support-messages-page", thread.id] });
+      queryClient.invalidateQueries({ queryKey: ["support-threads-page"] });
+      queryClient.invalidateQueries({ queryKey: ["support-my-threads"] });
       toast.success("Arquivo enviado!");
     } catch (err: any) {
       toast.error("Erro no upload: " + err.message);
     } finally {
+      e.target.value = "";
       setSending(false);
     }
   };
@@ -732,25 +906,68 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
                   #{thread.protocol}
                 </span>
               )}
-              <Badge variant={threadStatus === "closed" ? "secondary" : "default"} className="text-[9px] uppercase">
-                {threadStatus === "closed" ? "Fechado" : "Aberto"}
+              <Badge
+                variant={threadStatus === "closed" ? "secondary" : "default"}
+                className="text-[9px] uppercase"
+              >
+                {getSupportStatusMeta(threadStatus).label}
               </Badge>
             </div>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-online/20 bg-online/10 px-2.5 py-1 text-online">
                 <span className="h-2 w-2 rounded-full bg-online animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
-                Atendimento online
+                {getSupportStatusMeta(threadStatus).description}
               </span>
               <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/60 px-2.5 py-1">
-                Resposta contextual
+                Histórico preservado
               </span>
             </div>
             <div className="mt-2 text-[10px] text-muted-foreground leading-relaxed max-w-xl">
-              Chat contínuo para suporte do cliente, com histórico, confirmação de envio e identificação por protocolo.
+              Chat contínuo para suporte do cliente, com histórico, confirmação de envio e
+              identificação por protocolo.
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {isOwner && (
+            <div className="hidden items-center gap-2 lg:flex">
+              <Select
+                value={threadPriority}
+                onValueChange={(value) =>
+                  void handleOperationUpdate({ priority: value as SupportPriority })
+                }
+              >
+                <SelectTrigger className="w-[132px]" aria-label="Prioridade da conversa">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="urgent">Urgente</SelectItem>
+                  <SelectItem value="high">Alta</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="low">Baixa</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={threadCategory}
+                onValueChange={(value) =>
+                  void handleOperationUpdate({ category: value as SupportCategory })
+                }
+              >
+                <SelectTrigger className="w-[132px]" aria-label="Categoria da conversa">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="general">Geral</SelectItem>
+                  <SelectItem value="access">Acesso</SelectItem>
+                  <SelectItem value="billing">Financeiro</SelectItem>
+                  <SelectItem value="playback">Player</SelectItem>
+                  <SelectItem value="catalog">Catálogo</SelectItem>
+                  <SelectItem value="technical">Técnico</SelectItem>
+                  <SelectItem value="other">Outro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           {isOwner && threadStatus !== "closed" && (
             <Button
               type="button"
@@ -762,7 +979,13 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
             </Button>
           )}
           {isOwner && (
-            <Button data-tv-focus variant="ghost" size="icon" onClick={onClose} className="hover:bg-destructive/10 hover:text-destructive">
+            <Button
+              data-tv-focus
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              className="hover:bg-destructive/10 hover:text-destructive"
+            >
               <X className="h-4 w-4" />
             </Button>
           )}
@@ -806,7 +1029,9 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
                     </Button>
                   </PaginationItem>
                 ))}
-                {messagesTotalPages > messagesPaginationPages[messagesPaginationPages.length - 1] && (
+                {messagesTotalPages >
+                  (messagesPaginationPages[messagesPaginationPages.length - 1] ??
+                    messagesSafePage) && (
                   <PaginationItem>
                     <PaginationEllipsis />
                   </PaginationItem>
@@ -818,7 +1043,9 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
                       event.preventDefault();
                       setMessagesPage((current) => Math.min(messagesTotalPages, current + 1));
                     }}
-                    className={messagesSafePage >= messagesTotalPages ? "pointer-events-none opacity-50" : ""}
+                    className={
+                      messagesSafePage >= messagesTotalPages ? "pointer-events-none opacity-50" : ""
+                    }
                   />
                 </PaginationItem>
               </PaginationContent>
@@ -833,7 +1060,9 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
         ) : null}
 
         {messages.map((msg) => {
-          const isMe = isOwner ? msg.sender_id !== thread.user_id : msg.sender_id === thread.user_id;
+          const isMe = isOwner
+            ? msg.sender_id !== thread.user_id
+            : msg.sender_id === thread.user_id;
           const messageType = inferSupportMessageType(msg, thread.user_id);
           const messageMeta = getSupportMessageTypeMeta(messageType);
           const isClosePrompt = messageType === "closure_prompt";
@@ -841,15 +1070,22 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
           const scoreValue = threadSatisfaction;
           return (
             <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
-              <div className={cn(
-                "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-md transition-all hover:shadow-lg",
-                isMe
-                  ? "bg-primary text-primary-foreground rounded-tr-none border border-primary/20"
-                  : "bg-sidebar-accent/80 border border-sidebar-border rounded-tl-none backdrop-blur-sm"
-              )}>
+              <div
+                className={cn(
+                  "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm shadow-md transition-all hover:shadow-lg",
+                  isMe
+                    ? "bg-primary text-primary-foreground rounded-tr-none border border-primary/20"
+                    : "bg-sidebar-accent/80 border border-sidebar-border rounded-tl-none backdrop-blur-sm",
+                )}
+              >
                 {messageType !== "user_message" && (
                   <div className="mb-2 flex items-center gap-1.5">
-                    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]", messageMeta.className)}>
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.16em]",
+                        messageMeta.className,
+                      )}
+                    >
                       {messageMeta.label}
                     </span>
                   </div>
@@ -859,10 +1095,22 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
                     <p className="leading-relaxed">{msg.content}</p>
                     {!isOwner && threadStatus === "open" && (
                       <div className="flex flex-wrap gap-2">
-                        <Button type="button" size="sm" variant="default" onClick={() => void handleCloseThread()} disabled={closing}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="default"
+                          onClick={() => void handleCloseThread()}
+                          disabled={closing}
+                        >
                           Sim, encerrar
                         </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => void handleKeepOpen()} disabled={closing}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleKeepOpen()}
+                          disabled={closing}
+                        >
                           Não, manter aberto
                         </Button>
                       </div>
@@ -888,7 +1136,9 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
                       </div>
                     ) : (
                       <p className="text-xs text-muted-foreground">
-                        {scoreValue ? `Avaliação registrada: ${scoreValue}/5` : "Aguardando avaliação."}
+                        {scoreValue
+                          ? `Avaliação registrada: ${scoreValue}/5`
+                          : "Aguardando avaliação."}
                       </p>
                     )}
                   </div>
@@ -897,11 +1147,24 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
                     {msg.file_url ? (
                       <div className="space-y-2 py-1">
                         {msg.file_type === "image" ? (
-                          <img src={msg.file_url} alt="Imagem" className="max-w-full rounded-lg cursor-zoom-in border border-white/10" onClick={() => window.open(msg.file_url)} />
+                          <img
+                            src={msg.file_url}
+                            alt="Imagem"
+                            className="max-w-full rounded-lg cursor-zoom-in border border-white/10"
+                            onClick={() => window.open(msg.file_url)}
+                          />
                         ) : msg.file_type === "audio" ? (
-                          <audio controls src={msg.file_url} className="w-full max-w-[240px] h-10" />
+                          <audio
+                            controls
+                            src={msg.file_url}
+                            className="w-full max-w-[240px] h-10"
+                          />
                         ) : (
-                          <a href={msg.file_url} target="_blank" className="flex items-center gap-2 font-bold underline decoration-primary/50">
+                          <a
+                            href={msg.file_url}
+                            target="_blank"
+                            className="flex items-center gap-2 font-bold underline decoration-primary/50"
+                          >
                             <ImageIcon className="h-4 w-4" /> Abrir Arquivo
                           </a>
                         )}
@@ -911,8 +1174,16 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
                     )}
                   </>
                 )}
-                <div className={cn("text-[9px] mt-1 font-bold opacity-50", isMe ? "text-right" : "text-left")}>
-                  {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                <div
+                  className={cn(
+                    "text-[9px] mt-1 font-bold opacity-50",
+                    isMe ? "text-right" : "text-left",
+                  )}
+                >
+                  {new Date(msg.created_at).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </div>
               </div>
             </div>
@@ -929,12 +1200,16 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
               <p className="font-semibold">Atendimento encerrado.</p>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              Este protocolo permanece no histórico. Para abrir um novo atendimento, volte ao início e envie uma nova mensagem.
+              Este protocolo permanece no histórico. Para abrir um novo atendimento, volte ao início
+              e envie uma nova mensagem.
             </p>
           </div>
         </div>
       ) : (
-        <form onSubmit={handleSend} className="p-4 border-t border-sidebar-border bg-sidebar/60 backdrop-blur-md">
+        <form
+          onSubmit={handleSend}
+          className="p-4 border-t border-sidebar-border bg-sidebar/60 backdrop-blur-md"
+        >
           <div className="flex items-center gap-3">
             <input
               type="file"
@@ -956,14 +1231,23 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
             <Input
               name="message"
               autoComplete="off"
-              placeholder="Escreva sua resposta..."
+              placeholder={isOwner ? "Responder ao cliente..." : "Descreva sua solicitação..."}
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={(e) => {
+                setNewMessage(e.target.value);
+                pendingMessageIdRef.current = null;
+              }}
               className="flex-1 bg-sidebar-accent/30 border-sidebar-border focus-visible:ring-primary h-11 rounded-xl shadow-inner"
               data-tv-focus
               enterKeyHint="send"
             />
-            <Button data-tv-focus type="submit" size="icon" className="h-11 w-11 rounded-full shadow-lg" disabled={sending || !newMessage.trim()}>
+            <Button
+              data-tv-focus
+              type="submit"
+              size="icon"
+              className="h-11 w-11 rounded-full shadow-lg"
+              disabled={sending || !newMessage.trim()}
+            >
               <Send className="h-4 w-4" />
             </Button>
           </div>
@@ -982,10 +1266,20 @@ function ChatWindow({ thread, onClose, isOwner }: { thread: any; onClose: () => 
             O cliente receberá a confirmação de encerramento e a campanha de avaliação 1 a 5.
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setCloseConfirm(false)} disabled={closing}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setCloseConfirm(false)}
+              disabled={closing}
+            >
               Não, voltar
             </Button>
-            <Button type="button" variant="destructive" onClick={() => void handleCloseThread()} disabled={closing}>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleCloseThread()}
+              disabled={closing}
+            >
               {closing ? "Encerrando..." : "Sim, encerrar"}
             </Button>
           </DialogFooter>

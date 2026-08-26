@@ -244,6 +244,7 @@ export type Database = {
       }
       support_messages: {
         Row: {
+          client_message_id: string | null
           content: string | null
           created_at: string
           file_type: string | null
@@ -256,6 +257,7 @@ export type Database = {
         }
         Insert: {
           content?: string | null
+          client_message_id?: string | null
           created_at?: string
           file_type?: string | null
           file_url?: string | null
@@ -267,6 +269,7 @@ export type Database = {
         }
         Update: {
           content?: string | null
+          client_message_id?: string | null
           created_at?: string
           file_type?: string | null
           file_url?: string | null
@@ -288,16 +291,22 @@ export type Database = {
       }
       support_threads: {
         Row: {
+          assigned_to_user_id: string | null
+          category: string
           closed_at: string | null
           closed_by_role: string | null
           closed_by_user_id: string | null
           closure_prompt_at: string | null
           created_at: string
+          first_response_at: string | null
+          first_response_due_at: string | null
           id: string
           last_message: string | null
           last_message_at: string
           last_owner_message_at: string | null
           last_user_message_at: string | null
+          priority: string
+          resolution_due_at: string | null
           status: string
           protocol: string | null
           satisfaction_note: string | null
@@ -306,20 +315,27 @@ export type Database = {
           satisfaction_submitted_at: string | null
           unread_count_owner: number
           unread_count_user: number
+          waiting_since: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          assigned_to_user_id?: string | null
+          category?: string
           closed_at?: string | null
           closed_by_role?: string | null
           closed_by_user_id?: string | null
           closure_prompt_at?: string | null
           created_at?: string
+          first_response_at?: string | null
+          first_response_due_at?: string | null
           id?: string
           last_message?: string | null
           last_message_at?: string
           last_owner_message_at?: string | null
           last_user_message_at?: string | null
+          priority?: string
+          resolution_due_at?: string | null
           status?: string
           protocol?: string | null
           satisfaction_note?: string | null
@@ -328,20 +344,27 @@ export type Database = {
           satisfaction_submitted_at?: string | null
           unread_count_owner?: number
           unread_count_user?: number
+          waiting_since?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          assigned_to_user_id?: string | null
+          category?: string
           closed_at?: string | null
           closed_by_role?: string | null
           closed_by_user_id?: string | null
           closure_prompt_at?: string | null
           created_at?: string
+          first_response_at?: string | null
+          first_response_due_at?: string | null
           id?: string
           last_message?: string | null
           last_message_at?: string
           last_owner_message_at?: string | null
           last_user_message_at?: string | null
+          priority?: string
+          resolution_due_at?: string | null
           status?: string
           protocol?: string | null
           satisfaction_note?: string | null
@@ -350,6 +373,7 @@ export type Database = {
           satisfaction_submitted_at?: string | null
           unread_count_owner?: number
           unread_count_user?: number
+          waiting_since?: string | null
           updated_at?: string
           user_id?: string
         }
