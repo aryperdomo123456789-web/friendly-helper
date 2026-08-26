@@ -8,7 +8,7 @@
 
 **Ambiente:** produção HTTPS no aaPanel
 
-**Status:** rollout concluído; QoE de mídia ainda não medida
+**Status:** rollout concluído; QoE real medida com falha de entrega da mídia
 
 ## 1. Objetivo
 
@@ -39,16 +39,22 @@ Os health checks internos responderam HTTP 200 para main, player e payments. O d
 
 ## 4. Estabilidade observada
 
-Durante 60 segundos após o rollout, main, player e payments permaneceram HTTP 200. O worker permaneceu online sem novo restart na janela e apresentou aproximadamente 99 MiB na leitura do PM2. O contador histórico de reinícios do worker continuou elevado, portanto não deve ser tratado como SLO atingido; é dívida operacional para investigação prolongada.
+Na janela do rollout anterior, main, player e payments permaneceram HTTP 200; o worker ficou online sem novo restart e apresentou aproximadamente 99 MiB. Na publicação do micro-hotfix, os quatro processos também permaneceram online e os health checks passaram após 60+ segundos, mas a leitura do worker subiu para aproximadamente 395 MiB. O contador histórico de reinícios continua elevado; portanto, memória e estabilidade do worker ainda não devem ser tratados como SLO atingido e exigem observação prolongada.
 
 ## 5. Conclusão
 
-O rollout de Player Reliability v1 foi confirmado em produção para integridade de artefato, saúde dos serviços, autenticação, permissões e navegação de catálogo. A telemetria e a remoção do prefetch de playback estão no build ativo.
+O rollout de Player Reliability v1 foi confirmado em produção para integridade de artefato, saúde dos serviços, autenticação, permissões e navegação de catálogo. A telemetria, a remoção do prefetch de playback e a troca não bloqueante de portal estão no build ativo.
 
-O player não recebeu nota 10/10 com este smoke test. O estado real é aproximadamente **7,5/10 para IPTV multi-servidor em evolução** e **5/10 quando comparado a players OTT de primeira linha**, com a ressalva de que a reprodução real ainda não foi medida nesta conta. Para fechar o próximo gate, é necessário disponibilizar conteúdo de laboratório reproduzível e testar live, filme, episódio, buffering controlado, recovery, troca de portal, rede degradada, acessibilidade e ausência de URL upstream na rede.
+O player não recebeu nota 10/10 com este smoke test. A reprodução real foi medida e falhou antes do primeiro frame em três tentativas live observadas no laboratório: uma no Portal 1 com timeout aproximado de 60 s e duas no Portal 2 com erro nativo em aproximadamente 7,5 s e 2,6 s. A tentativa final pós-micro-hotfix falhou em aproximadamente 1,7 s, mas registrou somente `native_media_error`, sem o falso `autoplay_blocked`. Para fechar o próximo gate, é necessário disponibilizar conteúdo de laboratório reproduzível e testar live, filme, episódio, buffering controlado, recovery, troca de portal, rede degradada, acessibilidade e ausência de URL upstream na rede.
 
-O rollback continua preparado. Não foram alterados secrets, Nginx, firewall ou migrations durante esta publicação.
+O rollback continua preparado. O micro-hotfix `07b2964` foi publicado com manifesto determinístico; o build anterior permanece preservado. Não foram alterados secrets, Nginx, firewall ou migrations durante esta publicação. A leitura pós-reload manteve os quatro processos online e os health checks em 200, mas o worker apresentou aproximadamente 395 MiB, exigindo observação operacional prolongada antes de declarar SLO de memória.
 
 ## Referência
 
 A arquitetura, os critérios e as referências oficiais utilizadas estão em [Especificação de evolução do player para produção](../arquitetura/ESPECIFICACAO-PLAYER-PRODUCAO-2026-08-26.md).
+
+## Adendo — micro-hotfix pós-QA
+
+O commit `07b2964` ajustou exclusivamente `src/components/player/VideoPlayer.tsx`: o erro nativo encerra o loading, impede que a rejeição de `play()` seja registrada como autoplay quando já existe erro de mídia e remove o handler JSX duplicado. Prettier, os 20 testes determinísticos de worker/player, lint direcionado e build sanitizado passaram. O typecheck global continua com falhas preexistentes em rotas, schema gerado e outros componentes fora do escopo desta correção; não foi introduzida migration nem alteração de contrato.
+
+Após a publicação, a conta laboratorial permaneceu autenticada no Portal 2, o catálogo renderizou 20 itens e a reprodução final confirmou o comportamento de erro controlado. A ausência de primeiro frame continua bloqueada pela origem/proxy e não foi mascarada pelo hotfix.
