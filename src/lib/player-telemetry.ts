@@ -9,6 +9,7 @@ export type PlaybackTelemetryEventName =
   | "recover_attempt"
   | "recover_success"
   | "format_fallback"
+  | "quality_sample"
   | "ended"
   | "destroyed";
 
@@ -20,6 +21,8 @@ export type PlaybackTelemetryEvent = {
   latency_ms?: number;
   bitrate?: number;
   level?: number;
+  dropped_frames?: number;
+  decoded_frames?: number;
   fatal?: boolean;
   error_code?: string;
   recovery_attempt?: number;
@@ -126,6 +129,14 @@ export function createPlaybackTelemetry(options: {
     if (details.level !== undefined) {
       const level = clampNonNegative(details.level, 10_000);
       if (level !== undefined) event.level = level;
+    }
+    if (details.dropped_frames !== undefined) {
+      const droppedFrames = clampNonNegative(details.dropped_frames, 1_000_000_000);
+      if (droppedFrames !== undefined) event.dropped_frames = droppedFrames;
+    }
+    if (details.decoded_frames !== undefined) {
+      const decodedFrames = clampNonNegative(details.decoded_frames, 1_000_000_000);
+      if (decodedFrames !== undefined) event.decoded_frames = decodedFrames;
     }
     if (details.fatal !== undefined) event.fatal = details.fatal;
     if (details.recovery_attempt !== undefined) event.recovery_attempt = details.recovery_attempt;

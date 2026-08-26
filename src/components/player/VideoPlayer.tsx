@@ -33,6 +33,18 @@ function getLiveLatency(video: HTMLVideoElement): number | undefined {
   return Math.max(0, Math.round((liveEdge - video.currentTime) * 1000));
 }
 
+function getPlaybackQualityDetails(video: HTMLVideoElement): {
+  dropped_frames?: number;
+  decoded_frames?: number;
+} {
+  if (typeof video.getVideoPlaybackQuality !== "function") return {};
+  const quality = video.getVideoPlaybackQuality();
+  return {
+    dropped_frames: quality.droppedVideoFrames,
+    decoded_frames: quality.totalVideoFrames,
+  };
+}
+
 export function VideoPlayer({
   url,
   fallbackUrls = [],
@@ -55,6 +67,7 @@ export function VideoPlayer({
     let hls: import("hls.js").default | null = null;
     let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
     let startupTimer: ReturnType<typeof setTimeout> | null = null;
+    let qualityTimer: ReturnType<typeof setInterval> | null = null;
     let recoveryAttempts = 0;
     let hasStartedPlaying = false;
     let fallbackIndex = 0;
@@ -78,11 +91,15 @@ export function VideoPlayer({
         buffer_seconds?: number;
         latency_ms?: number;
         level?: number;
+        bitrate?: number;
+        dropped_frames?: number;
+        decoded_frames?: number;
       } = {};
       const bufferSeconds = getBufferedSeconds(video);
       const latencyMs = kind === "live" ? getLiveLatency(video) : undefined;
       if (bufferSeconds !== undefined) details.buffer_seconds = bufferSeconds;
       if (latencyMs !== undefined) details.latency_ms = latencyMs;
+      Object.assign(details, getPlaybackQualityDetails(video));
       return details;
     };
 
@@ -215,6 +232,16 @@ export function VideoPlayer({
             telemetry.record("manifest_loaded", levelDetails);
             ready();
           });
+          hls.on(Hls.Events.LEVEL_SWITCHED, (_event, data) => {
+            const level = Number(data.level);
+            const qualityDetails = currentDetails();
+            if (Number.isInteger(level) && level >= 0) {
+              qualityDetails.level = level;
+              const bitrate = hls?.levels?.[level]?.bitrate;
+              if (typeof bitrate === "number") qualityDetails.bitrate = bitrate;
+            }
+            telemetry.record("quality_sample", qualityDetails);
+          });
           hls.on(Hls.Events.ERROR, (_event, data) => {
             if (!data.fatal) return;
             const errorCode = `${data.type}:${data.details}`;
@@ -332,8 +359,20 @@ export function VideoPlayer({
       setError("Não foi possível preparar a reprodução neste navegador.");
     });
 
+    qualityTimer = setInterval(() => {
+      if (destroyed || !hasStartedPlaying) return;
+      const qualityDetails = getPlaybackQualityDetails(video);
+      if (
+        qualityDetails.dropped_frames !== undefined ||
+        qualityDetails.decoded_frames !== undefined
+      ) {
+        telemetry.record("quality_sample", qualityDetails);
+      }
+    }, 10_000);
+
     return () => {
       destroyed = true;
+      if (qualityTimer) clearInterval(qualityTimer);
       if (recoveryTimer) clearTimeout(recoveryTimer);
       clearStartupTimer();
       video.removeEventListener("loadeddata", onFirstFrame);
