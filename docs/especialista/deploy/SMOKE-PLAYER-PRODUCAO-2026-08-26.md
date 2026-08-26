@@ -98,3 +98,7 @@ A matriz confirma live, filme e episódio em uma origem autorizada e mostra que 
 Foi implementado e executado um fixture determinístico local usando o módulo real `createPlaybackTelemetry`. A matriz sequencial cobriu segmento live transitório, atraso de playlist, fallback HLS→TS, falha permanente, `startup_timeout`, retry manual, erro de decodificação, troca A→B→A, desmontagem/logout e VOD/episódio lento. Resultado: **10/10 cenários passaram**, sem porta pública, sem requisição a origem externa e sem tocar fontes de clientes.
 
 O fixture verificou cleanup, encerramento de loading, no máximo um fallback, retry em sessão nova, `recover_attempt`/`recover_success`, `fatal_error`, `destroyed` e ausência de `autoplay_blocked` falso. A matriz é evidência de contrato e política em ambiente determinístico; não substitui a mesma prova end-to-end em uma fonte autorizada real. O relatório sanitizado local foi gerado em `/home/ubuntu/player-recovery-matrix-2026-08-26.md`.
+
+## Logout na aba Conta
+
+A aba Conta recebeu um botão explícito **Sair da conta** para usuários comuns. A ação reutiliza o encerramento de queries, limpeza do cache React Query, `supabase.auth.signOut()` e navegação para a tela pública. Após o deploy, o botão foi localizado no DOM real e o logout foi confirmado visualmente pelo retorno à tela pública de login. Nenhum dado, permissão, assinatura, sessão de outro dispositivo ou configuração de produção foi alterado.
