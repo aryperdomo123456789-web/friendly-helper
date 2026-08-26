@@ -16,24 +16,24 @@ O override de Mercado Pago sandbox ficou restrito a runtime não produtivo: `NOD
 
 ## Matriz de evidências
 
-| Item | Resultado | Evidência observada |
-|---|---|---|
-| Bundle sem projeto Supabase legado | **Passou** | Busca binária em `.output` não encontrou o identificador antigo. |
-| Bundle apontando para Supabase customizado | **Passou** | `https://supabase.mago-bot.com` presente no artefato. |
-| Chave pública embutida | **Passou** | Comprimento e SHA-256 da chave embutida coincidiram com a produção; o valor não foi registrado. |
-| Login do usuário de laboratório | **Passou** | Login local e login pelo domínio HTTPS público redirecionaram para `/inicio`. |
-| Isolamento visual de usuário comum | **Passou** | Catálogo, servidores, conta e suporte carregaram sem controles administrativos. |
-| Área de conta e planos | **Passou** | `/conta` exibiu plano atual e quatro planos pagos. |
-| Preferência Checkout Pro sandbox | **Passou** | A preferência mensal de R$ 30,00 foi criada e abriu o redirecionamento `sandbox.mercadopago.com.br`. |
-| Registro local da preferência | **Passou** | Um registro laboratorial foi criado com status `pending`, moeda BRL, valor 30,00 e referência externa contendo `userId` e `planId`. |
-| Idempotência na criação | **Parcial — código confirmado** | O código envia `X-Idempotency-Key` com UUID por requisição; o valor não é persistido nem foi repetido em um teste de retry. |
-| Compra sandbox | **Não executada** | Foi interrompida antes de cartão/login de comprador por falta de conta compradora distinta. |
-| Webhook Mercado Pago real | **Não executado** | A URL pública ficou disponível, mas nenhum evento real foi entregue durante esta validação. |
-| HMAC `x-signature` real | **Não executado** | O segredo oficial de webhook sandbox não foi fornecido; o segredo temporário do preview não prova assinatura do provedor. |
-| Ativação de plano | **Não executada** | Depende de um pagamento sandbox aprovado entregue ao webhook. |
-| Bônus de indicação | **Não executado** | Depende de uma compra aprovada por usuário comprador distinto e elegível. |
-| Comprovante | **Não executado** | Depende do processamento real do webhook aprovado. |
-| Produção | **Preservada** | Nenhum deploy, reload, migration, alteração de configuração financeira ou mudança de permissão foi realizado. |
+| Item                                       | Resultado                       | Evidência observada                                                                                                                 |
+| ------------------------------------------ | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Bundle sem projeto Supabase legado         | **Passou**                      | Busca binária em `.output` não encontrou o identificador antigo.                                                                    |
+| Bundle apontando para Supabase customizado | **Passou**                      | `https://supabase.mago-bot.com` presente no artefato.                                                                               |
+| Chave pública embutida                     | **Passou**                      | Comprimento e SHA-256 da chave embutida coincidiram com a produção; o valor não foi registrado.                                     |
+| Login do usuário de laboratório            | **Passou**                      | Login local e login pelo domínio HTTPS público redirecionaram para `/inicio`.                                                       |
+| Isolamento visual de usuário comum         | **Passou**                      | Catálogo, servidores, conta e suporte carregaram sem controles administrativos.                                                     |
+| Área de conta e planos                     | **Passou**                      | `/conta` exibiu plano atual e quatro planos pagos.                                                                                  |
+| Preferência Checkout Pro sandbox           | **Passou**                      | A preferência mensal de R$ 30,00 foi criada e abriu o redirecionamento `sandbox.mercadopago.com.br`.                                |
+| Registro local da preferência              | **Passou**                      | Um registro laboratorial foi criado com status `pending`, moeda BRL, valor 30,00 e referência externa contendo `userId` e `planId`. |
+| Idempotência na criação                    | **Parcial — código confirmado** | O código envia `X-Idempotency-Key` com UUID por requisição; o valor não é persistido nem foi repetido em um teste de retry.         |
+| Compra sandbox                             | **Não executada**               | Foi interrompida antes de cartão/login de comprador por falta de conta compradora distinta.                                         |
+| Webhook Mercado Pago real                  | **Não executado**               | A URL pública ficou disponível, mas nenhum evento real foi entregue durante esta validação.                                         |
+| HMAC `x-signature` real                    | **Não executado**               | O segredo oficial de webhook sandbox não foi fornecido; o segredo temporário do preview não prova assinatura do provedor.           |
+| Ativação de plano                          | **Não executada**               | Depende de um pagamento sandbox aprovado entregue ao webhook.                                                                       |
+| Bônus de indicação                         | **Não executado**               | Depende de uma compra aprovada por usuário comprador distinto e elegível.                                                           |
+| Comprovante                                | **Não executado**               | Depende do processamento real do webhook aprovado.                                                                                  |
+| Produção                                   | **Preservada**                  | Nenhum deploy, reload, migration, alteração de configuração financeira ou mudança de permissão foi realizado.                       |
 
 ## Estado financeiro laboratorial
 
@@ -49,7 +49,7 @@ O preview temporário e o túnel público foram encerrados ao final da validaç�
 
 O produto está certificado até a criação segura de uma preferência Checkout Pro sandbox e a persistência local de um pagamento pendente. O caminho de compra real, webhook assinado, idempotência de replay, ativação, indicação e comprovante permanece **bloqueado por falta de uma conta compradora sandbox distinta e do segredo oficial do webhook**. Não é tecnicamente correto declarar essas etapas concluídas sem executar o evento do provedor.
 
-O próximo teste, caso seja autorizado, deve usar uma conta compradora de teste diferente da conta vendedora, cartão oficial de sandbox e o segredo oficial do webhook. A validação deve confirmar primeiro o evento `payment`, depois duplicação/replay, `claim_payment_approval`, ativação, bônus e comprovante. O token sandbox usado no laboratório foi exposto na conversa e deve ser revogado/renovado antes de qualquer uso real; a senha temporária do usuário de laboratório também deve ser trocada.
+O próximo teste, caso seja autorizado, deve usar uma conta compradora de teste diferente da conta vendedora, conforme a separação recomendada pelo Mercado Pago [1], e cartão oficial de sandbox conforme o roteiro do Checkout Pro [2]. Também será necessário o segredo oficial do webhook para validar a assinatura documentada pelo provedor [4]. A validação deve confirmar primeiro o evento `payment`, depois duplicação/replay, `claim_payment_approval`, ativação, bônus e comprovante. O token sandbox usado no laboratório foi exposto na conversa e deve ser revogado/renovado antes de qualquer uso real; a senha temporária do usuário de laboratório também deve ser trocada.
 
 ## Referências oficiais
 
