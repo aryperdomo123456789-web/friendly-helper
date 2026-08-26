@@ -39,7 +39,7 @@ Os health checks internos responderam HTTP 200 para main, player e payments. O d
 
 ## 4. Estabilidade observada
 
-Na janela do rollout anterior, main, player e payments permaneceram HTTP 200; o worker ficou online sem novo restart e apresentou aproximadamente 99 MiB. Na publicação do micro-hotfix, os quatro processos também permaneceram online e os health checks passaram após 60+ segundos, mas a leitura do worker subiu para aproximadamente 395 MiB. O contador histórico de reinícios continua elevado; portanto, memória e estabilidade do worker ainda não devem ser tratados como SLO atingido e exigem observação prolongada.
+Na janela do rollout anterior, main, player e payments permaneceram HTTP 200; o worker ficou online sem novo restart e apresentou aproximadamente 99 MiB. Na publicação do micro-hotfix, os quatro processos também permaneceram online e os health checks passaram após 60+ segundos; a leitura do worker chegou transitoriamente a aproximadamente 395 MiB e caiu para aproximadamente 85 MiB após quatro minutos. O contador histórico de reinícios continua elevado; portanto, memória e estabilidade do worker ainda não devem ser tratados como SLO atingido e exigem observação prolongada.
 
 ## 5. Conclusão
 
