@@ -528,8 +528,7 @@ function PainelDono() {
   };
 
   /* ------------------- Handlers Usuarios ------------------- */
-  const handleSaveUser = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const requestSaveUserConfirmation = () => {
     setSaveConfirm({
       kind: "user",
       title: userModal?.id ? "Confirmar atualização do acesso" : "Confirmar criação do acesso",
@@ -537,6 +536,11 @@ function PainelDono() {
         ? "Você tem certeza que deseja salvar as alterações deste usuário?"
         : "Você tem certeza que deseja criar este novo acesso?",
     });
+  };
+
+  const handleSaveUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    requestSaveUserConfirmation();
   };
 
   const executeSaveUser = async () => {
@@ -2472,7 +2476,16 @@ function PainelDono() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setUserModal(null)}>Cancelar</Button>
-              <Button type="submit" disabled={loading}>Salvar acesso</Button>
+              <Button
+                type="submit"
+                disabled={loading}
+                onClick={(event) => {
+                  event.preventDefault();
+                  requestSaveUserConfirmation();
+                }}
+              >
+                Salvar acesso
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
