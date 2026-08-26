@@ -16,6 +16,20 @@ import {
   withServerFilesystemLock,
 } from "./server-filesystem-cache.server";
 import { clearLocalImageCache } from "./server-media-cache.server";
+import {
+  createObservationId,
+  hashObservationId,
+  recordLockAcquired,
+  recordLockContended,
+  recordLockStaleRemoved,
+  recordLockTimedOut,
+  recordRefreshCoalesced,
+  recordRefreshFallback,
+  recordRefreshServerCompleted,
+  recordRefreshServerFailed,
+  recordRefreshServerStarted,
+  workerLog,
+} from "./worker-observability.server";
 
 type Kind = "live" | "movie" | "series";
 
@@ -41,7 +55,10 @@ type StreamRow = {
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 const refreshInFlight = new Map<
   string,
-  Promise<{ kinds: Record<Kind, { categories: number; streams: number }>; source: "m3u" | "xtream" }>
+  Promise<{
+    kinds: Record<Kind, { categories: number; streams: number }>;
+    source: "m3u" | "xtream";
+  }>
 >();
 
 function normalizeItems<T>(rows: T[] | null | undefined): T[] {
@@ -70,6 +87,26 @@ type PlaylistCacheRow = PlaylistSnapshot & {
   server_id: string;
 };
 
+type DynamicQueryResult = {
+  data?: unknown;
+  error: unknown | null;
+};
+
+type DynamicCacheQuery = {
+  select: (columns: string) => DynamicCacheQuery;
+  eq: (column: string, value: unknown) => DynamicCacheQuery;
+  delete: () => DynamicCacheQuery;
+  maybeSingle: () => Promise<DynamicQueryResult>;
+  upsert: (
+    values: Record<string, unknown>,
+    options?: { onConflict?: string },
+  ) => Promise<DynamicQueryResult>;
+};
+
+type DynamicSupabaseClient = {
+  from: (table: string) => DynamicCacheQuery;
+};
+
 async function loadServerCredential(serverId: string): Promise<{
   server: { id: string; name: string; is_active: boolean } | null;
   credential: XtreamCreds | null;
@@ -95,7 +132,7 @@ async function loadServerCredential(serverId: string): Promise<{
   }
 
   const dnsPool = normalizeItems(creds)
-    .map((row: any) => row.dns)
+    .map((row: { dns?: string }) => row.dns)
     .filter(Boolean);
 
   return {
@@ -109,7 +146,11 @@ async function loadServerCredential(serverId: string): Promise<{
   };
 }
 
-export function serverCatalogCacheKey(kind: Kind, scope: "categories" | "streams" | "series-info" | "vod-info" | "epg", id?: string) {
+export function serverCatalogCacheKey(
+  kind: Kind,
+  scope: "categories" | "streams" | "series-info" | "vod-info" | "epg",
+  id?: string,
+) {
   return cacheKey("catalog", kind, scope, id);
 }
 
@@ -118,7 +159,8 @@ export async function readServerCache<T>(serverId: string, cacheKeyName: string)
   if (local) return local;
 
   const supabaseAdmin = await getSupabaseAdmin();
-  const { data, error } = await (supabaseAdmin as any)
+  const cacheClient = supabaseAdmin as unknown as DynamicSupabaseClient;
+  const { data, error } = await cacheClient
     .from("iptv_server_cache")
     .select("payload, fetched_at")
     .eq("server_id", serverId)
@@ -140,7 +182,8 @@ export async function writeServerCache<T>(serverId: string, cacheKeyName: string
   }
 
   const supabaseAdmin = await getSupabaseAdmin();
-  const { error } = await (supabaseAdmin as any).from("iptv_server_cache").upsert(
+  const cacheClient = supabaseAdmin as unknown as DynamicSupabaseClient;
+  const { error } = await cacheClient.from("iptv_server_cache").upsert(
     {
       server_id: serverId,
       cache_key: cacheKeyName,
@@ -160,7 +203,8 @@ export async function clearServerCache(serverId: string) {
   }
 
   const supabaseAdmin = await getSupabaseAdmin();
-  const { error } = await (supabaseAdmin as any).from("iptv_server_cache").delete().eq("server_id", serverId);
+  const cacheClient = supabaseAdmin as unknown as DynamicSupabaseClient;
+  const { error } = await cacheClient.from("iptv_server_cache").delete().eq("server_id", serverId);
   if (error && !isMissingTableError(error)) throw error;
 }
 
@@ -172,7 +216,11 @@ export async function clearServerPlaylistCache(serverId: string) {
   }
 
   const supabaseAdmin = await getSupabaseAdmin();
-  const { error } = await (supabaseAdmin as any).from("iptv_server_m3u_cache").delete().eq("server_id", serverId);
+  const cacheClient = supabaseAdmin as unknown as DynamicSupabaseClient;
+  const { error } = await cacheClient
+    .from("iptv_server_m3u_cache")
+    .delete()
+    .eq("server_id", serverId);
   if (error && !isMissingTableError(error)) throw error;
 }
 
@@ -181,7 +229,8 @@ export async function readServerPlaylistCache(serverId: string) {
   if (local) return local;
 
   const supabaseAdmin = await getSupabaseAdmin();
-  const { data, error } = await (supabaseAdmin as any)
+  const cacheClient = supabaseAdmin as unknown as DynamicSupabaseClient;
+  const { data, error } = await cacheClient
     .from("iptv_server_m3u_cache")
     .select("server_id, source_url, playlist_text, playlist_hash, item_count, fetched_at")
     .eq("server_id", serverId)
@@ -202,7 +251,8 @@ export async function writeServerPlaylistCache(serverId: string, snapshot: Playl
   }
 
   const supabaseAdmin = await getSupabaseAdmin();
-  const { error } = await (supabaseAdmin as any).from("iptv_server_m3u_cache").upsert(
+  const cacheClient = supabaseAdmin as unknown as DynamicSupabaseClient;
+  const { error } = await cacheClient.from("iptv_server_m3u_cache").upsert(
     {
       server_id: serverId,
       source_url: snapshot.source_url,
@@ -242,7 +292,9 @@ async function fetchCatalogKind(credential: XtreamCreds, kind: Kind) {
     series: { categories: "get_series_categories", streams: "get_series" },
   };
 
-  const categories = await xtreamCall<CategoryRow[]>(credential, { action: actionMap[kind].categories });
+  const categories = await xtreamCall<CategoryRow[]>(credential, {
+    action: actionMap[kind].categories,
+  });
   const streams = await xtreamCall<StreamRow[]>(credential, { action: actionMap[kind].streams });
 
   return {
@@ -267,75 +319,161 @@ export async function refreshServerCatalogCache(
   serverId: string,
   options: { clearLocalBeforeFetch?: boolean } = {},
 ) {
+  const serverRef = hashObservationId(serverId);
+  const refreshRef = hashObservationId(createObservationId());
   const ongoing = refreshInFlight.get(serverId);
-  if (ongoing) return ongoing;
+  if (ongoing) {
+    recordRefreshCoalesced();
+    workerLog("info", "refresh_server_coalesced", {
+      refresh_ref: refreshRef,
+      server_ref: serverRef,
+    });
+    return ongoing;
+  }
 
-  const job = withServerFilesystemLock(serverId, async () => {
-    const { credential } = await loadServerCredential(serverId);
-    if (!credential) throw new Error("Servidor sem credenciais cadastradas.");
+  const refreshStartedAt = Date.now();
+  recordRefreshServerStarted();
+  workerLog("info", "refresh_server_started", { refresh_ref: refreshRef, server_ref: serverRef });
 
-    let catalog: PlaylistCatalog | null = null;
-    let playlistSnapshot: PlaylistSnapshot | null = null;
-    let source: "m3u" | "xtream" | null = null;
+  const job = withServerFilesystemLock(
+    serverId,
+    async () => {
+      const { credential } = await loadServerCredential(serverId);
+      if (!credential) throw new Error("Servidor sem credenciais cadastradas.");
 
-    try {
-      playlistSnapshot = await fetchRemotePlaylist(credential);
-      catalog = parsePlaylistCatalog(playlistSnapshot.playlist_text);
-      const hasAnyEntries = (Object.keys(catalog) as Kind[]).some(
-        (kind) => catalog![kind].streams.length > 0,
+      let catalog: PlaylistCatalog | null = null;
+      let playlistSnapshot: PlaylistSnapshot | null = null;
+      let source: "m3u" | "xtream" | null = null;
+
+      try {
+        playlistSnapshot = await fetchRemotePlaylist(credential);
+        catalog = parsePlaylistCatalog(playlistSnapshot.playlist_text);
+        const hasAnyEntries = (Object.keys(catalog) as Kind[]).some(
+          (kind) => catalog![kind].streams.length > 0,
+        );
+        if (!hasAnyEntries) {
+          catalog = null;
+          recordRefreshFallback();
+          workerLog("warn", "refresh_m3u_empty_fallback", {
+            refresh_ref: refreshRef,
+            server_ref: serverRef,
+            item_count: playlistSnapshot.item_count,
+          });
+        } else {
+          source = "m3u";
+          workerLog("info", "refresh_source_selected", {
+            refresh_ref: refreshRef,
+            server_ref: serverRef,
+            source,
+            item_count: playlistSnapshot.item_count,
+          });
+        }
+      } catch (error) {
+        recordRefreshFallback();
+        workerLog("warn", "refresh_m3u_failed_fallback", {
+          refresh_ref: refreshRef,
+          server_ref: serverRef,
+          error,
+        });
+      }
+
+      if (!catalog) {
+        const kinds: Kind[] = ["live", "movie", "series"];
+        catalog = createEmptyPlaylistCatalog();
+
+        for (const kind of kinds) {
+          // Fetch one catalog kind at a time so large Xtream responses do not
+          // remain resident together with the other kinds during a refresh.
+          catalog[kind] = await fetchCatalogKind(credential, kind);
+        }
+
+        source = "xtream";
+        workerLog("info", "refresh_source_selected", {
+          refresh_ref: refreshRef,
+          server_ref: serverRef,
+          source,
+        });
+      }
+
+      if (options.clearLocalBeforeFetch) {
+        await Promise.allSettled([
+          clearLocalServerCache(serverId),
+          clearLocalServerPlaylist(serverId),
+          clearLocalImageCache(serverId),
+        ]);
+      }
+
+      if (playlistSnapshot) {
+        await writeServerPlaylistCache(serverId, playlistSnapshot);
+      }
+
+      await writeCatalogRows(serverId, catalog);
+
+      const kinds = (Object.keys(catalog) as Kind[]).reduce(
+        (acc, kind) => {
+          acc[kind] = {
+            categories: catalog![kind].categories.length,
+            streams: catalog![kind].streams.length,
+          };
+          return acc;
+        },
+        {} as Record<Kind, { categories: number; streams: number }>,
       );
-      if (!hasAnyEntries) {
-        catalog = null;
-      } else {
-        source = "m3u";
-      }
-    } catch (error) {
-      console.warn("Playlist M3U indisponível, mantendo fallback Xtream", error);
-    }
-
-    if (!catalog) {
-      const kinds: Kind[] = ["live", "movie", "series"];
-      catalog = createEmptyPlaylistCatalog();
-
-      for (const kind of kinds) {
-        // Fetch one catalog kind at a time so large Xtream responses do not
-        // remain resident together with the other kinds during a refresh.
-        catalog[kind] = await fetchCatalogKind(credential, kind);
-      }
-
-      source = "xtream";
-    }
-
-    if (options.clearLocalBeforeFetch) {
-      await Promise.allSettled([
-        clearLocalServerCache(serverId),
-        clearLocalServerPlaylist(serverId),
-        clearLocalImageCache(serverId),
-      ]);
-    }
-
-    if (playlistSnapshot) {
-      await writeServerPlaylistCache(serverId, playlistSnapshot);
-    }
-
-    await writeCatalogRows(serverId, catalog);
-
-    return {
-      kinds: (Object.keys(catalog) as Kind[]).reduce((acc, kind) => {
-        acc[kind] = {
-          categories: catalog![kind].categories.length,
-          streams: catalog![kind].streams.length,
-        };
-        return acc;
-      }, {} as Record<Kind, { categories: number; streams: number }>),
-      source: source ?? "xtream",
-    };
-  });
+      const result = { kinds, source: source ?? "xtream" };
+      recordRefreshServerCompleted();
+      workerLog("info", "refresh_server_completed", {
+        refresh_ref: refreshRef,
+        server_ref: serverRef,
+        source: result.source,
+        kinds: result.kinds,
+        duration_ms: Date.now() - refreshStartedAt,
+      });
+      return result;
+    },
+    {
+      onAcquired: (waitMs) => {
+        recordLockAcquired();
+        workerLog("debug", "refresh_lock_acquired", {
+          refresh_ref: refreshRef,
+          server_ref: serverRef,
+          wait_ms: waitMs,
+        });
+      },
+      onContended: () => {
+        recordLockContended();
+        workerLog("warn", "refresh_lock_contended", {
+          refresh_ref: refreshRef,
+          server_ref: serverRef,
+        });
+      },
+      onStaleRemoved: () => {
+        recordLockStaleRemoved();
+        workerLog("warn", "refresh_lock_stale_removed", {
+          refresh_ref: refreshRef,
+          server_ref: serverRef,
+        });
+      },
+      onTimedOut: (waitMs) => {
+        recordLockTimedOut();
+        workerLog("error", "refresh_lock_timeout", {
+          refresh_ref: refreshRef,
+          server_ref: serverRef,
+          wait_ms: waitMs,
+        });
+      },
+    },
+  );
 
   refreshInFlight.set(serverId, job);
   try {
     return await job;
   } catch (error) {
+    recordRefreshServerFailed();
+    workerLog("error", "refresh_server_failed", {
+      refresh_ref: refreshRef,
+      server_ref: serverRef,
+      error,
+    });
     throw normalizeRefreshServerError(error);
   } finally {
     refreshInFlight.delete(serverId);
@@ -345,7 +483,9 @@ export async function refreshServerCatalogCache(
 function normalizeRefreshServerError(error: unknown) {
   const message = error instanceof Error ? error.message : typeof error === "string" ? error : "";
   if (/<!doctype html|^<html[\s>]|bad gateway|502/i.test(message)) {
-    return new Error("Falha ao recarregar o cache do servidor. O servidor respondeu com erro 502 ou conteúdo inválido.");
+    return new Error(
+      "Falha ao recarregar o cache do servidor. O servidor respondeu com erro 502 ou conteúdo inválido.",
+    );
   }
   if (error instanceof Error) return error;
   return new Error("Falha ao recarregar o cache do servidor.");

@@ -130,10 +130,22 @@ async function cleanupServerDirectory(serverDir: string) {
   await rm(serverDir, { recursive: true, force: true });
 }
 
-export async function withServerFilesystemLock<T>(serverId: string, task: () => Promise<T>) {
+export type ServerFilesystemLockObserver = {
+  onContended?: () => void;
+  onAcquired?: (waitMs: number) => void;
+  onStaleRemoved?: () => void;
+  onTimedOut?: (waitMs: number) => void;
+};
+
+export async function withServerFilesystemLock<T>(
+  serverId: string,
+  task: () => Promise<T>,
+  observer: ServerFilesystemLockObserver = {},
+) {
   await mkdir(LOCKS_ROOT, { recursive: true });
   const lockPath = getLockPath(serverId);
   const startedAt = Date.now();
+  let contentionReported = false;
 
   while (true) {
     try {
@@ -150,6 +162,8 @@ export async function withServerFilesystemLock<T>(serverId: string, task: () => 
         await handle.close();
       }
 
+      observer.onAcquired?.(Date.now() - startedAt);
+
       try {
         return await task();
       } finally {
@@ -164,10 +178,16 @@ export async function withServerFilesystemLock<T>(serverId: string, task: () => 
         throw error;
       }
 
+      if (!contentionReported) {
+        contentionReported = true;
+        observer.onContended?.();
+      }
+
       try {
         const stats = await stat(lockPath);
         if (Date.now() - stats.mtimeMs > LOCK_STALE_MS) {
           await rm(lockPath, { force: true }).catch(() => {});
+          observer.onStaleRemoved?.();
           continue;
         }
       } catch {
@@ -176,6 +196,7 @@ export async function withServerFilesystemLock<T>(serverId: string, task: () => 
       }
 
       if (Date.now() - startedAt > LOCK_TIMEOUT_MS) {
+        observer.onTimedOut?.(Date.now() - startedAt);
         throw new Error(`Outro refresh já está em andamento para o servidor ${serverId}.`);
       }
 

@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "build:services": "node scripts/build-multiservice-entrypoints.mjs",
     "lint": "eslint .",
-    "test:worker": "node --experimental-strip-types --test scripts/worker-scheduler.test.ts scripts/response-limit.test.ts",
+    "test:worker": "node --experimental-strip-types --test scripts/worker-scheduler.test.ts scripts/response-limit.test.ts scripts/worker-observability.test.ts",
+    "worker:observability": "node scripts/worker-observability-report.mjs",
     "format": "prettier --write .",
     "build:node": "NITRO_PRESET=node_server vite build && node scripts/generate-legacy-css.mjs && node scripts/build-multiservice-entrypoints.mjs",
     "start": "node .output/server/index.mjs"
