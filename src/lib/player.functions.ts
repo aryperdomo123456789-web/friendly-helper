@@ -9,6 +9,7 @@ import {
   writeServerCache,
 } from "./iptv-cache.server";
 import { parsePlaylistCatalog } from "./iptv-playlist.server";
+import { getPlaybackExtensions } from "./stream-format";
 
 type Kind = "live" | "movie" | "series";
 
@@ -603,19 +604,29 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
 
     const { buildStreamUrl } = await import("./xtream.server");
     const { signStreamUrl } = await import("./stream-proxy.server");
-    const direct = buildStreamUrl(credential, data.kind, data.stream_id, data.ext ?? undefined);
+    const playbackExtensions = getPlaybackExtensions(data.kind, data.ext);
     const playbackTtlSeconds = 24 * 60 * 60;
     // Proxied through our own origin: the panels only serve plain HTTP and the
     // browser refuses mixed content on an HTTPS page.
-    const proxied = await signStreamUrl(direct, {
-      subject: context.userId,
-      reference: data.server_id,
-      ttlSeconds: playbackTtlSeconds,
-    });
-    const isHls = /\.m3u8(?:$|[?#])/i.test(direct);
-    // Só força HLS para live quando o builder não selecionou explicitamente TS.
-    const forceHls = data.kind === "live" && !/\.ts(?:$|[?#])/i.test(direct);
-    return { url: isHls || forceHls ? `${proxied}&hls=1` : proxied };
+    const playbackUrls = await Promise.all(
+      playbackExtensions.map(async (extension) => {
+        const direct = buildStreamUrl(credential, data.kind, data.stream_id, extension);
+        const proxied = await signStreamUrl(direct, {
+          subject: context.userId,
+          reference: data.server_id,
+          ttlSeconds: playbackTtlSeconds,
+        });
+        const isHls = /\.m3u8(?:$|[?#])/i.test(direct);
+        // Só força HLS quando o URL final não selecionou explicitamente TS.
+        const forceHls = data.kind === "live" && !/\.ts(?:$|[?#])/i.test(direct);
+        return isHls || forceHls ? `${proxied}&hls=1` : proxied;
+      }),
+    );
+
+    return {
+      url: playbackUrls[0]!,
+      ...(playbackUrls.length > 1 ? { fallback_urls: playbackUrls.slice(1) } : {}),
+    };
   });
 
 const playbackTelemetryEventSchema = z.object({
@@ -629,6 +640,7 @@ const playbackTelemetryEventSchema = z.object({
     "fatal_error",
     "recover_attempt",
     "recover_success",
+    "format_fallback",
     "ended",
     "destroyed",
   ]),

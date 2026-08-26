@@ -6,6 +6,7 @@ import { createPlaybackSessionId, createPlaybackTelemetry } from "@/lib/player-t
 
 type Props = {
   url: string;
+  fallbackUrls?: string[];
   serverId: string;
   poster?: string | null;
   title?: string;
@@ -32,7 +33,14 @@ function getLiveLatency(video: HTMLVideoElement): number | undefined {
   return Math.max(0, Math.round((liveEdge - video.currentTime) * 1000));
 }
 
-export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Props) {
+export function VideoPlayer({
+  url,
+  fallbackUrls = [],
+  serverId,
+  poster,
+  title,
+  kind = "movie",
+}: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const sendTelemetry = useServerFn(recordPlaybackTelemetry);
   const [error, setError] = useState<string | null>(null);
@@ -46,9 +54,9 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
     let hls: import("hls.js").default | null = null;
     let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
     let recoveryAttempts = 0;
-    let hasStartedPlaying = false;
-    let hasReportedPlaying = false;
+    let fallbackIndex = 0;
     let hasNativeError = false;
+    let hasReportedPlaying = false;
     const sessionId = createPlaybackSessionId();
 
     const engine = video.canPlayType("application/vnd.apple.mpegurl") !== "" ? "native" : "hls.js";
@@ -119,19 +127,6 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
       void telemetry.flush();
     };
 
-    const onNativeError = () => {
-      if (destroyed) return;
-      hasNativeError = true;
-      telemetry.record("fatal_error", {
-        error_code: "native_media_error",
-        fatal: true,
-        reason: "native_playback_error",
-        ...currentDetails(),
-      });
-      setLoading(false);
-      setError("Fluxo indisponível neste momento.");
-    };
-
     const startPlayback = async (allowMutedFallback = false) => {
       try {
         await video.play();
@@ -153,9 +148,10 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
       }
     };
 
-    const start = async () => {
-      telemetry.record("startup_requested");
-      const isHls = url.includes(".m3u8") || url.includes("hls=1");
+    let tryNextFallback = (_reason: string) => false;
+
+    const startSource = async (sourceUrl: string) => {
+      const isHls = sourceUrl.includes(".m3u8") || sourceUrl.includes("hls=1");
       const nativeHls = video.canPlayType("application/vnd.apple.mpegurl") !== "";
 
       if (isHls && !nativeHls) {
@@ -179,7 +175,7 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
             manifestLoadingTimeOut: 60_000,
           });
           hls.attachMedia(video);
-          hls.loadSource(url);
+          hls.loadSource(sourceUrl);
           hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
             const manifestDetails = currentDetails();
             const levelCount = Array.isArray(data.levels) ? data.levels.length : undefined;
@@ -206,6 +202,7 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
             });
 
             if (recoveryAttempts >= 2) {
+              if (tryNextFallback("hls_fatal_error")) return;
               const code = (data.response as { code?: number } | undefined)?.code;
               setError(
                 code === 404 || code === 502
@@ -234,9 +231,56 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
         }
       }
 
-      video.src = url;
+      video.src = sourceUrl;
       video.load();
       void startPlayback(kind === "live");
+    };
+
+    tryNextFallback = (reason: string) => {
+      if (destroyed || hasStartedPlaying || fallbackIndex >= fallbackUrls.length) return false;
+      const fallbackUrl = fallbackUrls[fallbackIndex];
+      if (!fallbackUrl) return false;
+      fallbackIndex += 1;
+      recoveryAttempts = 0;
+      hasNativeError = false;
+      telemetry.record("format_fallback", {
+        recovery_attempt: fallbackIndex,
+        reason,
+      });
+      setError(null);
+      setLoading(true);
+      if (recoveryTimer) clearTimeout(recoveryTimer);
+      recoveryTimer = null;
+      hls?.destroy();
+      hls = null;
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      void startSource(fallbackUrl).catch(() => {
+        if (destroyed) return;
+        setLoading(false);
+        setError("Não foi possível preparar o formato alternativo.");
+      });
+      return true;
+    };
+
+    const onNativeError = () => {
+      if (destroyed) return;
+      hasNativeError = true;
+      telemetry.record("fatal_error", {
+        error_code: "native_media_error",
+        fatal: true,
+        reason: "native_playback_error",
+        ...currentDetails(),
+      });
+      setLoading(false);
+      if (tryNextFallback("native_media_error")) return;
+      setError("Fluxo indisponível neste momento.");
+    };
+
+    const start = async () => {
+      telemetry.record("startup_requested");
+      await startSource(url);
     };
 
     setError(null);
@@ -278,7 +322,7 @@ export function VideoPlayer({ url, serverId, poster, title, kind = "movie" }: Pr
       video.load();
       void telemetry.destroy("component_unmount");
     };
-  }, [kind, sendTelemetry, serverId, url]);
+  }, [fallbackUrls, kind, sendTelemetry, serverId, url]);
 
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-xl border border-border bg-black shadow-2xl">

@@ -8,6 +8,7 @@ export type PlaybackTelemetryEventName =
   | "fatal_error"
   | "recover_attempt"
   | "recover_success"
+  | "format_fallback"
   | "ended"
   | "destroyed";
 

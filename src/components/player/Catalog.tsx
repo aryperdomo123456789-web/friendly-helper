@@ -284,7 +284,13 @@ export function Catalog({
   const [catTerm, setCatTerm] = useState("");
   const [term, setTerm] = useState(initialSearch);
   const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [playing, setPlaying] = useState<{ id: string; url: string; name: string; icon: string | null } | null>(null);
+  const [playing, setPlaying] = useState<{
+    id: string;
+    url: string;
+    fallbackUrls: string[];
+    name: string;
+    icon: string | null;
+  } | null>(null);
   const [openSeries, setOpenSeries] = useState<{ id: string; name: string } | null>(null);
   const [pageSize, setPageSize] = useState<Record<Kind, 12 | 24 | 48>>({
     live: 24,
@@ -339,7 +345,13 @@ export function Catalog({
         queryFn: playbackQueryFn(item),
         staleTime: 24 * 60 * 60 * 1000,
       });
-      setPlaying({ id: item.id, url: result.url, name: item.name, icon: item.icon });
+      setPlaying({
+        id: item.id,
+        url: result.url,
+        fallbackUrls: result.fallback_urls ?? [],
+        name: item.name,
+        icon: item.icon,
+      });
       if (typeof window !== "undefined" && window.innerWidth < 1024) {
         // Comportamento mobile: scroll imediato para o player
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1041,6 +1053,7 @@ export function Catalog({
             <div className="space-y-2">
               <VideoPlayer
                 url={playing.url}
+                fallbackUrls={playing.fallbackUrls}
                 serverId={serverId}
                 poster={proxyMediaUrl(playing.icon, serverId) ?? playing.icon}
                 title={playing.name}
