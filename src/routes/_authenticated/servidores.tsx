@@ -62,10 +62,8 @@ function Servidores() {
                     <Button
                       size="sm"
                       onClick={() => {
-                        if (confirm("Deseja alternar para este servidor?")) {
-                          setServerId(server.id);
-                          toast.success("Servidor alterado com sucesso!");
-                        }
+                        setServerId(server.id);
+                        toast.success("Servidor alterado com sucesso!");
                       }}
                     >
                       Usar
