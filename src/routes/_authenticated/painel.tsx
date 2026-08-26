@@ -39,6 +39,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Tabs, 
   TabsContent, 
@@ -100,6 +101,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { portalName } from "@/lib/portal-name";
 import { proxyMediaUrl } from "@/lib/media-url";
 import { copyToClipboard } from "@/lib/clipboard";
 import { sendMassNotification } from "@/lib/notifications.functions";
@@ -359,7 +361,9 @@ function PainelDono() {
       const seed = Date.now();
       setServerCreateSeed(seed);
       setServerModal({
-        name: "",
+        name: portalName(nextServerSortOrder),
+        owner_note: "",
+        can_edit_owner_note: true,
         credentials: [{ username: "", password: "", dns: "" }],
         is_active: true,
         sort_order: nextServerSortOrder,
@@ -374,6 +378,7 @@ function PainelDono() {
 
     setServerModal({
       ...server,
+      name: portalName(Number(server.sort_order) || 0),
       credentials: [
         {
           username: currentCredential?.username ?? "",
@@ -494,13 +499,18 @@ function PainelDono() {
     const nextServers = [...previousServers];
     const [moved] = nextServers.splice(fromIndex, 1);
     nextServers.splice(toIndex, 0, moved);
+    const normalizedServers = nextServers.map((server, index) => ({
+      ...server,
+      name: portalName(index),
+      sort_order: index,
+    }));
 
-    setServerItems(nextServers);
+    setServerItems(normalizedServers);
     setDraggingServerId(null);
     setDragOverServerId(null);
 
     try {
-      await mutationReorderServers({ data: { ids: nextServers.map((server) => server.id) } });
+      await mutationReorderServers({ data: { ids: normalizedServers.map((server) => server.id) } });
       toast.success("Ordem dos servidores atualizada");
       queryClient.invalidateQueries({ queryKey: ["admin-servers"] });
       queryClient.invalidateQueries({ queryKey: ["player-session"] });
@@ -1162,17 +1172,17 @@ function PainelDono() {
                               setDragOverServerId(null);
                             }}
                             className="inline-flex h-7 w-7 cursor-grab items-center justify-center rounded-md border border-border/60 bg-background/40 text-muted-foreground transition hover:text-foreground active:cursor-grabbing"
-                            aria-label={`Arrastar servidor ${server.name}`}
+                            aria-label={`Arrastar ${portalName(index)}`}
                             title="Arrastar para reordenar"
                           >
                             <GripVertical className="h-4 w-4" />
                           </button>
                           <CardTitle className="truncate text-sm font-bold uppercase tracking-wider">
-                            {server.name}
+                            {portalName(index)}
                           </CardTitle>
                         </div>
                         <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
-                          Ordem {index + 1}
+                          Posição {index + 1}
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
@@ -1180,7 +1190,7 @@ function PainelDono() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
-                          onClick={() => handleRefreshServerCache(server.id, server.name)}
+                          onClick={() => handleRefreshServerCache(server.id, portalName(index))}
                           disabled={refreshingServerId === server.id}
                           title={
                             refreshStage
@@ -2191,22 +2201,20 @@ function PainelDono() {
               name="server-modal-password-hint"
             />
             <DialogHeader>
-          <DialogTitle>{serverModal?.id ? "Editar servidor" : "Novo servidor"}</DialogTitle>
+          <DialogTitle>
+            {serverModal?.id ? `Editar ${portalName(Number(serverModal.sort_order) || 0)}` : "Novo portal"}
+          </DialogTitle>
               <DialogDescription>
-                Configure os dados da API Xtream Codes do servidor.
+                O nome é definido automaticamente pela ordem. Configure abaixo a origem Xtream Codes.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Nome para exibição</Label>
-                <Input 
-                  id="name" 
-                  name="server_display_name"
-                  autoComplete="off"
-                  value={serverModal?.name || ""} 
-                  onChange={e => setServerModal({...serverModal, name: e.target.value})}
-                  required 
-                />
+              <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Identificação automática</p>
+                <p className="mt-1 text-sm font-semibold">{portalName(Number(serverModal?.sort_order) || 0)}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  A identificação acompanha a ordem definida no arraste.
+                </p>
               </div>
               <div className="grid gap-2">
                 <Label>DNS do servidor (ex: http://link.site:80)</Label>
@@ -2242,6 +2250,23 @@ function PainelDono() {
                   Limita conexões simultâneas deste servidor; a quantidade de servidores cadastrados não limita ativos.
                 </p>
               </div>
+              {serverModal?.can_edit_owner_note ? (
+                <div className="grid gap-2">
+                  <Label htmlFor="owner_note">Observação privada do dono</Label>
+                  <Textarea
+                    id="owner_note"
+                    name="owner_note"
+                    value={serverModal?.owner_note ?? ""}
+                    onChange={(event) => setServerModal({ ...serverModal, owner_note: event.target.value })}
+                    placeholder="Ex.: referência interna do servidor conectado, contrato, região ou observação operacional."
+                    maxLength={2000}
+                    rows={4}
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    Visível e editável somente pelo dono. Usuários e administradores não recebem este conteúdo.
+                  </p>
+                </div>
+              ) : null}
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>Usuário da API</Label>

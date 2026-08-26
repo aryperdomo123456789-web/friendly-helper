@@ -1,9 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ensureUserReferralCode, generateUniqueReferralCode, isReferralEligiblePlan } from "./referral-code";
 import { clearServerCache, clearServerPlaylistCache, refreshServerCatalogCache } from "./iptv-cache.server";
 import { clearLocalImageCache } from "./server-media-cache.server";
+import { portalName } from "./portal-name";
+import type { Database } from "@/integrations/supabase/types";
 
 export const SYNTHETIC_EMAIL_DOMAIN = "iptv.local";
 
@@ -19,10 +22,11 @@ const credentialSchema = z.object({
 
 const serverSchema = z.object({
   id: z.string().uuid().optional(),
-  name: z.string().trim().min(1).max(120),
+  name: z.string().trim().max(120).optional(),
   is_active: z.boolean().default(true),
   connection_capacity: z.number().int().min(1).max(1_000_000).nullable().optional(),
   sort_order: z.number().int().min(0).max(999).default(0),
+  owner_note: z.string().trim().max(2000).optional(),
   credentials: z.array(credentialSchema).max(6).default([]),
   bulk_action: z.enum(["none", "add_to_all", "remove_from_all"]).optional().default("none"),
 });
@@ -58,7 +62,35 @@ const reorderServersSchema = z.object({
   ids: z.array(z.string().uuid()).min(1),
 });
 
-async function assertOwner(supabase: any, userId: string) {
+async function normalizePortalNames(supabaseAdmin: SupabaseClient<Database>) {
+  const { data: orderedServers, error } = await supabaseAdmin
+    .from("iptv_servers")
+    .select("id")
+    .order("sort_order")
+    .order("created_at");
+  if (error) throw error;
+
+  const results = await Promise.all(
+    (orderedServers ?? []).map((server, index) =>
+      supabaseAdmin
+        .from("iptv_servers")
+        .update({ name: portalName(index) })
+        .eq("id", server.id),
+    ),
+  );
+  const failed = results.find((result) => result.error);
+  if (failed?.error) throw failed.error;
+}
+
+function isMissingOwnerNotesTable(error: unknown) {
+  const details = error as { code?: string; message?: string } | null;
+  return (
+    details?.code === "PGRST205" ||
+    /iptv_server_owner_notes|does not exist|schema cache/i.test(details?.message ?? "")
+  );
+}
+
+async function assertOwner(supabase: any, userId: string): Promise<"owner" | "admin"> {
   // Le direto a tabela de papeis (politica permite ler o proprio papel).
   const { data, error } = await supabase
     .from("user_roles")
@@ -67,6 +99,7 @@ async function assertOwner(supabase: any, userId: string) {
     .in("role", ["owner", "admin"]);
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new Error("Acesso restrito à área administrativa.");
+  return data.some((row: { role: string }) => row.role === "owner") ? "owner" : "admin";
 }
 
 async function assertNotOwnerAccount(supabase: any, userId: string) {
@@ -98,7 +131,7 @@ async function assertNotOwnerAccount(supabase: any, userId: string) {
 export const listServers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertOwner(context.supabase, context.userId);
+    const role = await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const [{ data: servers, error }, { data: credentials, error: credentialsError }] = await Promise.all([
       supabaseAdmin
@@ -116,15 +149,25 @@ export const listServers = createServerFn({ method: "GET" })
     const credentialByServerId = new Map(
       (credentials ?? []).map((credential) => [credential.server_id, credential]),
     );
+    const ownerNoteByServerId = new Map<string, string>();
+    if (role === "owner") {
+      const { data: notes, error: notesError } = await supabaseAdmin
+        .from("iptv_server_owner_notes")
+        .select("server_id, note");
+      if (notesError && !isMissingOwnerNotesTable(notesError)) throw notesError;
+      for (const note of notes ?? []) ownerNoteByServerId.set(note.server_id, note.note);
+    }
 
-    return (servers ?? []).map((server) => ({
+    return (servers ?? []).map((server, index) => ({
       id: server.id,
-      name: server.name,
+      name: portalName(index),
       url: (server as any).url,
       is_active: server.is_active,
       sort_order: server.sort_order,
       connection_capacity: server.connection_capacity,
       created_at: server.created_at,
+      owner_note: role === "owner" ? (ownerNoteByServerId.get(server.id) ?? "") : null,
+      can_edit_owner_note: role === "owner",
       credentials: credentialByServerId.has(server.id)
         ? [credentialByServerId.get(server.id)]
         : [],
@@ -135,7 +178,7 @@ export const saveServer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => serverSchema.parse(input))
   .handler(async ({ data, context }) => {
-    await assertOwner(context.supabase, context.userId);
+    const role = await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const normalizedCredentials = (data.credentials ?? []).map((credential) => ({
       username: credential.username.trim(),
@@ -189,7 +232,7 @@ export const saveServer = createServerFn({ method: "POST" })
         connection_capacity?: number | null;
         url?: string;
       } = {
-        name: data.name,
+        name: portalName(data.sort_order),
         is_active: data.is_active,
         sort_order: data.sort_order,
       };
@@ -208,7 +251,7 @@ export const saveServer = createServerFn({ method: "POST" })
       const { data: created, error } = await supabaseAdmin
         .from("iptv_servers")
         .insert({
-          name: data.name,
+          name: portalName(data.sort_order),
           url: nextDns!,
           is_active: data.is_active,
           sort_order: data.sort_order,
@@ -219,6 +262,15 @@ export const saveServer = createServerFn({ method: "POST" })
         .single();
       if (error) throw error;
       serverId = created.id;
+    }
+
+    if (role === "owner" && data.owner_note !== undefined) {
+      const { error: noteError } = await supabaseAdmin.from("iptv_server_owner_notes").upsert({
+        server_id: serverId!,
+        note: data.owner_note,
+        updated_at: new Date().toISOString(),
+      });
+      if (noteError && !isMissingOwnerNotesTable(noteError)) throw noteError;
     }
 
     if (resolvedCredential.username || resolvedCredential.password || resolvedCredential.dns) {
@@ -238,6 +290,7 @@ export const saveServer = createServerFn({ method: "POST" })
     }
 
     // Ações em massa para usuários
+    await normalizePortalNames(supabaseAdmin);
     if (data.bulk_action === "add_to_all") {
       const { data: allUsers } = await supabaseAdmin.from("profiles").select("id");
       if (allUsers && allUsers.length > 0) {
@@ -280,6 +333,7 @@ export const deleteServer = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { error } = await supabaseAdmin.from("iptv_servers").delete().eq("id", data.id);
     if (error) throw error;
+    await normalizePortalNames(supabaseAdmin);
     await Promise.allSettled([
       clearServerCache(data.id),
       clearServerPlaylistCache(data.id),

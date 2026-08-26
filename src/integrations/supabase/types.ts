@@ -62,6 +62,32 @@ export type Database = {
         }
         Relationships: []
       }
+      iptv_server_owner_notes: {
+        Row: {
+          note: string
+          server_id: string
+          updated_at: string
+        }
+        Insert: {
+          note?: string
+          server_id: string
+          updated_at?: string
+        }
+        Update: {
+          note?: string
+          server_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "iptv_server_owner_notes_server_id_fkey"
+            columns: ["server_id"]
+            isOneToOne: true
+            referencedRelation: "iptv_servers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       iptv_servers: {
         Row: {
           connection_capacity: number | null

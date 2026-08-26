@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { portalName } from "../src/lib/portal-name.ts";
 import {
   getServerSelectionStorageKey,
   isPlayerQuery,
   isServerScopedQuery,
   resolveServerSelection,
 } from "../src/lib/player-isolation.ts";
+
+test("gera nomes canônicos pela posição do portal", () => {
+  assert.equal(portalName(0), "Portal 1");
+  assert.equal(portalName(1), "Portal 2");
+  assert.equal(portalName(2), "Portal 3");
+  assert.equal(portalName(-1), "Portal 1");
+});
 
 test("escopa a seleção de servidor por usuário", () => {
   const firstUserKey = getServerSelectionStorageKey("user-a");
