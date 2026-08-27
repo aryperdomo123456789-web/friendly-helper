@@ -75,3 +75,9 @@ A melhoria visual não deve ser confundida com certificação de player top 1. R
 ## Referências
 
 [1]: https://google.aip.dev/151 "Google AIP-151 — Long-running operations"
+
+## Iteração 2 — Suporte responsivo
+
+O Suporte recebeu um modo adaptativo lista/conversa. Em viewport compacta, a lista de atendimentos ocupa a tela inicialmente; ao selecionar um protocolo, a conversa ocupa a área disponível e o controle de retorno devolve o usuário à lista. Em desktop, a divisão permanece em duas colunas com altura limitada e rolagem interna, evitando que a página inteira cresça indefinidamente. O contrato de chat, paginação, leitura, envio, anexos e encerramento foi preservado.
+
+A validação local passou com 34/34 testes, lint lógico direcionado e build sanitizado. A validação de viewport móvel deve ser repetida em dispositivo/viewport real antes da certificação final de responsividade.

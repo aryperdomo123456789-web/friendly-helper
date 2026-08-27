@@ -95,6 +95,8 @@ function SuportePage() {
     "all" | "open" | "pending_support" | "pending_customer" | "closed"
   >("all");
   const [ownerPriority, setOwnerPriority] = useState<"all" | SupportPriority>("all");
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
+  const [mobilePane, setMobilePane] = useState<"threads" | "conversation">("threads");
 
   const threads = useQuery({
     queryKey: [
@@ -161,6 +163,23 @@ function SuportePage() {
   const satisfactionAverage = Number(supportStats?.satisfaction_average ?? 0);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const media = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsCompactViewport(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!isCompactViewport) {
+      setMobilePane("threads");
+      return;
+    }
+    setMobilePane(selectedThread ? "conversation" : "threads");
+  }, [isCompactViewport, selectedThread]);
+
+  useEffect(() => {
     if (!isOwner) return;
 
     const channel = supabase
@@ -225,8 +244,13 @@ function SuportePage() {
           </Tabs>
 
           {ownerView === "atendimento" ? (
-            <div className="grid gap-6 h-[75vh] grid-cols-1 md:grid-cols-12">
-              <Card className="md:col-span-4 flex flex-col overflow-hidden bg-sidebar/30 border-sidebar-border">
+            <div className="grid h-[min(75vh,720px)] min-h-[480px] grid-cols-1 gap-4 md:grid-cols-12 md:gap-6">
+              <Card
+                className={cn(
+                  "flex flex-col overflow-hidden bg-sidebar/30 border-sidebar-border md:col-span-4",
+                  isCompactViewport && mobilePane !== "threads" && "hidden",
+                )}
+              >
                 <CardHeader className="py-4 border-b border-sidebar-border">
                   <div className="space-y-2">
                     <CardTitle className="text-lg flex items-center gap-2">
@@ -296,6 +320,7 @@ function SuportePage() {
                         key={item.id}
                         onClick={() => {
                           setSelectedThread(item);
+                          setMobilePane("conversation");
                           mutationMarkRead({ data: { threadId: item.id, isOwner: true } });
                           queryClient.invalidateQueries({ queryKey: ["support-threads-page"] });
                         }}
@@ -385,11 +410,19 @@ function SuportePage() {
                 )}
               </Card>
 
-              <Card className="md:col-span-8 flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20">
+              <Card
+                className={cn(
+                  "flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20 md:col-span-8",
+                  isCompactViewport && mobilePane !== "conversation" && "hidden",
+                )}
+              >
                 {selectedThread ? (
                   <ChatWindow
                     thread={selectedThread}
-                    onClose={() => setSelectedThread(null)}
+                    onClose={() => {
+                      setSelectedThread(null);
+                      setMobilePane("threads");
+                    }}
                     isOwner={isOwner}
                   />
                 ) : (
@@ -482,8 +515,13 @@ function SuportePage() {
           )}
         </div>
       ) : (
-        <div className="grid gap-6 h-[75vh] grid-cols-1 md:grid-cols-12">
-          <Card className="md:col-span-4 flex flex-col overflow-hidden bg-sidebar/30 border-sidebar-border">
+        <div className="grid h-[min(75vh,720px)] min-h-[480px] grid-cols-1 gap-4 md:grid-cols-12 md:gap-6">
+          <Card
+            className={cn(
+              "flex flex-col overflow-hidden bg-sidebar/30 border-sidebar-border md:col-span-4",
+              isCompactViewport && mobilePane !== "threads" && "hidden",
+            )}
+          >
             <CardHeader className="py-4 border-b border-sidebar-border">
               <div className="space-y-2">
                 <CardTitle className="text-lg flex items-center gap-2">
@@ -544,11 +582,19 @@ function SuportePage() {
             </div>
           </Card>
 
-          <Card className="md:col-span-8 flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20">
+          <Card
+            className={cn(
+              "flex flex-col overflow-hidden border-sidebar-border bg-sidebar/20 md:col-span-8",
+              isCompactViewport && mobilePane !== "conversation" && "hidden",
+            )}
+          >
             {selectedThread ? (
               <ChatWindow
                 thread={selectedThread}
-                onClose={() => setSelectedThread(null)}
+                onClose={() => {
+                  setSelectedThread(null);
+                  setMobilePane("threads");
+                }}
                 isOwner={isOwner}
               />
             ) : (
@@ -978,17 +1024,17 @@ function ChatWindow({
               Encerrar
             </Button>
           )}
-          {isOwner && (
-            <Button
-              data-tv-focus
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="hover:bg-destructive/10 hover:text-destructive"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+          <Button
+            data-tv-focus
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label="Voltar para conversas"
+            title="Voltar para conversas"
+            className="hover:bg-destructive/10 hover:text-destructive"
+          >
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
