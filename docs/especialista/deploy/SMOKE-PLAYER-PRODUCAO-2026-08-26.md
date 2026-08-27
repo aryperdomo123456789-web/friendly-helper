@@ -108,3 +108,11 @@ A aba Conta recebeu um botão explícito **Sair da conta** para usuários comuns
 A simulação isolada de falha transitória de segmento continuou aprovada pelo fixture R1–R10 e pela suíte oficial. Nos testes reais, Portal 1 foi selecionado e o catálogo de categorias carregou, porém as categorias visitadas não ofereceram itens reproduzíveis; nenhuma tentativa de playback foi iniciada. Portal 2 foi selecionado e permaneceu em uso no seletor, mas a rota TV ao Vivo informou que não havia servidor liberado para aquela sessão; igualmente, nenhum playback foi iniciado. Esses resultados são inconclusivos para a saúde do player e foram mantidos separados de falhas de origem.
 
 Para o laboratório, foi criado snapshot protegido do registro antes da mudança e aplicado exclusivamente `profiles.max_connections = 20` ao usuário de teste. O painel do dono recarregou mostrando `0 / 20`, e a consulta de verificação confirmou o valor 20. Nenhum outro usuário, plano, servidor, permissão, pagamento ou sessão foi alterado.
+
+## Auditoria administrativa sanitizada
+
+O commit `cda973e` adicionou uma aba Auditoria somente leitura ao painel do dono, com paginação server-side e referências hash para ator, alvo e entidade. O endpoint exige papel de dono e reutiliza `audit_logs`; nenhum identificador bruto é retornado ao navegador.
+
+Durante a validação visual, detalhes legados de pagamento inicialmente exibiram `planId` e `provider_preference_id`; a descoberta foi tratada como bloqueio. O commit `6664759` endureceu a redaction para remover chaves de ID/ref e o build foi republicado com manifesto `233bd2ccce8bbde89656c9a810d86b733afed4a69f895574756d7311db46e790`. Na segunda validação, a tabela exibiu apenas referências hash de 16 caracteres e campos operacionais seguros, como amount e currency; não apareceram senha, token, URL, playlist, `planId`, `provider_preference_id`, `request_id` ou ID bruto.
+
+O deploy teve manifesto local/remoto igual, readiness 200, domínio público 200, quatro processos online e rollback preservado. A sessão administrativa foi encerrada e o navegador retornou à tela pública.
