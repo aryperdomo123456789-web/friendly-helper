@@ -122,3 +122,7 @@ O deploy teve manifesto local/remoto igual, readiness 200, domínio público 200
 O commit `6ec4f1a` adicionou `quality_sample` ao contrato QoE e ao player, com contadores de frames descartados/decodificados, nível e bitrate quando o engine HLS fornece essas informações. O build foi publicado com manifesto `9ff316b1f61891b4309c509ec7edb77895f25000a4be1c55acabe246eb15415a`; o rollback permaneceu preservado.
 
 Após uma única reprodução autorizada no Portal 3, o processo main registrou amostras sanitizadas em aproximadamente 10,002 ms e 20,001 ms: `dropped_frames = 0`, `decoded_frames = 213` e depois `dropped_frames = 0`, `decoded_frames = 513`. O player respondeu HTTP 200 e permaneceu saudável. O engine registrado foi nativo; por isso não houve nível/bitrate HLS nessa amostra. A instrumentação confirma ausência de frames descartados naquela janela, mas ainda não certifica ABR ou qualidade multi-device.
+
+## Defesa final da Auditoria no cliente
+
+O commit `24d113f` adicionou uma segunda camada de redaction no painel, reaplicando o sanitizador puro antes de renderizar detalhes no navegador. Após o deploy do manifesto `3897ca3753780ccd67c260ee283b48e7ebeee6341d446a786e10033703385c9e`, a sessão do dono abriu a aba Auditoria no domínio público. A tabela exibiu apenas referências hash de 16 caracteres para ator/alvo e os campos operacionais amount/currency; não exibiu IDs brutos, `planId`, `provider_preference_id`, `request_id`, tokens, URLs ou credenciais. O logout foi concluído e o navegador retornou à tela pública.
