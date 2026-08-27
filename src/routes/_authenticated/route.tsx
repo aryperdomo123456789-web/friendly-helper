@@ -434,6 +434,7 @@ function ShellLayout() {
               const isRestricted = !isOwner && (blocked || expired) && item.restricted;
               if (isRestricted) return null;
               
+              const isPrimaryNavigation = PRIMARY_TABS.some((tab) => tab.to === item.to);
               return (
                 <SidebarLink
                   key={item.to}
@@ -441,6 +442,7 @@ function ShellLayout() {
                   onClick={() => setOpen(false)}
                   label={item.label}
                   icon={item.icon}
+                  className={cn(showPrimaryTabs && isPrimaryNavigation && "lg:hidden")}
                 />
               );
             })}
@@ -660,7 +662,7 @@ function ShellLayout() {
 
             {servers.length > 0 && location.pathname !== "/painel" && location.pathname !== "/suporte" ? (
               <Select value={serverId ?? ""} onValueChange={setServerId}>
-                <SelectTrigger className="w-[190px] bg-sidebar/50 border-border/50">
+                <SelectTrigger className="w-[150px] max-w-[38vw] bg-sidebar/50 border-border/50 sm:w-[190px]">
                   <SelectValue placeholder="Servidor" />
                 </SelectTrigger>
 

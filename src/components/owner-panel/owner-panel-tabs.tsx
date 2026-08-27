@@ -29,21 +29,23 @@ export function OwnerPanelTabs({ hasUnreadSupport }: OwnerPanelTabsProps) {
           </p>
         </div>
       </div>
-      <TabsList className="flex h-auto flex-wrap justify-start gap-2 bg-transparent p-0">
-        {OWNER_PANEL_TABS.map((tab) => (
-          <TabsTrigger
-            key={tab.value}
-            value={tab.value}
-            className="gap-2 rounded-full border border-sidebar-border/70 bg-sidebar-accent/30 px-4 py-2 data-[state=active]:border-primary/50 data-[state=active]:bg-primary/10"
-          >
-            <tab.icon className="h-4 w-4" />
-            {tab.label}
-            {tab.value === "suporte" && hasUnreadSupport ? (
-              <span className={cn("h-2 w-2 rounded-full bg-destructive animate-pulse")} />
-            ) : null}
-          </TabsTrigger>
-        ))}
-      </TabsList>
+      <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
+        <TabsList className="flex h-auto w-max min-w-full flex-nowrap justify-start gap-2 bg-transparent p-0">
+          {OWNER_PANEL_TABS.map((tab) => (
+            <TabsTrigger
+              key={tab.value}
+              value={tab.value}
+              className="gap-2 rounded-full border border-sidebar-border/70 bg-sidebar-accent/30 px-4 py-2 data-[state=active]:border-primary/50 data-[state=active]:bg-primary/10"
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+              {tab.value === "suporte" && hasUnreadSupport ? (
+                <span className={cn("h-2 w-2 rounded-full bg-destructive animate-pulse")} />
+              ) : null}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
     </div>
   );
 }

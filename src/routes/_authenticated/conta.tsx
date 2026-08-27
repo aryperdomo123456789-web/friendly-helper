@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, UserCog, Link as LinkIcon, Copy, CreditCard, Check, Crown, LogOut } from "lucide-react";
+import { AlertTriangle, Check, Copy, CreditCard, Crown, Link as LinkIcon, Loader2, LogOut, UserCog } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { copyToClipboard } from "@/lib/clipboard";
 import { UserPageShell } from "@/components/user-shell/user-page-shell";
+import { ContentEmptyState } from "@/components/ui/content-empty-state";
 
 export const Route = createFileRoute("/_authenticated/conta")({
   head: () => ({
@@ -164,6 +165,28 @@ function ContaPage() {
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
+    );
+  }
+
+  if (account.isError) {
+    return (
+      <UserPageShell
+        className="mx-auto max-w-4xl pb-20"
+        title="Minha Conta"
+        description="Confira seu plano, conexões e segurança de acesso."
+        icon={UserCog}
+      >
+        <ContentEmptyState
+          icon={AlertTriangle}
+          title="Não foi possível carregar sua conta"
+          description="A sessão continua protegida, mas os dados da conta não responderam. Tente novamente antes de alterar qualquer informação."
+          action={
+            <Button type="button" onClick={() => void account.refetch()}>
+              Tentar novamente
+            </Button>
+          }
+        />
+      </UserPageShell>
     );
   }
 

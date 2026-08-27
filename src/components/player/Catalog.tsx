@@ -24,8 +24,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VideoPlayer } from "./VideoPlayer";
-import { ChevronLeft, Loader2, PlayCircle, Search, Tv, Info, AlertTriangle } from "lucide-react";
+import { AlertTriangle, ChevronLeft, Film, Info, Loader2, MonitorPlay, PlayCircle, Search, Tv } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ContentEmptyState } from "@/components/ui/content-empty-state";
 import { toast } from "sonner";
 import { proxyMediaUrl } from "@/lib/media-url";
 
@@ -590,9 +591,11 @@ export function Catalog({
 
   if (!serverId) {
     return (
-      <div className="rounded-xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
-        Nenhum servidor liberado para este acesso.
-      </div>
+      <ContentEmptyState
+        icon={Tv}
+        title="Nenhum portal disponível"
+        description="Este acesso ainda não possui um portal liberado. Quando o acesso for atualizado, recarregue esta área ou fale com o suporte."
+      />
     );
   }
 
@@ -634,8 +637,8 @@ export function Catalog({
 
 
       {/* Layout do legado: categorias | lista | player sempre na tela */}
-      <div className="grid flex-1 min-h-0 min-w-0 gap-4 lg:grid-cols-[284px_minmax(0,1.14fr)_minmax(360px,420px)] xl:grid-cols-[284px_minmax(0,1.22fr)_minmax(340px,400px)]">
-        <aside className="flex h-full min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-2">
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,38%)] xl:grid-cols-[284px_minmax(0,1.22fr)_minmax(340px,400px)]">
+        <aside className="flex h-full min-h-0 min-w-0 max-h-64 flex-col rounded-xl border border-border bg-card p-2 lg:col-span-2 xl:col-span-1 xl:max-h-none">
           <p className="px-2 pb-2 text-sm font-semibold">Categorias</p>
           <div className="relative px-1 pb-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -926,9 +929,16 @@ export function Catalog({
                     </div>
                   </div>
                 ) : filtered.length === 0 ? (
-                  <p className="p-8 text-center text-sm text-muted-foreground">
-                    {LABEL[kind].empty}
-                  </p>
+                  <ContentEmptyState
+                    icon={kind === "live" ? Tv : kind === "movie" ? Film : MonitorPlay}
+                    title={LABEL[kind].empty}
+                    description={
+                      deferredTerm.trim()
+                        ? "Nenhum resultado corresponde à busca atual. Tente outro termo ou limpe o filtro."
+                        : "Ainda não há itens disponíveis nesta categoria para este portal."
+                    }
+                    className="min-h-44 border-border/60 bg-secondary/10"
+                  />
                 ) : (
                   <div className="space-y-2">
                     {streams.isFetching ? (
