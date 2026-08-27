@@ -81,3 +81,11 @@ A melhoria visual não deve ser confundida com certificação de player top 1. R
 O Suporte recebeu um modo adaptativo lista/conversa. Em viewport compacta, a lista de atendimentos ocupa a tela inicialmente; ao selecionar um protocolo, a conversa ocupa a área disponível e o controle de retorno devolve o usuário à lista. Em desktop, a divisão permanece em duas colunas com altura limitada e rolagem interna, evitando que a página inteira cresça indefinidamente. O contrato de chat, paginação, leitura, envio, anexos e encerramento foi preservado.
 
 A validação local passou com 34/34 testes, lint lógico direcionado e build sanitizado. A validação de viewport móvel deve ser repetida em dispositivo/viewport real antes da certificação final de responsividade.
+
+## Fechamento da auditoria de abas
+
+Foram auditadas as áreas Início, TV ao Vivo, Filmes, Séries, Servidores, Conta, Suporte, Usuários e Painel do dono no build publicado. A auditoria encontrou e corrigiu duas regressões de runtime no processo: a referência de ícone no shell e a ordem condicional de hooks em Usuários. O Suporte também recebeu correção de colisão de símbolo e ordem segura de estado antes de sua validação final.
+
+As validações finais confirmaram: Início com hero/atalhos; TV ao Vivo com estado vazio orientativo; Filmes com categorias, busca, cards e player reservado; Séries com 323 itens e paginação; Servidores com estados de portal; Conta com plano, indicação, segurança e logout; Suporte com lista/conversa, filtros e retorno; Usuários com filtros, tabela, paginação e `0 / 20` no laboratório; Painel com abas administrativas e Auditoria.
+
+O primeiro lote foi publicado no `7550222`, o modo responsivo do Suporte no `d63d205`, o hotfix do ícone no `d55842e`, a ordem segura de estado no `0b6c9e6` e o hotfix de hooks de Usuários no `10e23ca`. Os builds correspondentes passaram por manifesto, readiness e rollback. A validação visual ocorreu em viewport desktop; a certificação de mobile físico e telas TV permanece uma etapa própria.
