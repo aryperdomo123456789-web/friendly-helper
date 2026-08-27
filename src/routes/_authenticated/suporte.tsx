@@ -33,7 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  X,
+  X as CloseIcon,
   MessageSquare,
   Send,
   Image as ImageIcon,
@@ -1033,7 +1033,7 @@ function ChatWindow({
             title="Voltar para conversas"
             className="hover:bg-destructive/10 hover:text-destructive"
           >
-            <X className="h-4 w-4" />
+            <CloseIcon className="h-4 w-4" />
           </Button>
         </div>
       </div>
