@@ -154,14 +154,6 @@ function UsuariosPage() {
     setCurrentPage(1);
   }, [debouncedSearch, statusFilter, serverFilter, planFilter, referralFilter, sortOrder, pageSize]);
 
-  if (!isOwner) {
-    return (
-      <div className="mx-auto max-w-md rounded-xl border border-border bg-card p-6 text-center">
-        <p className="font-semibold">Área restrita ao dono do sistema.</p>
-      </div>
-    );
-  }
-
   const handleSaveUser = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!userModal?.server_ids?.length) {
@@ -312,6 +304,14 @@ function UsuariosPage() {
     return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   }, [safePage, totalPages]);
 
+
+  if (!isOwner) {
+    return (
+      <div className="mx-auto max-w-md rounded-xl border border-border bg-card p-6 text-center">
+        <p className="font-semibold">Área restrita ao dono do sistema.</p>
+      </div>
+    );
+  }
 
   return (
     <OwnerPageShell
