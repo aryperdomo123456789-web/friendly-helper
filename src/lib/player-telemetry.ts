@@ -10,6 +10,7 @@ export type PlaybackTelemetryEventName =
   | "recover_success"
   | "format_fallback"
   | "quality_sample"
+  | "quality_change"
   | "ended"
   | "destroyed";
 

@@ -642,6 +642,7 @@ const playbackTelemetryEventSchema = z.object({
     "recover_success",
     "format_fallback",
     "quality_sample",
+    "quality_change",
     "ended",
     "destroyed",
   ]),

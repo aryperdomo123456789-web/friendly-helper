@@ -3,6 +3,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { Loader2 } from "lucide-react";
 import { recordPlaybackTelemetry } from "@/lib/player.functions";
 import { createPlaybackSessionId, createPlaybackTelemetry } from "@/lib/player-telemetry";
+import {
+  normalizePlayerQualityOptions,
+  qualityChangeDetails,
+  type PlayerQualityOption,
+} from "@/lib/player-quality";
 
 type Props = {
   url: string;
@@ -58,6 +63,9 @@ export function VideoPlayer({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [qualityOptions, setQualityOptions] = useState<PlayerQualityOption[]>([]);
+  const [selectedQuality, setSelectedQuality] = useState("-1");
+  const qualityChangeRef = useRef<(index: number) => boolean>(() => false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -73,6 +81,7 @@ export function VideoPlayer({
     let fallbackIndex = 0;
     let hasNativeError = false;
     let hasReportedPlaying = false;
+    let qualityOptionsLocal: PlayerQualityOption[] = [];
     const sessionId = createPlaybackSessionId();
 
     const engine = video.canPlayType("application/vnd.apple.mpegurl") !== "" ? "native" : "hls.js";
@@ -154,6 +163,17 @@ export function VideoPlayer({
       void telemetry.flush();
     };
 
+    const applyQualityChange = (index: number) => {
+      if (destroyed || !hls || qualityOptionsLocal.length === 0) return false;
+      const details = qualityChangeDetails(qualityOptionsLocal, index);
+      if (details.reason === "invalid_quality_selection") return false;
+      hls.currentLevel = index;
+      telemetry.record("quality_change", details);
+      return true;
+    };
+
+    qualityChangeRef.current = applyQualityChange;
+
     const startPlayback = async (allowMutedFallback = false) => {
       try {
         await video.play();
@@ -219,7 +239,13 @@ export function VideoPlayer({
           hls.loadSource(sourceUrl);
           hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
             const manifestDetails = currentDetails();
-            const levelCount = Array.isArray(data.levels) ? data.levels.length : undefined;
+            const levels = Array.isArray(data.levels) ? data.levels : [];
+            qualityOptionsLocal = normalizePlayerQualityOptions(levels);
+            if (!destroyed) {
+              setQualityOptions(qualityOptionsLocal);
+              setSelectedQuality("-1");
+            }
+            const levelCount = levels.length;
             if (levelCount !== undefined) manifestDetails.level = levelCount;
             telemetry.record("manifest_loaded", manifestDetails);
             ready();
@@ -294,6 +320,9 @@ export function VideoPlayer({
       fallbackIndex += 1;
       recoveryAttempts = 0;
       hasNativeError = false;
+      qualityOptionsLocal = [];
+      setQualityOptions([]);
+      setSelectedQuality("-1");
       clearStartupTimer();
       telemetry.record("format_fallback", {
         recovery_attempt: fallbackIndex,
@@ -372,6 +401,8 @@ export function VideoPlayer({
 
     return () => {
       destroyed = true;
+      qualityChangeRef.current = () => false;
+      qualityOptionsLocal = [];
       if (qualityTimer) clearInterval(qualityTimer);
       if (recoveryTimer) clearTimeout(recoveryTimer);
       clearStartupTimer();
@@ -410,6 +441,33 @@ export function VideoPlayer({
         onWaiting={() => setLoading(true)}
         onStalled={() => setLoading(true)}
       />
+      {qualityOptions.length > 1 ? (
+        <div className="absolute right-3 top-3 rounded-md bg-black/70 px-2 py-1.5 text-white shadow-lg">
+          <label className="mr-2 text-[10px] font-semibold uppercase tracking-wider" htmlFor="player-quality-select">
+            Qualidade
+          </label>
+          <select
+            id="player-quality-select"
+            aria-label="Qualidade de vídeo"
+            className="rounded border border-white/30 bg-black/60 px-1.5 py-1 text-xs text-white outline-none focus:ring-2 focus:ring-primary"
+            value={selectedQuality}
+            onChange={(event) => {
+              const value = event.target.value;
+              const index = Number(value);
+              if (Number.isInteger(index) && qualityChangeRef.current(index)) {
+                setSelectedQuality(value);
+              }
+            }}
+          >
+            <option value="-1">Automática</option>
+            {qualityOptions.map((option) => (
+              <option key={option.index} value={option.index}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       {loading && !error ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/40">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
