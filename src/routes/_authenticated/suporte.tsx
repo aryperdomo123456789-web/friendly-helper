@@ -97,6 +97,7 @@ function SuportePage() {
   const [ownerPriority, setOwnerPriority] = useState<"all" | SupportPriority>("all");
   const [isCompactViewport, setIsCompactViewport] = useState(false);
   const [mobilePane, setMobilePane] = useState<"threads" | "conversation">("threads");
+  const [selectedThread, setSelectedThread] = useState<any>(null);
 
   const threads = useQuery({
     queryKey: [
@@ -201,8 +202,6 @@ function SuportePage() {
       supabase.removeChannel(channel);
     };
   }, [isOwner, queryClient]);
-
-  const [selectedThread, setSelectedThread] = useState<any>(null);
 
   useEffect(() => {
     if (!isOwner && userThreadQuery.data) {
