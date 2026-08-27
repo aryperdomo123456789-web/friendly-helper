@@ -2,7 +2,7 @@ export type AdminAuditScalar = boolean | number | string | null;
 export type AdminAuditDetails = Record<string, AdminAuditScalar>;
 
 const FORBIDDEN_DETAIL_KEY =
-  /(password|pass|token|secret|credential|playlist|stream|url|dns|cookie|authorization|header|payload|body)/i;
+  /(password|pass|token|secret|credential|playlist|stream|url|dns|cookie|authorization|header|payload|body|id|ref)/i;
 const SAFE_DETAIL_KEYS = new Set(["password_changed"]);
 const MAX_DETAIL_KEY_LENGTH = 64;
 const MAX_DETAIL_STRING_LENGTH = 160;
