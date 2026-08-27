@@ -731,7 +731,7 @@ export function Catalog({
       ) : null}
 
       {/* Layout do legado: categorias | lista | player sempre na tela */}
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(380px,42%)] xl:grid-cols-[280px_minmax(0,1fr)_minmax(420px,480px)] 2xl:grid-cols-[300px_minmax(0,1fr)_minmax(460px,540px)]">
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(420px,46%)] xl:grid-cols-[260px_minmax(0,1fr)_minmax(460px,36%)] 2xl:grid-cols-[320px_minmax(0,1fr)_minmax(560px,38%)]">
         <aside className="flex h-full min-h-0 min-w-0 max-h-64 flex-col rounded-xl border border-border bg-card p-2 lg:col-span-2 xl:col-span-1 xl:max-h-none">
           <p className="px-2 pb-2 text-sm font-semibold">Categorias</p>
           <div className="relative px-1 pb-2">
@@ -1195,7 +1195,7 @@ export function Catalog({
 
         <section
           id="wp-player-area"
-          className="lg:sticky lg:top-4 lg:self-start lg:w-full lg:max-w-[480px] xl:max-w-[520px] lg:justify-self-end"
+          className="lg:sticky lg:top-4 lg:self-start lg:w-full lg:max-w-none lg:justify-self-stretch"
         >
           {playing ? (
             <div className="space-y-2">

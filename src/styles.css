@@ -268,9 +268,9 @@ body,
 
 .wp-marquee-separator {
   display: inline-block;
-  width: 0.45rem;
-  height: 0.45rem;
-  margin-inline: 1.35rem;
+  width: 0.58rem;
+  height: 0.58rem;
+  margin-inline: 0.72rem;
   border-radius: 9999px;
   background: radial-gradient(
     circle at 30% 25%,
