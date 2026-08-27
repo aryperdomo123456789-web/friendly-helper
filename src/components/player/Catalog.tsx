@@ -1120,13 +1120,17 @@ export function Catalog({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 shrink-0 border-primary/30 bg-primary/5 px-2.5 text-xs hover:bg-primary/10"
-                  onClick={() => setCategoriesOpen(true)}
+                  className="wp-category-trigger h-9 shrink-0 border-primary/50 bg-primary/10 px-3 text-xs font-bold text-primary hover:-translate-y-0.5 hover:border-primary hover:bg-primary/15 hover:text-primary active:scale-[0.98]"
+                  onClick={() => setCategoriesOpen((open) => !open)}
                   aria-expanded={categoriesOpen}
                   aria-controls={`wp-category-drawer-${kind}`}
                 >
+                  <span className="wp-category-trigger-dot" aria-hidden="true" />
                   <PanelLeftOpen className="h-4 w-4" />
                   <span>Categorias</span>
+                  <span className="hidden text-[10px] uppercase tracking-[0.14em] text-primary/70 sm:inline">
+                    Explorar
+                  </span>
                 </Button>
               </div>
               <div className="relative px-1 pb-2">

@@ -307,6 +307,94 @@ body,
   animation: wp-marquee 4.8s linear infinite;
 }
 
+@keyframes wp-category-attention {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 oklch(0.68 0.16 249 / 0.08),
+      0 0 0.75rem oklch(0.68 0.16 249 / 0.08);
+  }
+  50% {
+    box-shadow:
+      0 0 0 0.22rem oklch(0.68 0.16 249 / 0.12),
+      0 0 1.3rem oklch(0.68 0.16 249 / 0.18);
+  }
+}
+
+@keyframes wp-category-dot {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+.wp-category-trigger {
+  position: relative;
+  isolation: isolate;
+  animation: wp-category-attention 3.6s ease-in-out infinite;
+  transition:
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.wp-category-trigger::before {
+  position: absolute;
+  inset: -0.25rem;
+  z-index: -1;
+  border: 1px solid oklch(0.68 0.16 249 / 0.28);
+  border-radius: inherit;
+  content: "";
+  opacity: 0;
+  transform: scale(0.94);
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.wp-category-trigger:hover::before,
+.wp-category-trigger:focus-visible::before,
+.wp-category-trigger[aria-expanded="true"]::before {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.wp-category-trigger:hover,
+.wp-category-trigger:focus-visible,
+.wp-category-trigger[aria-expanded="true"] {
+  animation-play-state: paused;
+}
+
+.wp-category-trigger-dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  box-shadow:
+    0 0 0 0.18rem oklch(0.68 0.16 249 / 0.12),
+    0 0 0.65rem oklch(0.68 0.16 249 / 0.62);
+  animation: wp-category-dot 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wp-category-trigger,
+  .wp-category-trigger-dot {
+    animation: none;
+  }
+
+  .wp-category-trigger,
+  .wp-category-trigger::before {
+    transition: none;
+  }
+}
+
 /* ------------------------------------------------------------------
  * Themes definition
  * ------------------------------------------------------------------ */
