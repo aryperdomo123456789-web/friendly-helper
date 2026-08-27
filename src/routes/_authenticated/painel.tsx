@@ -36,6 +36,7 @@ import {
   inferSupportMessageType,
 } from "@/lib/support-message.types";
 import { isAttachmentWithinLimit, isValidAttachmentType } from "@/lib/chat-policy";
+import { sanitizeAdminAuditDetails, type AdminAuditDetails } from "@/lib/admin-audit";
 
 import { 
   Card, 
@@ -129,6 +130,21 @@ export const Route = createFileRoute("/_authenticated/painel")({
   }),
   component: PainelDono,
 });
+
+function formatAuditDetails(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "—";
+  const scalarDetails = Object.fromEntries(
+    Object.entries(value).filter(
+      ([, item]) =>
+        item === null ||
+        typeof item === "boolean" ||
+        typeof item === "number" ||
+        typeof item === "string",
+    ),
+  ) as AdminAuditDetails;
+  const sanitized = sanitizeAdminAuditDetails(scalarDetails);
+  return Object.keys(sanitized).length > 0 ? JSON.stringify(sanitized) : "—";
+}
 
 function PainelDono() {
   const { isOwner } = usePlayerSession();
@@ -2265,7 +2281,7 @@ function PainelDono() {
                           <TableCell className="font-mono text-xs">{entry.actor_ref ?? "sistema"}</TableCell>
                           <TableCell className="font-mono text-xs">{entry.target_ref ?? entry.entity_ref ?? "—"}</TableCell>
                           <TableCell className="max-w-[280px] truncate font-mono text-[11px] text-muted-foreground">
-                            {Object.keys(entry.details ?? {}).length > 0 ? JSON.stringify(entry.details) : "—"}
+                            {formatAuditDetails(entry.details)}
                           </TableCell>
                         </TableRow>
                       ))
