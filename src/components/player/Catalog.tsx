@@ -58,14 +58,20 @@ function MarqueeText({
   text,
   active,
   className = "",
+  multiline = false,
 }: {
   text: string;
   active?: boolean;
   className?: string;
+  multiline?: boolean;
 }) {
   return (
     <span
-      className={cn("block overflow-hidden whitespace-nowrap text-ellipsis", className)}
+      className={cn(
+        "block overflow-hidden",
+        multiline ? "line-clamp-2 break-words leading-snug" : "truncate whitespace-nowrap",
+        className,
+      )}
       title={text}
     >
       {text}
@@ -232,8 +238,13 @@ const CatalogGridCard = memo(function CatalogGridCard({
           <PlayCircle className="absolute inset-0 m-auto h-9 w-9 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
         )}
       </div>
-      <div className="px-2 py-2 text-xs font-medium">
-        <MarqueeText text={item.name} active={active} className="line-clamp-2" />
+      <div className="min-h-[4.25rem] px-3 py-3 text-sm font-semibold">
+        <MarqueeText
+          text={item.name}
+          active={active}
+          multiline
+          className="min-h-[2.5rem] text-sm leading-snug"
+        />
       </div>
     </button>
   );
@@ -637,7 +648,7 @@ export function Catalog({
 
 
       {/* Layout do legado: categorias | lista | player sempre na tela */}
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(320px,38%)] xl:grid-cols-[284px_minmax(0,1.22fr)_minmax(340px,400px)]">
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(380px,42%)] xl:grid-cols-[280px_minmax(0,1fr)_minmax(420px,480px)] 2xl:grid-cols-[300px_minmax(0,1fr)_minmax(460px,540px)]">
         <aside className="flex h-full min-h-0 min-w-0 max-h-64 flex-col rounded-xl border border-border bg-card p-2 lg:col-span-2 xl:col-span-1 xl:max-h-none">
           <p className="px-2 pb-2 text-sm font-semibold">Categorias</p>
           <div className="relative px-1 pb-2">
@@ -950,8 +961,8 @@ export function Catalog({
                       className={cn(
                         "grid gap-2 transition-opacity duration-150",
                         kind === "live"
-                          ? "grid-cols-2 xl:grid-cols-3"
-                          : "grid-cols-2 xl:grid-cols-4",
+                          ? "grid-cols-1 sm:grid-cols-2"
+                          : "grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3",
                         streams.isFetching && streams.data?.length ? "opacity-80" : "opacity-100",
                       )}
                     >
@@ -1058,7 +1069,7 @@ export function Catalog({
           )}
         </section>
 
-        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start lg:w-full lg:max-w-[420px] xl:max-w-[400px] lg:justify-self-end">
+        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start lg:w-full lg:max-w-[480px] xl:max-w-[520px] lg:justify-self-end">
           {playing ? (
             <div className="space-y-2">
               <VideoPlayer
