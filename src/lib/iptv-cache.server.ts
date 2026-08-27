@@ -30,6 +30,11 @@ import {
   recordRefreshServerStarted,
   workerLog,
 } from "./worker-observability.server";
+import {
+  createLongOperationMetadata,
+  type LongOperationStage,
+  type LongOperationState,
+} from "./long-operation";
 
 type Kind = "live" | "movie" | "series";
 
@@ -67,6 +72,21 @@ function normalizeItems<T>(rows: T[] | null | undefined): T[] {
 
 function cacheKey(...parts: Array<string | undefined | null>) {
   return parts.filter(Boolean).join(":");
+}
+
+function logRefreshOperationState(
+  refreshRef: string,
+  serverRef: string,
+  state: LongOperationState,
+  stage: LongOperationStage,
+  startedAt: number,
+  fields: Record<string, unknown> = {},
+) {
+  workerLog("info", "refresh_operation_state", {
+    ...createLongOperationMetadata(refreshRef, state, stage, startedAt),
+    server_ref: serverRef,
+    ...fields,
+  });
 }
 
 async function getSupabaseAdmin() {
@@ -333,8 +353,10 @@ export async function refreshServerCatalogCache(
 
   const refreshStartedAt = Date.now();
   recordRefreshServerStarted();
+  logRefreshOperationState(refreshRef, serverRef, "pending", "queued", refreshStartedAt);
   workerLog("info", "refresh_server_started", { refresh_ref: refreshRef, server_ref: serverRef });
 
+  logRefreshOperationState(refreshRef, serverRef, "running", "acquiring_lock", refreshStartedAt);
   const job = withServerFilesystemLock(
     serverId,
     async () => {
@@ -345,8 +367,10 @@ export async function refreshServerCatalogCache(
       let playlistSnapshot: PlaylistSnapshot | null = null;
       let source: "m3u" | "xtream" | null = null;
 
+      logRefreshOperationState(refreshRef, serverRef, "running", "fetching_m3u", refreshStartedAt);
       try {
         playlistSnapshot = await fetchRemotePlaylist(credential);
+        logRefreshOperationState(refreshRef, serverRef, "running", "parsing_catalog", refreshStartedAt);
         catalog = parsePlaylistCatalog(playlistSnapshot.playlist_text);
         const hasAnyEntries = (Object.keys(catalog) as Kind[]).some(
           (kind) => catalog![kind].streams.length > 0,
@@ -384,6 +408,9 @@ export async function refreshServerCatalogCache(
         for (const kind of kinds) {
           // Fetch one catalog kind at a time so large Xtream responses do not
           // remain resident together with the other kinds during a refresh.
+          logRefreshOperationState(refreshRef, serverRef, "running", "fetching_catalog", refreshStartedAt, {
+            kind,
+          });
           catalog[kind] = await fetchCatalogKind(credential, kind);
         }
 
@@ -395,6 +422,7 @@ export async function refreshServerCatalogCache(
         });
       }
 
+      logRefreshOperationState(refreshRef, serverRef, "running", "persisting_cache", refreshStartedAt);
       if (options.clearLocalBeforeFetch) {
         await Promise.allSettled([
           clearLocalServerCache(serverId),
@@ -421,6 +449,10 @@ export async function refreshServerCatalogCache(
       );
       const result = { kinds, source: source ?? "xtream" };
       recordRefreshServerCompleted();
+      logRefreshOperationState(refreshRef, serverRef, "succeeded", "completed", refreshStartedAt, {
+        source: result.source,
+        kinds: result.kinds,
+      });
       workerLog("info", "refresh_server_completed", {
         refresh_ref: refreshRef,
         server_ref: serverRef,
@@ -469,6 +501,7 @@ export async function refreshServerCatalogCache(
     return await job;
   } catch (error) {
     recordRefreshServerFailed();
+    logRefreshOperationState(refreshRef, serverRef, "failed", "failed", refreshStartedAt, { error });
     workerLog("error", "refresh_server_failed", {
       refresh_ref: refreshRef,
       server_ref: serverRef,
