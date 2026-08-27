@@ -1,5 +1,6 @@
 import {
   type CSSProperties,
+  type KeyboardEvent,
   memo,
   useCallback,
   useEffect,
@@ -38,9 +39,11 @@ import {
   Info,
   Loader2,
   MonitorPlay,
+  PanelLeftOpen,
   PlayCircle,
   Search,
   Tv,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ContentEmptyState } from "@/components/ui/content-empty-state";
@@ -182,14 +185,25 @@ function useImagePrefetch(sources: Array<string | null | undefined>, resetKey: s
     if (uniqueSources.length === 0) return;
 
     let cancelled = false;
-    const schedule =
-      typeof window !== "undefined" && "requestIdleCallback" in window
-        ? window.requestIdleCallback.bind(window)
-        : (callback: () => void) => window.setTimeout(callback, 0);
-    const cancel =
-      typeof window !== "undefined" && "cancelIdleCallback" in window
-        ? window.cancelIdleCallback.bind(window)
-        : window.clearTimeout.bind(window);
+    type IdleRuntime = typeof globalThis & {
+      requestIdleCallback?: (callback: () => void) => number;
+      cancelIdleCallback?: (handle: number) => void;
+    };
+    const runtime = globalThis as IdleRuntime;
+    type PrefetchHandle = ReturnType<typeof setTimeout> | number;
+    const schedule = (callback: () => void): PrefetchHandle => {
+      if (typeof runtime.requestIdleCallback === "function") {
+        return runtime.requestIdleCallback(callback);
+      }
+      return setTimeout(callback, 0);
+    };
+    const cancel = (handle: PrefetchHandle) => {
+      if (typeof handle === "number" && typeof runtime.cancelIdleCallback === "function") {
+        runtime.cancelIdleCallback(handle);
+      } else {
+        clearTimeout(handle);
+      }
+    };
 
     const handle = schedule(() => {
       if (cancelled) return;
@@ -359,6 +373,10 @@ export function Catalog({
 
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [catTerm, setCatTerm] = useState("");
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const categoryTriggerRef = useRef<HTMLButtonElement>(null);
+  const categoryDrawerRef = useRef<HTMLDivElement>(null);
+  const categoriesWereOpen = useRef(false);
   const [term, setTerm] = useState(initialSearch);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [playing, setPlaying] = useState<{
@@ -511,12 +529,17 @@ export function Catalog({
     [openSeries, play],
   );
 
+  const closeCategories = useCallback(() => {
+    setCategoriesOpen(false);
+  }, []);
+
   const selectCategory = useCallback(
     (categoryId: string) => {
       startTransition(() => {
         setCategoryId(categoryId);
         setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
       });
+      setCategoriesOpen(false);
       if (typeof window !== "undefined" && window.innerWidth < 1024) {
         const listArea = document.getElementById("wp-items-area");
         if (listArea) listArea.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -525,9 +548,64 @@ export function Catalog({
     [kind],
   );
 
+  const handleCategoryDrawerKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCategories();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = Array.from(
+        event.currentTarget.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable.at(0);
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    },
+    [closeCategories],
+  );
+
+  useEffect(() => {
+    if (!categoriesOpen) {
+      if (categoriesWereOpen.current) {
+        categoriesWereOpen.current = false;
+        categoryTriggerRef.current?.focus({ preventScroll: true });
+      }
+      return;
+    }
+
+    categoriesWereOpen.current = true;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusTimer = window.setTimeout(() => {
+      const firstFocusable = categoryDrawerRef.current?.querySelector<HTMLElement>(
+        'input:not([disabled]), button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+      );
+      firstFocusable?.focus({ preventScroll: true });
+    }, 0);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [categoriesOpen]);
+
   useEffect(() => {
     setCategoryId(null);
     setCatTerm("");
+    setCategoriesOpen(false);
     setTerm(initialSearch);
     setPlaying(null);
     setOpenSeries(null);
@@ -552,6 +630,10 @@ export function Catalog({
   const activeCategory = searchAll
     ? null
     : (categoryId ?? categories.data?.[0]?.category_id ?? null);
+  const activeCategoryLabel = searchAll
+    ? "Busca em todas as categorias"
+    : (categories.data?.find((category) => category.category_id === activeCategory)
+        ?.category_name ?? "Todas as categorias");
 
   const streams = useQuery({
     queryKey: ["streams", kind, serverId, activeCategory],
@@ -730,46 +812,83 @@ export function Catalog({
         </div>
       ) : null}
 
-      {/* Layout do legado: categorias | lista | player sempre na tela */}
-      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(420px,46%)] xl:grid-cols-[260px_minmax(0,1fr)_minmax(460px,36%)] 2xl:grid-cols-[320px_minmax(0,1fr)_minmax(560px,38%)]">
-        <aside className="flex h-full min-h-0 min-w-0 max-h-64 flex-col rounded-xl border border-border bg-card p-2 lg:col-span-2 xl:col-span-1 xl:max-h-none">
-          <p className="px-2 pb-2 text-sm font-semibold">Categorias</p>
-          <div className="relative px-1 pb-2">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={catTerm}
-              onChange={(event) => setCatTerm(event.target.value)}
-              placeholder="Pesquisar categoria..."
-              className="h-9 pl-9"
+      <div className="relative grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(420px,46%)] xl:grid-cols-[minmax(0,1fr)_minmax(460px,36%)] 2xl:grid-cols-[minmax(0,1fr)_minmax(560px,38%)]">
+        {categoriesOpen ? (
+          <>
+            <button
+              type="button"
+              aria-label="Fechar painel de categorias"
+              onClick={closeCategories}
+              className="absolute inset-y-0 left-0 right-0 z-30 cursor-default bg-black/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary lg:right-[46%] xl:right-[36%] 2xl:right-[38%]"
             />
-          </div>
-          <div className="wp-scroll flex-1 min-h-0 space-y-1 overflow-y-auto">
-            {categories.isLoading ? (
-              <div className="flex justify-center p-6">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            <div
+              ref={categoryDrawerRef}
+              id={`wp-category-drawer-${kind}`}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={`wp-category-drawer-title-${kind}`}
+              tabIndex={-1}
+              onKeyDown={handleCategoryDrawerKeyDown}
+              className="absolute inset-y-0 left-0 z-40 flex w-[min(360px,calc(100vw-1rem))] max-w-full flex-col rounded-xl border border-primary/30 bg-card p-3 text-card-foreground shadow-2xl ring-1 ring-white/10 motion-safe:animate-in motion-safe:fade-in-0 motion-safe:slide-in-from-left-2 motion-safe:duration-200 xl:w-[400px] 2xl:w-[440px]"
+            >
+              <div className="flex items-start justify-between gap-3 border-b border-border/60 px-1 pb-3">
+                <div className="min-w-0">
+                  <p id={`wp-category-drawer-title-${kind}`} className="text-sm font-bold">
+                    Categorias
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {activeCategoryLabel}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 shrink-0"
+                  onClick={closeCategories}
+                  aria-label="Fechar categorias"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
-            ) : categories.isError ? (
-              <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
-                Não foi possível carregar as categorias.
-              </div>
-            ) : (
-              visibleCategories.map((category) => (
-                <CatalogCategoryButton
-                  key={category.category_id}
-                  category={category}
-                  active={activeCategory === category.category_id}
-                  onSelect={selectCategory}
-                  onHover={prefetchCategoryStreams}
+              <div className="relative px-1 py-3">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={catTerm}
+                  onChange={(event) => setCatTerm(event.target.value)}
+                  placeholder="Pesquisar categoria..."
+                  className="h-9 pl-9"
                 />
-              ))
-            )}
-            {!categories.isLoading && visibleCategories.length === 0 ? (
-              <p className="p-4 text-xs text-muted-foreground">
-                {categories.error ? "Falha ao consultar o servidor." : "Sem categorias."}
-              </p>
-            ) : null}
-          </div>
-        </aside>
+              </div>
+              <div className="wp-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-1">
+                {categories.isLoading ? (
+                  <div className="flex justify-center p-6">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  </div>
+                ) : categories.isError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+                    Não foi possível carregar as categorias.
+                  </div>
+                ) : (
+                  visibleCategories.map((category) => (
+                    <CatalogCategoryButton
+                      key={category.category_id}
+                      category={category}
+                      active={activeCategory === category.category_id}
+                      onSelect={selectCategory}
+                      onHover={prefetchCategoryStreams}
+                    />
+                  ))
+                )}
+                {!categories.isLoading && visibleCategories.length === 0 ? (
+                  <p className="p-4 text-xs text-muted-foreground">
+                    {categories.error ? "Falha ao consultar o servidor." : "Sem categorias."}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </>
+        ) : null}
 
         <section className="flex h-full min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-2">
           {openSeries ? (
@@ -989,7 +1108,27 @@ export function Catalog({
             </>
           ) : (
             <>
-              <p className="px-2 pb-2 text-sm font-semibold">{LABEL[kind].list}</p>
+              <div className="flex items-center justify-between gap-3 px-2 pb-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{LABEL[kind].list}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {activeCategoryLabel}
+                  </p>
+                </div>
+                <Button
+                  ref={categoryTriggerRef}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 border-primary/30 bg-primary/5 px-2.5 text-xs hover:bg-primary/10"
+                  onClick={() => setCategoriesOpen(true)}
+                  aria-expanded={categoriesOpen}
+                  aria-controls={`wp-category-drawer-${kind}`}
+                >
+                  <PanelLeftOpen className="h-4 w-4" />
+                  <span>Categorias</span>
+                </Button>
+              </div>
               <div className="relative px-1 pb-2">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
