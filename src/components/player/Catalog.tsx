@@ -82,6 +82,7 @@ function MarqueeText({
   multiline?: boolean;
 }) {
   const viewportRef = useRef<HTMLSpanElement>(null);
+  const contentRef = useRef<HTMLSpanElement>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
 
   useEffect(() => {
@@ -92,7 +93,13 @@ function MarqueeText({
     }
 
     const measure = () => {
-      setIsOverflowing(viewport.scrollWidth > viewport.clientWidth + 1);
+      const intrinsicWidth = contentRef.current?.getBoundingClientRect().width ?? 0;
+      const generousLengthThreshold = text.trim().length >= 18;
+      setIsOverflowing(
+        viewport.scrollWidth > viewport.clientWidth + 1 ||
+          intrinsicWidth > viewport.clientWidth + 1 ||
+          generousLengthThreshold,
+      );
     };
 
     measure();
@@ -126,7 +133,9 @@ function MarqueeText({
           <span className="wp-marquee-separator" aria-hidden="true" />
         </span>
       ) : (
-        <span data-marquee-content>{text}</span>
+        <span ref={contentRef} data-marquee-content className="inline-block min-w-max">
+          {text}
+        </span>
       )}
     </span>
   );
