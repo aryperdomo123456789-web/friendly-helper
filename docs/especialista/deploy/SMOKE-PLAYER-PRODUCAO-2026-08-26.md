@@ -116,3 +116,9 @@ O commit `cda973e` adicionou uma aba Auditoria somente leitura ao painel do dono
 Durante a validação visual, detalhes legados de pagamento inicialmente exibiram `planId` e `provider_preference_id`; a descoberta foi tratada como bloqueio. O commit `6664759` endureceu a redaction para remover chaves de ID/ref e o build foi republicado com manifesto `233bd2ccce8bbde89656c9a810d86b733afed4a69f895574756d7311db46e790`. Na segunda validação, a tabela exibiu apenas referências hash de 16 caracteres e campos operacionais seguros, como amount e currency; não apareceram senha, token, URL, playlist, `planId`, `provider_preference_id`, `request_id` ou ID bruto.
 
 O deploy teve manifesto local/remoto igual, readiness 200, domínio público 200, quatro processos online e rollback preservado. A sessão administrativa foi encerrada e o navegador retornou à tela pública.
+
+## Telemetria de qualidade pós-deploy
+
+O commit `6ec4f1a` adicionou `quality_sample` ao contrato QoE e ao player, com contadores de frames descartados/decodificados, nível e bitrate quando o engine HLS fornece essas informações. O build foi publicado com manifesto `9ff316b1f61891b4309c509ec7edb77895f25000a4be1c55acabe246eb15415a`; o rollback permaneceu preservado.
+
+Após uma única reprodução autorizada no Portal 3, o processo main registrou amostras sanitizadas em aproximadamente 10,002 ms e 20,001 ms: `dropped_frames = 0`, `decoded_frames = 213` e depois `dropped_frames = 0`, `decoded_frames = 513`. O player respondeu HTTP 200 e permaneceu saudável. O engine registrado foi nativo; por isso não houve nível/bitrate HLS nessa amostra. A instrumentação confirma ausência de frames descartados naquela janela, mas ainda não certifica ABR ou qualidade multi-device.
