@@ -1,5 +1,5 @@
 export type LongOperationState =
-  "pending" | "running" | "succeeded" | "failed" | "cancel_requested";
+  "pending" | "running" | "succeeded" | "failed" | "cancel_requested" | "cancelled";
 
 export type LongOperationStage =
   | "queued"
@@ -9,7 +9,8 @@ export type LongOperationStage =
   | "fetching_catalog"
   | "persisting_cache"
   | "completed"
-  | "failed";
+  | "failed"
+  | "cancelled";
 
 const STAGE_PROGRESS: Record<LongOperationStage, number | null> = {
   queued: 0,
@@ -20,6 +21,7 @@ const STAGE_PROGRESS: Record<LongOperationStage, number | null> = {
   persisting_cache: 85,
   completed: 100,
   failed: null,
+  cancelled: null,
 };
 
 export type LongOperationMetadata = {
@@ -29,6 +31,22 @@ export type LongOperationMetadata = {
   progress_percent: number | null;
   elapsed_ms: number;
 };
+
+export class LongOperationCancelledError extends Error {
+  constructor(message = "Operação cancelada cooperativamente.") {
+    super(message);
+    this.name = "LongOperationCancelledError";
+  }
+}
+
+export function isTerminalLongOperationState(state: LongOperationState) {
+  return state === "succeeded" || state === "failed" || state === "cancelled";
+}
+
+export function getLongOperationPollDelay(attempt: number) {
+  const safeAttempt = Math.max(0, Math.floor(attempt));
+  return Math.min(15_000, Math.round(1_000 * 1.5 ** safeAttempt));
+}
 
 export function createLongOperationMetadata(
   operationRef: string,

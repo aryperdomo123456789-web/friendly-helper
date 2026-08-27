@@ -14,6 +14,8 @@ import {
   kickDevices,
   testServerConnection,
   listAdminAuditLogsPage,
+  getRefreshOperationStatus,
+  cancelRefreshOperation,
 } from "@/lib/owner.functions";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -37,6 +39,7 @@ import {
 } from "@/lib/support-message.types";
 import { isAttachmentWithinLimit, isValidAttachmentType } from "@/lib/chat-policy";
 import { sanitizeAdminAuditDetails, type AdminAuditDetails } from "@/lib/admin-audit";
+import { getLongOperationPollDelay } from "@/lib/long-operation";
 
 import { 
   Card, 
@@ -167,6 +170,8 @@ function PainelDono() {
   const mutationSaveServer = useServerFn(saveServer);
   const mutationDeleteServer = useServerFn(deleteServer);
   const mutationRefreshServerCache = useServerFn(refreshServerCache);
+  const fetchRefreshOperationStatus = useServerFn(getRefreshOperationStatus);
+  const mutationCancelRefreshOperation = useServerFn(cancelRefreshOperation);
   const mutationReorderServers = useServerFn(reorderServers);
   const mutationCreateUser = useServerFn(createAccessUser);
   const mutationUpdateUser = useServerFn(updateAccessUser);
@@ -235,9 +240,11 @@ function PainelDono() {
   const [draggingServerId, setDraggingServerId] = useState<string | null>(null);
   const [dragOverServerId, setDragOverServerId] = useState<string | null>(null);
   const [refreshingServerId, setRefreshingServerId] = useState<string | null>(null);
+  const [refreshOperationRef, setRefreshOperationRef] = useState<string | null>(null);
   const [refreshStageByServerId, setRefreshStageByServerId] = useState<Record<string, "validando" | "baixando" | "concluido" | "falha">>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const refreshTimersRef = useRef<Record<string, number | undefined>>({});
+  const refreshOperationNameRef = useRef("");
   const nextServerSortOrder = serverItems.reduce(
     (max, server) => Math.max(max, Number(server.sort_order) || 0),
     -1,
@@ -482,32 +489,51 @@ function PainelDono() {
 
   const clearRefreshTimers = useCallback((id: string) => {
     const timer = refreshTimersRef.current[id];
-    if (timer) {
-      window.clearTimeout(timer);
-    }
+    if (timer) window.clearTimeout(timer);
     delete refreshTimersRef.current[id];
   }, []);
 
-  const setRefreshStage = useCallback((id: string, stage: "validando" | "baixando" | "concluido" | "falha") => {
-    setRefreshStageByServerId((current) => ({ ...current, [id]: stage }));
-  }, []);
+  const setRefreshStage = useCallback(
+    (id: string, stage: "validando" | "baixando" | "concluido" | "falha") => {
+      setRefreshStageByServerId((current) => ({ ...current, [id]: stage }));
+    },
+    [],
+  );
 
-  const handleRefreshServerCache = async (id: string, name: string) => {
-    clearRefreshTimers(id);
-    setRefreshingServerId(id);
-    setRefreshStage(id, "validando");
-    refreshTimersRef.current[id] = window.setTimeout(() => {
-      setRefreshStageByServerId((current) => (current[id] === "validando" ? { ...current, [id]: "baixando" } : current));
-    }, 450);
+  const refreshOperationStatus = useQuery({
+    queryKey: ["admin-refresh-operation-status", refreshOperationRef],
+    queryFn: () => fetchRefreshOperationStatus({ data: { operation_ref: refreshOperationRef! } }),
+    enabled: isOwner && Boolean(refreshOperationRef),
+    refetchOnWindowFocus: false,
+    refetchInterval: (query) => {
+      const state = query.state.data?.operation_state;
+      if (state === "succeeded" || state === "failed" || state === "cancelled") return false;
+      return getLongOperationPollDelay(query.state.dataUpdateCount ?? 0);
+    },
+  });
 
-    try {
-      const result = await mutationRefreshServerCache({ data: { id, clear_local_before_fetch: true } });
-      clearRefreshTimers(id);
-      setRefreshStage(id, "concluido");
+  useEffect(() => {
+    const status = refreshOperationStatus.data;
+    const serverId = refreshingServerId;
+    if (!status || !serverId || status.operation_ref !== refreshOperationRef) return;
+
+    const stage = status.operation_state === "failed" || status.operation_state === "cancelled"
+      ? "falha"
+      : status.operation_state === "succeeded"
+        ? "concluido"
+        : status.operation_stage === "queued" || status.operation_stage === "acquiring_lock"
+          ? "validando"
+          : "baixando";
+    setRefreshStage(serverId, stage);
+    if (!status.done) return;
+
+    const serverName = refreshOperationNameRef.current || "servidor";
+    if (status.operation_state === "succeeded") {
+      const source = status.result.source;
       toast.success(
-        result.source === "m3u"
-          ? `Portal ${name} validado e recarregado com M3U local.`
-          : `Portal ${name} validado com fallback Xtream e cache atualizado.`,
+        source === "m3u"
+          ? `Portal ${serverName} validado e recarregado com M3U local.`
+          : `Portal ${serverName} validado com fallback Xtream e cache atualizado.`,
       );
       queryClient.invalidateQueries({ queryKey: ["admin-servers"] });
       queryClient.invalidateQueries({ queryKey: ["player-session"] });
@@ -515,30 +541,61 @@ function PainelDono() {
       queryClient.invalidateQueries({ queryKey: ["streams"] });
       queryClient.invalidateQueries({ queryKey: ["series-info"] });
       queryClient.invalidateQueries({ queryKey: ["epg"] });
-      refreshTimersRef.current[id] = window.setTimeout(() => {
-        setRefreshStageByServerId((current) => {
-          if (current[id] !== "concluido") return current;
-          const next = { ...current };
-          delete next[id];
-          return next;
-        });
-        delete refreshTimersRef.current[id];
-      }, 1600);
+    } else if (status.operation_state === "cancelled") {
+      toast.info(`Refresh do Portal ${serverName} cancelado cooperativamente.`);
+    } else {
+      toast.error(status.error?.message || `Falha ao recarregar o Portal ${serverName}.`);
+    }
+
+    setRefreshingServerId(null);
+    setRefreshOperationRef(null);
+    refreshTimersRef.current[serverId] = window.setTimeout(() => {
+      setRefreshStageByServerId((current) => {
+        if (current[serverId] !== stage) return current;
+        const next = { ...current };
+        delete next[serverId];
+        return next;
+      });
+      delete refreshTimersRef.current[serverId];
+    }, status.operation_state === "succeeded" ? 1600 : 2400);
+  }, [
+    fetchRefreshOperationStatus,
+    queryClient,
+    refreshOperationRef,
+    refreshOperationStatus.data,
+    refreshingServerId,
+    setRefreshStage,
+  ]);
+
+  const handleRefreshServerCache = async (id: string, name: string) => {
+    if (refreshingServerId) return;
+    clearRefreshTimers(id);
+    refreshOperationNameRef.current = name;
+    setRefreshingServerId(id);
+    setRefreshStage(id, "validando");
+    try {
+      const result = await mutationRefreshServerCache({ data: { id, clear_local_before_fetch: true } });
+      setRefreshOperationRef(result.operation_ref);
+      toast.info(
+        result.coalesced
+          ? `Portal ${name} já tinha um refresh em andamento; acompanhando a operação existente.`
+          : `Refresh do Portal ${name} iniciado. O painel acompanhará o progresso.`,
+      );
     } catch (err: any) {
-      clearRefreshTimers(id);
+      setRefreshingServerId(null);
+      setRefreshOperationRef(null);
       setRefreshStage(id, "falha");
-      toast.error(err.message || "Erro ao recarregar cache do servidor");
-      refreshTimersRef.current[id] = window.setTimeout(() => {
-        setRefreshStageByServerId((current) => {
-          if (current[id] !== "falha") return current;
-          const next = { ...current };
-          delete next[id];
-          return next;
-        });
-        delete refreshTimersRef.current[id];
-      }, 2400);
-    } finally {
-      setRefreshingServerId((current) => (current === id ? null : current));
+      toast.error(err.message || "Erro ao iniciar refresh do servidor");
+    }
+  };
+
+  const handleCancelRefresh = async (id: string) => {
+    if (id !== refreshingServerId || !refreshOperationRef) return;
+    try {
+      await mutationCancelRefreshOperation({ data: { operation_ref: refreshOperationRef } });
+      toast.info("Cancelamento solicitado. O worker vai parar no próximo checkpoint seguro.");
+    } catch (err: any) {
+      toast.error(err.message || "Não foi possível solicitar o cancelamento.");
     }
   };
 
@@ -1250,7 +1307,7 @@ function PainelDono() {
                           size="icon"
                           className="h-8 w-8"
                           onClick={() => handleRefreshServerCache(server.id, portalName(index))}
-                          disabled={refreshingServerId === server.id}
+                          disabled={refreshingServerId !== null}
                           title={
                             refreshStage
                               ? refreshStage === "validando"
@@ -1269,6 +1326,18 @@ function PainelDono() {
                             <RefreshCw className="h-4 w-4" />
                           )}
                         </Button>
+                        {refreshingServerId === server.id ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-amber-500 hover:text-amber-400"
+                            onClick={() => handleCancelRefresh(server.id)}
+                            title="Solicitar cancelamento cooperativo"
+                            aria-label="Cancelar refresh do portal"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                         <Server className="h-4 w-4 text-primary" />
                       </div>
                     </CardHeader>
@@ -1293,7 +1362,7 @@ function PainelDono() {
                             {refreshStage === "validando"
                               ? "Validando"
                               : refreshStage === "baixando"
-                                ? "Baixando"
+                                ? "Processando"
                                 : refreshStage === "concluido"
                                   ? "Concluído"
                                   : "Falha"}
@@ -1302,7 +1371,7 @@ function PainelDono() {
                             {refreshStage === "validando"
                               ? "Conferindo o portal e preparando a leitura."
                               : refreshStage === "baixando"
-                                ? "M3U sendo baixada e organizada por este servidor."
+                                ? "Refresh em andamento; o snapshot será atualizado por etapas."
                                 : refreshStage === "concluido"
                                   ? "Cache pronto e isolado para este portal."
                                   : "O portal respondeu com erro ou conteúdo inválido."}

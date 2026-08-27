@@ -1,4 +1,12 @@
-import { refreshServerCatalogCache } from "@/lib/iptv-cache.server";
+import { executeServerCatalogRefresh } from "@/lib/iptv-cache.server";
+import {
+  claimNextRefreshOperation,
+  createRefreshOperation,
+  isRefreshOperationCancellationRequested,
+  pruneRefreshOperations,
+  updateRefreshOperation,
+} from "@/lib/long-running-operations.server";
+import { getLongOperationProgress } from "@/lib/long-operation";
 import {
   createObservationId,
   getWorkerEnv,
@@ -29,7 +37,12 @@ const HEARTBEAT_INTERVAL_MS = parseDuration(
   60_000,
 );
 const ENABLE_CACHE_REFRESH = parseBoolean(getWorkerEnv("WORKER_REFRESH_CATALOG") ?? "1");
-const ENABLE_PRUNE = parseBoolean(getWorkerEnv("WORKER_PRUNE_LOGS") ?? "0");
+const ENABLE_PRUNE = parseBoolean(getWorkerEnv("WORKER_PRUNE_LOGS") ?? "1");
+const OPERATION_POLL_INTERVAL_MS = parseDuration(
+  getWorkerEnv("WORKER_OPERATION_POLL_INTERVAL_MS") ?? "10000",
+  10_000,
+);
+const OPERATION_WORKER_REF = hashObservationId(createObservationId());
 const MEMORY_WARN_MB = parsePositiveNumber(getWorkerEnv("WORKER_MEMORY_WARN_MB") ?? "384", 384);
 const MEMORY_CRITICAL_MB = Math.max(
   MEMORY_WARN_MB + 1,
@@ -48,12 +61,7 @@ if (ENABLE_CACHE_REFRESH) {
 if (ENABLE_PRUNE) {
   tasks.push({
     name: "prune-maintenance",
-    run: async () => {
-      workerLog("info", "maintenance_placeholder", {
-        task: "prune-maintenance",
-        message: "Tarefa de prune ainda é um placeholder controlado.",
-      });
-    },
+    run: pruneLongRunningOperations,
   });
 }
 
@@ -67,6 +75,13 @@ async function main() {
       workerLog("error", "worker_scheduler_error", { error });
     },
   });
+  const operationScheduler = createWorkerScheduler({
+    intervalMs: OPERATION_POLL_INTERVAL_MS,
+    runTick: processNextRefreshOperation,
+    onError: (error) => {
+      workerLog("error", "operation_scheduler_error", { error });
+    },
+  });
 
   const heartbeatTimer = setInterval(() => {
     const memory = observeMemoryThresholds(MEMORY_WARN_MB, MEMORY_CRITICAL_MB);
@@ -74,6 +89,7 @@ async function main() {
       interval_ms: WORKER_INTERVAL_MS,
       heartbeat_interval_ms: HEARTBEAT_INTERVAL_MS,
       configured_tasks: tasks.map((task) => task.name),
+      operation_poll_interval_ms: OPERATION_POLL_INTERVAL_MS,
       memory,
       observability: getWorkerObservabilitySnapshot(),
     });
@@ -94,7 +110,7 @@ async function main() {
     shuttingDown = true;
     clearInterval(heartbeatTimer);
     workerLog("info", "worker_shutdown_started", { signal });
-    await scheduler.stop();
+    await Promise.all([scheduler.stop(), operationScheduler.stop()]);
     workerLog("info", "worker_shutdown_completed", {
       signal,
       observability: getWorkerObservabilitySnapshot(),
@@ -105,7 +121,7 @@ async function main() {
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
-  await scheduler.start();
+  await Promise.all([operationScheduler.start(), scheduler.start()]);
 }
 
 async function runTick() {
@@ -173,40 +189,16 @@ async function refreshActiveServerCatalogs() {
 
     if (error) throw error;
     const activeServers = servers ?? [];
-    if (activeServers.length === 0) {
-      workerLog("info", "refresh_cycle_empty", {
-        cycle_ref: cycleRef,
-        duration_ms: Date.now() - startedAt,
-      });
-      recordRefreshCycleCompleted();
-      return;
-    }
-
-    let completedServers = 0;
-    let failedServers = 0;
+    let enqueuedServers = 0;
     for (const server of activeServers) {
       const serverRef = hashObservationId(server.id);
-      workerLog("info", "refresh_server_requested", {
+      const created = await createRefreshOperation(server.id, null, { initialStatus: "pending" });
+      if (!created.coalesced) enqueuedServers += 1;
+      workerLog("info", "refresh_operation_enqueued", {
         cycle_ref: cycleRef,
         server_ref: serverRef,
+        coalesced: created.coalesced,
       });
-      try {
-        const result = await refreshServerCatalogCache(server.id);
-        completedServers += 1;
-        workerLog("info", "refresh_server_result", {
-          cycle_ref: cycleRef,
-          server_ref: serverRef,
-          source: result.source,
-          kinds: result.kinds,
-        });
-      } catch (error) {
-        failedServers += 1;
-        workerLog("error", "refresh_server_error", {
-          cycle_ref: cycleRef,
-          server_ref: serverRef,
-          error,
-        });
-      }
     }
 
     recordRefreshCycleCompleted();
@@ -214,8 +206,7 @@ async function refreshActiveServerCatalogs() {
       cycle_ref: cycleRef,
       duration_ms: Date.now() - startedAt,
       active_servers: activeServers.length,
-      completed_servers: completedServers,
-      failed_servers: failedServers,
+      enqueued_servers: enqueuedServers,
     });
   } catch (error) {
     recordRefreshCycleFailed();
@@ -226,6 +217,66 @@ async function refreshActiveServerCatalogs() {
     });
     throw error;
   }
+}
+
+async function processNextRefreshOperation() {
+  const operation = await claimNextRefreshOperation(OPERATION_WORKER_REF);
+  if (!operation) return;
+
+  const operationRef = operation.operation_ref;
+  const operationLogRef = hashObservationId(operationRef);
+  const clearLocalBeforeFetch = operation.request_payload["clear_local_before_fetch"] === true;
+  if (operation.status === "cancelled") {
+    workerLog("info", "refresh_operation_cancelled_before_start", {
+      operation_ref: operationLogRef,
+      server_ref: hashObservationId(operation.server_id),
+    });
+    return;
+  }
+
+  workerLog("info", "refresh_operation_claimed", {
+    operation_ref: operationLogRef,
+    server_ref: hashObservationId(operation.server_id),
+    attempt_count: operation.attempt_count,
+  });
+  try {
+    await executeServerCatalogRefresh(
+      operation.server_id,
+      operationRef,
+      { clearLocalBeforeFetch },
+      {
+        isCancellationRequested: () => isRefreshOperationCancellationRequested(operationRef),
+        onProgress: async (status, stage, details) => {
+          const patch: Parameters<typeof updateRefreshOperation>[1] = {
+            status,
+            stage,
+            progressPercent: getLongOperationProgress(stage),
+          };
+          if (status === "succeeded" && details) patch.result = details;
+          if (status === "failed") {
+            patch.error = { code: "REFRESH_FAILED", message: "Falha ao atualizar o catálogo." };
+          }
+          if (details) patch.details = details;
+          patch.workerRef = OPERATION_WORKER_REF;
+          return updateRefreshOperation(operationRef, patch);
+        },
+      },
+    );
+  } catch (error) {
+    workerLog("error", "refresh_operation_execution_finished_with_error", {
+      operation_ref: operationLogRef,
+      server_ref: hashObservationId(operation.server_id),
+      error,
+    });
+  }
+}
+
+async function pruneLongRunningOperations() {
+  const deleted = await pruneRefreshOperations();
+  workerLog("info", "long_running_operations_pruned", {
+    deleted_operations: deleted,
+    retention_days: 30,
+  });
 }
 
 function parseBoolean(value: string): boolean {

@@ -45,3 +45,20 @@ test("cria metadata sanitizada e elapsed não negativo", () => {
     0,
   );
 });
+
+test("reconhece somente estados finais como done", async () => {
+  const { isTerminalLongOperationState } = await import("../src/lib/long-operation.ts");
+  assert.equal(isTerminalLongOperationState("running"), false);
+  assert.equal(isTerminalLongOperationState("cancel_requested"), false);
+  assert.equal(isTerminalLongOperationState("succeeded"), true);
+  assert.equal(isTerminalLongOperationState("failed"), true);
+  assert.equal(isTerminalLongOperationState("cancelled"), true);
+});
+
+test("aplica backoff limitado para polling", async () => {
+  const { getLongOperationPollDelay } = await import("../src/lib/long-operation.ts");
+  assert.deepEqual(
+    [0, 1, 2, 3, 20].map(getLongOperationPollDelay),
+    [1000, 1500, 2250, 3375, 15000],
+  );
+});

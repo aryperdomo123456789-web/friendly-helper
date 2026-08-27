@@ -14,6 +14,7 @@ import {
   writeLocalServerCache,
   writeLocalServerPlaylist,
   withServerFilesystemLock,
+  type ServerFilesystemLockObserver,
 } from "./server-filesystem-cache.server";
 import { clearLocalImageCache } from "./server-media-cache.server";
 import {
@@ -32,11 +33,31 @@ import {
 } from "./worker-observability.server";
 import {
   createLongOperationMetadata,
+  LongOperationCancelledError,
   type LongOperationStage,
   type LongOperationState,
 } from "./long-operation";
+import {
+  isRefreshOperationCancellationRequested,
+  updateRefreshOperation,
+  type RefreshOperationRow,
+} from "./long-running-operations.server";
 
 type Kind = "live" | "movie" | "series";
+
+type RefreshResult = {
+  kinds: Record<Kind, { categories: number; streams: number }>;
+  source: "m3u" | "xtream";
+};
+
+type RefreshExecutionHooks = {
+  onProgress?: (
+    state: LongOperationState,
+    stage: LongOperationStage,
+    details?: Record<string, unknown>,
+  ) => Promise<unknown>;
+  isCancellationRequested?: () => Promise<boolean>;
+};
 
 type CachedRow<T> = {
   payload: T;
@@ -58,13 +79,7 @@ type StreamRow = {
 };
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
-const refreshInFlight = new Map<
-  string,
-  Promise<{
-    kinds: Record<Kind, { categories: number; streams: number }>;
-    source: "m3u" | "xtream";
-  }>
->();
+const refreshInFlight = new Map<string, Promise<RefreshResult>>();
 
 function normalizeItems<T>(rows: T[] | null | undefined): T[] {
   return Array.isArray(rows) ? rows : [];
@@ -83,7 +98,7 @@ function logRefreshOperationState(
   fields: Record<string, unknown> = {},
 ) {
   workerLog("info", "refresh_operation_state", {
-    ...createLongOperationMetadata(refreshRef, state, stage, startedAt),
+    ...createLongOperationMetadata(hashObservationId(refreshRef), state, stage, startedAt),
     server_ref: serverRef,
     ...fields,
   });
@@ -153,7 +168,7 @@ async function loadServerCredential(serverId: string): Promise<{
 
   const dnsPool = normalizeItems(creds)
     .map((row: { dns?: string }) => row.dns)
-    .filter(Boolean);
+    .filter((dns): dns is string => Boolean(dns));
 
   return {
     server,
@@ -224,7 +239,10 @@ export async function clearServerCache(serverId: string) {
 
   const supabaseAdmin = await getSupabaseAdmin();
   const cacheClient = supabaseAdmin as unknown as DynamicSupabaseClient;
-  const { error } = await cacheClient.from("iptv_server_cache").delete().eq("server_id", serverId);
+  const { error } = await (cacheClient
+    .from("iptv_server_cache")
+    .delete()
+    .eq("server_id", serverId) as any);
   if (error && !isMissingTableError(error)) throw error;
 }
 
@@ -237,10 +255,10 @@ export async function clearServerPlaylistCache(serverId: string) {
 
   const supabaseAdmin = await getSupabaseAdmin();
   const cacheClient = supabaseAdmin as unknown as DynamicSupabaseClient;
-  const { error } = await cacheClient
+  const { error } = await (cacheClient
     .from("iptv_server_m3u_cache")
     .delete()
-    .eq("server_id", serverId);
+    .eq("server_id", serverId) as any);
   if (error && !isMissingTableError(error)) throw error;
 }
 
@@ -335,31 +353,74 @@ async function fetchCatalogKind(credential: XtreamCreds, kind: Kind) {
   };
 }
 
-export async function refreshServerCatalogCache(
+export async function executeServerCatalogRefresh(
   serverId: string,
+  refreshRef: string,
   options: { clearLocalBeforeFetch?: boolean } = {},
-) {
+  hooks: RefreshExecutionHooks = {},
+): Promise<RefreshResult> {
   const serverRef = hashObservationId(serverId);
-  const refreshRef = hashObservationId(createObservationId());
-  const ongoing = refreshInFlight.get(serverId);
-  if (ongoing) {
-    recordRefreshCoalesced();
-    workerLog("info", "refresh_server_coalesced", {
-      refresh_ref: refreshRef,
-      server_ref: serverRef,
-    });
-    return ongoing;
-  }
-
   const refreshStartedAt = Date.now();
-  recordRefreshServerStarted();
-  logRefreshOperationState(refreshRef, serverRef, "pending", "queued", refreshStartedAt);
-  workerLog("info", "refresh_server_started", { refresh_ref: refreshRef, server_ref: serverRef });
+  const progress = async (
+    state: LongOperationState,
+    stage: LongOperationStage,
+    details: Record<string, unknown> = {},
+  ) => {
+    logRefreshOperationState(refreshRef, serverRef, state, stage, refreshStartedAt, details);
+    await hooks.onProgress?.(state, stage, details);
+  };
+  const assertNotCancelled = async () => {
+    if (await hooks.isCancellationRequested?.()) {
+      throw new LongOperationCancelledError();
+    }
+  };
 
-  logRefreshOperationState(refreshRef, serverRef, "running", "acquiring_lock", refreshStartedAt);
+  recordRefreshServerStarted();
+  await progress("running", "acquiring_lock");
+  workerLog("info", "refresh_server_started", {
+    refresh_ref: hashObservationId(refreshRef),
+    server_ref: serverRef,
+  });
+
+  const lockObserver: ServerFilesystemLockObserver = {
+    onAcquired: (waitMs) => {
+      recordLockAcquired();
+      workerLog("debug", "refresh_lock_acquired", {
+        refresh_ref: hashObservationId(refreshRef),
+        server_ref: serverRef,
+        wait_ms: waitMs,
+      });
+    },
+    onContended: () => {
+      recordLockContended();
+      workerLog("warn", "refresh_lock_contended", {
+        refresh_ref: hashObservationId(refreshRef),
+        server_ref: serverRef,
+      });
+    },
+    onStaleRemoved: () => {
+      recordLockStaleRemoved();
+      workerLog("warn", "refresh_lock_stale_removed", {
+        refresh_ref: hashObservationId(refreshRef),
+        server_ref: serverRef,
+      });
+    },
+    onTimedOut: (waitMs) => {
+      recordLockTimedOut();
+      workerLog("error", "refresh_lock_timeout", {
+        refresh_ref: hashObservationId(refreshRef),
+        server_ref: serverRef,
+        wait_ms: waitMs,
+      });
+    },
+  };
+  if (hooks.isCancellationRequested)
+    lockObserver.isCancellationRequested = hooks.isCancellationRequested;
+
   const job = withServerFilesystemLock(
     serverId,
     async () => {
+      await assertNotCancelled();
       const { credential } = await loadServerCredential(serverId);
       if (!credential) throw new Error("Servidor sem credenciais cadastradas.");
 
@@ -367,10 +428,12 @@ export async function refreshServerCatalogCache(
       let playlistSnapshot: PlaylistSnapshot | null = null;
       let source: "m3u" | "xtream" | null = null;
 
-      logRefreshOperationState(refreshRef, serverRef, "running", "fetching_m3u", refreshStartedAt);
+      await progress("running", "fetching_m3u");
       try {
+        await assertNotCancelled();
         playlistSnapshot = await fetchRemotePlaylist(credential);
-        logRefreshOperationState(refreshRef, serverRef, "running", "parsing_catalog", refreshStartedAt);
+        await assertNotCancelled();
+        await progress("running", "parsing_catalog");
         catalog = parsePlaylistCatalog(playlistSnapshot.playlist_text);
         const hasAnyEntries = (Object.keys(catalog) as Kind[]).some(
           (kind) => catalog![kind].streams.length > 0,
@@ -379,23 +442,24 @@ export async function refreshServerCatalogCache(
           catalog = null;
           recordRefreshFallback();
           workerLog("warn", "refresh_m3u_empty_fallback", {
-            refresh_ref: refreshRef,
+            refresh_ref: hashObservationId(refreshRef),
             server_ref: serverRef,
             item_count: playlistSnapshot.item_count,
           });
         } else {
           source = "m3u";
           workerLog("info", "refresh_source_selected", {
-            refresh_ref: refreshRef,
+            refresh_ref: hashObservationId(refreshRef),
             server_ref: serverRef,
             source,
             item_count: playlistSnapshot.item_count,
           });
         }
       } catch (error) {
+        if (error instanceof LongOperationCancelledError) throw error;
         recordRefreshFallback();
         workerLog("warn", "refresh_m3u_failed_fallback", {
-          refresh_ref: refreshRef,
+          refresh_ref: hashObservationId(refreshRef),
           server_ref: serverRef,
           error,
         });
@@ -406,23 +470,23 @@ export async function refreshServerCatalogCache(
         catalog = createEmptyPlaylistCatalog();
 
         for (const kind of kinds) {
+          await assertNotCancelled();
           // Fetch one catalog kind at a time so large Xtream responses do not
           // remain resident together with the other kinds during a refresh.
-          logRefreshOperationState(refreshRef, serverRef, "running", "fetching_catalog", refreshStartedAt, {
-            kind,
-          });
+          await progress("running", "fetching_catalog", { kind });
           catalog[kind] = await fetchCatalogKind(credential, kind);
         }
 
         source = "xtream";
         workerLog("info", "refresh_source_selected", {
-          refresh_ref: refreshRef,
+          refresh_ref: hashObservationId(refreshRef),
           server_ref: serverRef,
           source,
         });
       }
 
-      logRefreshOperationState(refreshRef, serverRef, "running", "persisting_cache", refreshStartedAt);
+      await assertNotCancelled();
+      await progress("running", "persisting_cache");
       if (options.clearLocalBeforeFetch) {
         await Promise.allSettled([
           clearLocalServerCache(serverId),
@@ -447,14 +511,14 @@ export async function refreshServerCatalogCache(
         },
         {} as Record<Kind, { categories: number; streams: number }>,
       );
-      const result = { kinds, source: source ?? "xtream" };
+      const result: RefreshResult = { kinds, source: source ?? "xtream" };
       recordRefreshServerCompleted();
-      logRefreshOperationState(refreshRef, serverRef, "succeeded", "completed", refreshStartedAt, {
+      await progress("succeeded", "completed", {
         source: result.source,
         kinds: result.kinds,
       });
       workerLog("info", "refresh_server_completed", {
-        refresh_ref: refreshRef,
+        refresh_ref: hashObservationId(refreshRef),
         server_ref: serverRef,
         source: result.source,
         kinds: result.kinds,
@@ -462,52 +526,53 @@ export async function refreshServerCatalogCache(
       });
       return result;
     },
-    {
-      onAcquired: (waitMs) => {
-        recordLockAcquired();
-        workerLog("debug", "refresh_lock_acquired", {
-          refresh_ref: refreshRef,
-          server_ref: serverRef,
-          wait_ms: waitMs,
-        });
-      },
-      onContended: () => {
-        recordLockContended();
-        workerLog("warn", "refresh_lock_contended", {
-          refresh_ref: refreshRef,
-          server_ref: serverRef,
-        });
-      },
-      onStaleRemoved: () => {
-        recordLockStaleRemoved();
-        workerLog("warn", "refresh_lock_stale_removed", {
-          refresh_ref: refreshRef,
-          server_ref: serverRef,
-        });
-      },
-      onTimedOut: (waitMs) => {
-        recordLockTimedOut();
-        workerLog("error", "refresh_lock_timeout", {
-          refresh_ref: refreshRef,
-          server_ref: serverRef,
-          wait_ms: waitMs,
-        });
-      },
-    },
+    lockObserver,
   );
 
-  refreshInFlight.set(serverId, job);
   try {
     return await job;
   } catch (error) {
-    recordRefreshServerFailed();
-    logRefreshOperationState(refreshRef, serverRef, "failed", "failed", refreshStartedAt, { error });
-    workerLog("error", "refresh_server_failed", {
-      refresh_ref: refreshRef,
-      server_ref: serverRef,
-      error,
+    const cancelled = error instanceof LongOperationCancelledError;
+    if (!cancelled) recordRefreshServerFailed();
+    const finalState: LongOperationState = cancelled ? "cancelled" : "failed";
+    const finalStage: LongOperationStage = cancelled ? "cancelled" : "failed";
+    await progress(finalState, finalStage, {
+      reason: cancelled ? "cooperative_cancel" : "execution_error",
+    }).catch((progressError) =>
+      workerLog("error", "refresh_operation_snapshot_failed", { error: progressError }),
+    );
+    workerLog(
+      cancelled ? "info" : "error",
+      cancelled ? "refresh_server_cancelled" : "refresh_server_failed",
+      {
+        refresh_ref: hashObservationId(refreshRef),
+        server_ref: serverRef,
+        error,
+      },
+    );
+    throw cancelled ? error : normalizeRefreshServerError(error);
+  }
+}
+
+export async function refreshServerCatalogCache(
+  serverId: string,
+  options: { clearLocalBeforeFetch?: boolean } = {},
+) {
+  const refreshRef = hashObservationId(createObservationId());
+  const ongoing = refreshInFlight.get(serverId);
+  if (ongoing) {
+    recordRefreshCoalesced();
+    workerLog("info", "refresh_server_coalesced", {
+      refresh_ref: hashObservationId(refreshRef),
+      server_ref: hashObservationId(serverId),
     });
-    throw normalizeRefreshServerError(error);
+    return ongoing;
+  }
+
+  const job = executeServerCatalogRefresh(serverId, refreshRef, options);
+  refreshInFlight.set(serverId, job);
+  try {
+    return await job;
   } finally {
     refreshInFlight.delete(serverId);
   }

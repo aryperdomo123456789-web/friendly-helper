@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 import type { PlaylistSnapshot } from "./iptv-playlist.server";
 import { MAX_PLAYLIST_TEXT_BYTES } from "./response-limit.server";
+import { LongOperationCancelledError } from "./long-operation";
 
 const LOCAL_CACHE_ROOT =
   process.env["MAGO_SERVER_FILESYSTEM_CACHE_DIR"]?.trim() ||
@@ -135,6 +136,7 @@ export type ServerFilesystemLockObserver = {
   onAcquired?: (waitMs: number) => void;
   onStaleRemoved?: () => void;
   onTimedOut?: (waitMs: number) => void;
+  isCancellationRequested?: () => Promise<boolean>;
 };
 
 export async function withServerFilesystemLock<T>(
@@ -148,6 +150,10 @@ export async function withServerFilesystemLock<T>(
   let contentionReported = false;
 
   while (true) {
+    if (await observer.isCancellationRequested?.()) {
+      throw new LongOperationCancelledError();
+    }
+
     try {
       const handle = await open(lockPath, "wx");
       try {
@@ -201,6 +207,9 @@ export async function withServerFilesystemLock<T>(
       }
 
       await new Promise((resolve) => setTimeout(resolve, 150));
+      if (await observer.isCancellationRequested?.()) {
+        throw new LongOperationCancelledError();
+      }
     }
   }
 }

@@ -3,7 +3,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ensureUserReferralCode, generateUniqueReferralCode, isReferralEligiblePlan } from "./referral-code";
-import { clearServerCache, clearServerPlaylistCache, refreshServerCatalogCache } from "./iptv-cache.server";
+import { clearServerCache, clearServerPlaylistCache } from "./iptv-cache.server";
+import {
+  createRefreshOperation,
+  getRefreshOperationByRef,
+  requestRefreshOperationCancel,
+} from "./long-running-operations.server";
 import { clearLocalImageCache } from "./server-media-cache.server";
 import { portalName } from "./portal-name";
 import type { Database } from "@/integrations/supabase/types";
@@ -321,8 +326,8 @@ export const saveServer = createServerFn({ method: "POST" })
       await supabaseAdmin.from("user_server_access").delete().eq("server_id", serverId);
     }
 
-    void refreshServerCatalogCache(serverId!).catch((error) => {
-      console.error("Falha ao recarregar o cache do servidor", error);
+    void createRefreshOperation(serverId!, context.userId, { initialStatus: "pending" }).catch((error: unknown) => {
+      console.error("Falha ao enfileirar o refresh do servidor", error);
     });
 
     await recordAdminAudit({
@@ -396,10 +401,41 @@ export const refreshServerCache = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertOwner(context.supabase, context.userId);
-    const result = await refreshServerCatalogCache(data.id, {
+    const created = await createRefreshOperation(data.id, context.userId, {
       clearLocalBeforeFetch: data.clear_local_before_fetch,
     });
-    return { ok: true, ...result };
+    const operation = created.row;
+    return {
+      ok: true,
+      operation_ref: operation.operation_ref,
+      operation_state: operation.status,
+      operation_stage: operation.stage,
+      progress_percent: operation.progress_percent,
+      done: false,
+      coalesced: created.coalesced,
+    };
+  });
+
+const refreshOperationRefSchema = z.object({ operation_ref: z.string().uuid() });
+
+export const getRefreshOperationStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => refreshOperationRefSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertOwner(context.supabase, context.userId);
+    const status = await getRefreshOperationByRef(data.operation_ref);
+    if (!status) throw new Error("Operação de refresh não encontrada ou expirada.");
+    return status;
+  });
+
+export const cancelRefreshOperation = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => refreshOperationRefSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertOwner(context.supabase, context.userId);
+    const status = await requestRefreshOperationCancel(data.operation_ref);
+    if (!status) throw new Error("Operação de refresh não encontrada ou expirada.");
+    return status;
   });
 
 export const testServerConnection = createServerFn({ method: "POST" })
@@ -484,7 +520,8 @@ export const listAdminAuditLogsPage = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const from = (data.page - 1) * data.page_size;
     const to = from + data.page_size - 1;
-    const { data: rows, count, error } = await (supabaseAdmin
+    const auditClient = supabaseAdmin as any;
+    const { data: rows, count, error } = await (auditClient
       .from("audit_logs")
       .select(
         "id, actor_user_id, target_user_id, action, entity_type, entity_id, details, source, created_at",
