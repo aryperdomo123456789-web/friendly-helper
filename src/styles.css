@@ -142,7 +142,8 @@
   }
 
   /* Reset para TVs (WebOS/Tizen costumam ter paddings estranhos) */
-  html, body {
+  html,
+  body {
     margin: 0;
     padding: 0;
     width: 100%;
@@ -173,7 +174,9 @@
     z-index: 9999;
     position: relative;
     /* Glow mais forte para visibilidade em telas de TV de longe */
-    box-shadow: 0 0 35px var(--primary), 0 0 10px rgba(0,0,0,0.5);
+    box-shadow:
+      0 0 35px var(--primary),
+      0 0 10px rgba(0, 0, 0, 0.5);
     background-color: var(--primary) !important;
     color: var(--primary-foreground) !important;
   }
@@ -200,8 +203,12 @@
 
 /* Fix para navegadores de TV que não suportam flex-gap ou subgrid */
 @supports not (gap: 1rem) {
-  .flex.gap-4 > * + * { margin-left: 1rem; }
-  .grid.gap-4 > * { margin-bottom: 1rem; }
+  .flex.gap-4 > * + * {
+    margin-left: 1rem;
+  }
+  .grid.gap-4 > * {
+    margin-bottom: 1rem;
+  }
 }
 
 :root {
@@ -256,7 +263,39 @@ body,
 }
 
 .wp-marquee-run {
-  animation: wp-marquee 4.8s linear infinite;
+  animation: wp-marquee var(--wp-marquee-duration, 34s) linear infinite;
+}
+
+.wp-marquee-separator {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-inline: 1.35rem;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 30% 25%,
+    oklch(0.98 0.02 250),
+    var(--color-primary) 45%,
+    oklch(0.3 0.08 250) 100%
+  );
+  box-shadow:
+    0 0 0 2px oklch(0.98 0.02 250 / 0.16),
+    0 0 0.75rem oklch(0.7 0.16 249 / 0.65),
+    inset -2px -2px 3px oklch(0.12 0.04 265 / 0.65),
+    inset 2px 2px 3px oklch(1 0 0 / 0.45);
+  vertical-align: middle;
+}
+
+.group:hover .wp-marquee-run,
+.group:focus-within .wp-marquee-run {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wp-marquee-run {
+    animation: none;
+    transform: none;
+  }
 }
 
 .wp-marquee-run-on-hover {
@@ -365,7 +404,9 @@ body,
 body {
   background-image: none;
   background-attachment: fixed;
-  transition: background-color 0.3s ease, color 0.3s ease;
+  transition:
+    background-color 0.3s ease,
+    color 0.3s ease;
 }
 
 [data-theme="azul"] body {

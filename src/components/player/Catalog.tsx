@@ -1,4 +1,5 @@
 import {
+  type CSSProperties,
   memo,
   useCallback,
   useEffect,
@@ -16,20 +17,35 @@ import {
   getPlaybackUrl,
   getSeriesInfo,
   getChannelEPG,
-  getEnrichedMetadata
+  getEnrichedMetadata,
 } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
 import { getDeviceId } from "@/lib/device";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { VideoPlayer } from "./VideoPlayer";
-import { AlertTriangle, ChevronLeft, Film, Info, Loader2, MonitorPlay, PlayCircle, Search, Tv } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronLeft,
+  Film,
+  Info,
+  Loader2,
+  MonitorPlay,
+  PlayCircle,
+  Search,
+  Tv,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ContentEmptyState } from "@/components/ui/content-empty-state";
 import { toast } from "sonner";
 import { proxyMediaUrl } from "@/lib/media-url";
-
 
 type Kind = "live" | "movie" | "series";
 
@@ -65,16 +81,53 @@ function MarqueeText({
   className?: string;
   multiline?: boolean;
 }) {
+  const viewportRef = useRef<HTMLSpanElement>(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || multiline) {
+      setIsOverflowing(false);
+      return;
+    }
+
+    const measure = () => {
+      setIsOverflowing(viewport.scrollWidth > viewport.clientWidth + 1);
+    };
+
+    measure();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    observer?.observe(viewport);
+    return () => observer?.disconnect();
+  }, [multiline, text]);
+
+  const shouldMarquee = isOverflowing && !multiline;
+  const durationSeconds = Math.min(52, Math.max(28, text.trim().length * 0.55));
+
   return (
     <span
+      ref={viewportRef}
       className={cn(
         "block overflow-hidden",
         multiline ? "line-clamp-2 break-words leading-snug" : "truncate whitespace-nowrap",
         className,
       )}
       title={text}
+      aria-label={text}
     >
-      {text}
+      {shouldMarquee ? (
+        <span
+          className="wp-marquee wp-marquee-run"
+          style={{ "--wp-marquee-duration": `${durationSeconds}s` } as CSSProperties}
+        >
+          <span aria-hidden="true">{text}</span>
+          <span className="wp-marquee-separator" aria-hidden="true" />
+          <span aria-hidden="true">{text}</span>
+          <span className="wp-marquee-separator" aria-hidden="true" />
+        </span>
+      ) : (
+        <span data-marquee-content>{text}</span>
+      )}
     </span>
   );
 }
@@ -242,7 +295,6 @@ const CatalogGridCard = memo(function CatalogGridCard({
         <MarqueeText
           text={item.name}
           active={active}
-          multiline
           className="min-h-[2.5rem] text-sm leading-snug"
         />
       </div>
@@ -265,7 +317,11 @@ const CatalogEpisodeButton = memo(function CatalogEpisodeButton({
       className="w-full justify-start"
       onClick={() => onActivate(episode)}
     >
-      {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlayCircle className="mr-2 h-4 w-4" />}
+      {loading ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      ) : (
+        <PlayCircle className="mr-2 h-4 w-4" />
+      )}
       <span className="truncate">
         {episode.episode_num}. {episode.title}
       </span>
@@ -330,124 +386,135 @@ export function Catalog({
     [serverId, kind, deviceId],
   );
   const playbackQueryFn = useCallback(
-    (item: { id: string; ext?: string | null; name: string; icon: string | null }) =>
-      () =>
-        fetchPlayback({
-          data: {
-            server_id: serverId!,
-            kind,
-            stream_id: item.id,
-            device_id: deviceId,
-            ...(item.ext ? { ext: item.ext } : {}),
-          },
-        }),
+    (item: { id: string; ext?: string | null; name: string; icon: string | null }) => () =>
+      fetchPlayback({
+        data: {
+          server_id: serverId!,
+          kind,
+          stream_id: item.id,
+          device_id: deviceId,
+          ...(item.ext ? { ext: item.ext } : {}),
+        },
+      }),
     [fetchPlayback, serverId, kind, deviceId],
   );
 
-  const play = useCallback(async (item: {
-    id: string;
-    name: string;
-    icon: string | null;
-    ext?: string | null;
-  }) => {
-    setLoadingId(item.id);
-    try {
-      const result = await queryClient.fetchQuery({
-        queryKey: playbackCacheKey(item),
-        queryFn: playbackQueryFn(item),
-        staleTime: 24 * 60 * 60 * 1000,
+  const play = useCallback(
+    async (item: { id: string; name: string; icon: string | null; ext?: string | null }) => {
+      setLoadingId(item.id);
+      try {
+        const result = await queryClient.fetchQuery({
+          queryKey: playbackCacheKey(item),
+          queryFn: playbackQueryFn(item),
+          staleTime: 24 * 60 * 60 * 1000,
+        });
+        setPlaying({
+          id: item.id,
+          url: result.url,
+          fallbackUrls: result.fallback_urls ?? [],
+          name: item.name,
+          icon: item.icon,
+        });
+        if (typeof window !== "undefined" && window.innerWidth < 1024) {
+          // Comportamento mobile: scroll imediato para o player
+          window.scrollTo({ top: 0, behavior: "smooth" });
+          const playerArea = document.getElementById("wp-player-area");
+          if (playerArea) {
+            playerArea.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        }
+      } catch (error: any) {
+        const msg = error.message || "";
+        if (msg.includes("Limite") || msg.includes("simultanea")) {
+          toast.error(
+            <div className="flex flex-col gap-1">
+              <span className="font-bold">Acesso em uso!</span>
+              <span>{msg}</span>
+              <span className="text-[10px] opacity-80 italic">
+                Sugestão: faça logout em outros dispositivos ou fale com o suporte para aumentar seu
+                limite.
+              </span>
+            </div>,
+            { duration: 6000 },
+          );
+        } else {
+          toast.error(msg || "Não foi possível abrir o conteúdo");
+        }
+      } finally {
+        setLoadingId(null);
+      }
+    },
+    [queryClient, playbackCacheKey, playbackQueryFn],
+  );
+
+  const prefetchCategoryStreams = useCallback(
+    (targetCategoryId: string) => {
+      if (!serverId || !targetCategoryId) return;
+      void queryClient.prefetchQuery({
+        queryKey: ["streams", kind, serverId, targetCategoryId],
+        queryFn: () =>
+          fetchStreams({
+            data: {
+              server_id: serverId,
+              kind,
+              category_id: targetCategoryId,
+            },
+          }),
+        staleTime: 5 * 60_000,
       });
-      setPlaying({
-        id: item.id,
-        url: result.url,
-        fallbackUrls: result.fallback_urls ?? [],
-        name: item.name,
-        icon: item.icon,
+    },
+    [queryClient, serverId, kind, fetchStreams],
+  );
+
+  const prefetchSeriesInfo = useCallback(
+    (series: { id: string; name: string }) => {
+      if (!serverId || kind !== "series") return;
+      void queryClient.prefetchQuery({
+        queryKey: ["series-info", serverId, series.id],
+        queryFn: () => fetchSeries({ data: { server_id: serverId, series_id: series.id } }),
+        staleTime: 10 * 60_000,
+      });
+    },
+    [queryClient, serverId, kind, fetchSeries],
+  );
+
+  const activateCatalogItem = useCallback(
+    (item: { id: string; name: string; icon: string | null; ext?: string | null }) => {
+      if (kind === "series") {
+        setOpenSeries({ id: item.id, name: item.name });
+        return;
+      }
+      void play(item);
+    },
+    [kind, play],
+  );
+
+  const activateEpisode = useCallback(
+    (episode: CatalogEpisode) => {
+      if (!openSeries) return;
+      void play({
+        id: episode.id,
+        name: `${openSeries.name} - ${episode.episode_num}. ${episode.title}`,
+        icon: null,
+        ext: episode.ext,
+      });
+    },
+    [openSeries, play],
+  );
+
+  const selectCategory = useCallback(
+    (categoryId: string) => {
+      startTransition(() => {
+        setCategoryId(categoryId);
+        setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
       });
       if (typeof window !== "undefined" && window.innerWidth < 1024) {
-        // Comportamento mobile: scroll imediato para o player
-        window.scrollTo({ top: 0, behavior: "smooth" });
-        const playerArea = document.getElementById("wp-player-area");
-        if (playerArea) {
-          playerArea.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
+        const listArea = document.getElementById("wp-items-area");
+        if (listArea) listArea.scrollIntoView({ behavior: "smooth", block: "start" });
       }
-    } catch (error: any) {
-      const msg = error.message || "";
-      if (msg.includes("Limite") || msg.includes("simultanea")) {
-        toast.error(
-          <div className="flex flex-col gap-1">
-            <span className="font-bold">Acesso em uso!</span>
-            <span>{msg}</span>
-            <span className="text-[10px] opacity-80 italic">Sugestão: faça logout em outros dispositivos ou fale com o suporte para aumentar seu limite.</span>
-          </div>,
-          { duration: 6000 }
-        );
-      } else {
-        toast.error(msg || "Não foi possível abrir o conteúdo");
-      }
-    } finally {
-
-      setLoadingId(null);
-    }
-  }, [queryClient, playbackCacheKey, playbackQueryFn]);
-
-
-  const prefetchCategoryStreams = useCallback((targetCategoryId: string) => {
-    if (!serverId || !targetCategoryId) return;
-    void queryClient.prefetchQuery({
-      queryKey: ["streams", kind, serverId, targetCategoryId],
-      queryFn: () =>
-        fetchStreams({
-          data: {
-            server_id: serverId,
-            kind,
-            category_id: targetCategoryId,
-          },
-        }),
-      staleTime: 5 * 60_000,
-    });
-  }, [queryClient, serverId, kind, fetchStreams]);
-
-  const prefetchSeriesInfo = useCallback((series: { id: string; name: string }) => {
-    if (!serverId || kind !== "series") return;
-    void queryClient.prefetchQuery({
-      queryKey: ["series-info", serverId, series.id],
-      queryFn: () => fetchSeries({ data: { server_id: serverId, series_id: series.id } }),
-      staleTime: 10 * 60_000,
-    });
-  }, [queryClient, serverId, kind, fetchSeries]);
-
-  const activateCatalogItem = useCallback((item: { id: string; name: string; icon: string | null; ext?: string | null }) => {
-    if (kind === "series") {
-      setOpenSeries({ id: item.id, name: item.name });
-      return;
-    }
-    void play(item);
-  }, [kind, play]);
-
-
-  const activateEpisode = useCallback((episode: CatalogEpisode) => {
-    if (!openSeries) return;
-    void play({
-      id: episode.id,
-      name: `${openSeries.name} - ${episode.episode_num}. ${episode.title}`,
-      icon: null,
-      ext: episode.ext,
-    });
-  }, [openSeries, play]);
-
-  const selectCategory = useCallback((categoryId: string) => {
-    startTransition(() => {
-      setCategoryId(categoryId);
-      setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
-    });
-    if (typeof window !== "undefined" && window.innerWidth < 1024) {
-      const listArea = document.getElementById("wp-items-area");
-      if (listArea) listArea.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [kind]);
-
+    },
+    [kind],
+  );
 
   useEffect(() => {
     setCategoryId(null);
@@ -463,7 +530,6 @@ export function Catalog({
     setTerm(initialSearch);
   }, [initialSearch]);
 
-
   const categories = useQuery({
     queryKey: ["categories", kind, serverId],
     queryFn: () => fetchCategories({ data: { server_id: serverId!, kind } }),
@@ -474,7 +540,9 @@ export function Catalog({
   });
 
   const searchAll = Boolean(initialSearch.trim());
-  const activeCategory = searchAll ? null : categoryId ?? categories.data?.[0]?.category_id ?? null;
+  const activeCategory = searchAll
+    ? null
+    : (categoryId ?? categories.data?.[0]?.category_id ?? null);
 
   const streams = useQuery({
     queryKey: ["streams", kind, serverId, activeCategory],
@@ -485,7 +553,7 @@ export function Catalog({
           kind,
           ...(activeCategory ? { category_id: activeCategory } : {}),
         },
-    }),
+      }),
     enabled: Boolean(serverId) && (kind === "live" ? Boolean(activeCategory) : true),
     retry: 1,
     staleTime: 5 * 60_000,
@@ -519,7 +587,14 @@ export function Catalog({
       if (category.category_id === activeCategory) continue;
       prefetchCategoryStreams(category.category_id);
     }
-  }, [serverId, categories.isLoading, categories.isError, visibleCategories, activeCategory, prefetchCategoryStreams]);
+  }, [
+    serverId,
+    categories.isLoading,
+    categories.isError,
+    visibleCategories,
+    activeCategory,
+    prefetchCategoryStreams,
+  ]);
 
   const filtered = useMemo(() => {
     const list = streams.data ?? [];
@@ -542,7 +617,10 @@ export function Catalog({
         if (totalPagesForSeason <= windowSize) {
           return Array.from({ length: totalPagesForSeason }, (_, index) => index + 1);
         }
-        const startPage = Math.max(1, Math.min(safeSeasonPage - 2, totalPagesForSeason - (windowSize - 1)));
+        const startPage = Math.max(
+          1,
+          Math.min(safeSeasonPage - 2, totalPagesForSeason - (windowSize - 1)),
+        );
         const endPage = Math.min(totalPagesForSeason, startPage + windowSize - 1);
         return Array.from({ length: endPage - startPage + 1 }, (_, index) => startPage + index);
       })();
@@ -598,8 +676,6 @@ export function Catalog({
 
   useImagePrefetch(pageImageSources, `${serverId ?? "no-server"}:${kind}`);
 
-
-
   if (!serverId) {
     return (
       <ContentEmptyState
@@ -619,14 +695,15 @@ export function Catalog({
             <div className="flex-1 space-y-1">
               <p className="text-sm font-bold text-destructive">Conexão bloqueada</p>
               <p className="text-xs text-destructive/80 leading-relaxed">
-                {blocked}. Se voce esta tentando conectar em um novo dispositivo, certifique-se de ter encerrado a sessao nos outros.
+                {blocked}. Se voce esta tentando conectar em um novo dispositivo, certifique-se de
+                ter encerrado a sessao nos outros.
               </p>
               <div className="pt-1">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="h-7 text-[10px] border-destructive/30 hover:bg-destructive/20 text-destructive"
-                  onClick={() => window.location.href = "/conta"}
+                  onClick={() => (window.location.href = "/conta")}
                 >
                   Ver Planos / Suporte
                 </Button>
@@ -639,13 +716,10 @@ export function Catalog({
       {!hideHeader ? (
         <div className="flex flex-none flex-col gap-1 px-1 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h1 className="truncate text-xl font-bold sm:text-2xl">
-              {LABEL[kind].title}
-            </h1>
+            <h1 className="truncate text-xl font-bold sm:text-2xl">{LABEL[kind].title}</h1>
           </div>
         </div>
       ) : null}
-
 
       {/* Layout do legado: categorias | lista | player sempre na tela */}
       <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(380px,42%)] xl:grid-cols-[280px_minmax(0,1fr)_minmax(420px,480px)] 2xl:grid-cols-[300px_minmax(0,1fr)_minmax(460px,540px)]">
@@ -701,10 +775,11 @@ export function Catalog({
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <p className="truncate text-sm font-bold uppercase tracking-tight">{openSeries.name}</p>
+                <p className="truncate text-sm font-bold uppercase tracking-tight">
+                  {openSeries.name}
+                </p>
               </div>
               <div className="wp-scroll flex-1 min-h-0 space-y-3 overflow-y-auto px-1 pb-4">
-
                 {seriesInfo.isLoading && !seriesInfo.data ? (
                   <div className="flex justify-center p-8">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -733,148 +808,172 @@ export function Catalog({
                         Atualizando temporadas e episódios...
                       </div>
                     ) : null}
-                    {currentEpisodeGroups.map(({ season, size, total, totalPagesForSeason, safeSeasonPage, start, end, pages, items }) => (
-                      <div key={season.season} className="space-y-2 rounded-xl border border-border/60 bg-secondary/10 p-2">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs font-semibold text-primary">
-                            Temporada {season.season}
-                          </p>
-                          <div className="text-[10px] text-muted-foreground">
-                            Mostrando <span className="font-bold text-primary">{start}</span> a{" "}
-                            <span className="font-bold text-primary">{end}</span> de{" "}
-                            <span className="font-bold">{total}</span> episódios
+                    {currentEpisodeGroups.map(
+                      ({
+                        season,
+                        size,
+                        total,
+                        totalPagesForSeason,
+                        safeSeasonPage,
+                        start,
+                        end,
+                        pages,
+                        items,
+                      }) => (
+                        <div
+                          key={season.season}
+                          className="space-y-2 rounded-xl border border-border/60 bg-secondary/10 p-2"
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-primary">
+                              Temporada {season.season}
+                            </p>
+                            <div className="text-[10px] text-muted-foreground">
+                              Mostrando <span className="font-bold text-primary">{start}</span> a{" "}
+                              <span className="font-bold text-primary">{end}</span> de{" "}
+                              <span className="font-bold">{total}</span> episódios
+                            </div>
                           </div>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="w-[140px]">
-                            <Select
-                              value={String(size)}
-                              onValueChange={(value) =>
-                                startTransition(() => {
-                                  setEpisodePageSize((sizes) => ({
-                                    ...sizes,
-                                    [season.season]: Number(value) as 6 | 12 | 24,
-                                  }));
-                                  setEpisodePage((pagesMap) => ({
-                                    ...pagesMap,
-                                    [season.season]: 1,
-                                  }));
-                                })
-                              }
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="12" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {[6, 12, 24].map((value) => (
-                                  <SelectItem key={value} value={String(value)}>
-                                    {value} por página
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          {totalPagesForSeason > 1 ? (
-                            <div className="flex flex-wrap items-center gap-1">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-8 px-2.5 text-[10px]"
-                                onClick={() =>
-                                  startTransition(() =>
-                                    setEpisodePage((pagesMap) => ({ ...pagesMap, [season.season]: 1 })),
-                                  )
-                                }
-                                disabled={safeSeasonPage === 1}
-                              >
-                                Primeira
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-8 px-2.5 text-[10px]"
-                                onClick={() =>
-                                  startTransition(() =>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="w-[140px]">
+                              <Select
+                                value={String(size)}
+                                onValueChange={(value) =>
+                                  startTransition(() => {
+                                    setEpisodePageSize((sizes) => ({
+                                      ...sizes,
+                                      [season.season]: Number(value) as 6 | 12 | 24,
+                                    }));
                                     setEpisodePage((pagesMap) => ({
                                       ...pagesMap,
-                                      [season.season]: Math.max(1, (pagesMap[season.season] ?? 1) - 1),
-                                    })),
-                                  )
+                                      [season.season]: 1,
+                                    }));
+                                  })
                                 }
-                                disabled={safeSeasonPage === 1}
                               >
-                                Anterior
-                              </Button>
-                              {pages.map((page) => (
+                                <SelectTrigger className="h-8">
+                                  <SelectValue placeholder="12" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {[6, 12, 24].map((value) => (
+                                    <SelectItem key={value} value={String(value)}>
+                                      {value} por página
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            {totalPagesForSeason > 1 ? (
+                              <div className="flex flex-wrap items-center gap-1">
                                 <Button
-                                  key={page}
                                   type="button"
                                   size="sm"
-                                  variant={page === safeSeasonPage ? "default" : "outline"}
-                                  className="h-8 min-w-8 px-2.5 text-[10px]"
+                                  variant="outline"
+                                  className="h-8 px-2.5 text-[10px]"
                                   onClick={() =>
                                     startTransition(() =>
-                                      setEpisodePage((pagesMap) => ({ ...pagesMap, [season.season]: page })),
+                                      setEpisodePage((pagesMap) => ({
+                                        ...pagesMap,
+                                        [season.season]: 1,
+                                      })),
                                     )
                                   }
+                                  disabled={safeSeasonPage === 1}
                                 >
-                                  {page}
+                                  Primeira
                                 </Button>
-                              ))}
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-8 px-2.5 text-[10px]"
-                                onClick={() =>
-                                  startTransition(() =>
-                                    setEpisodePage((pagesMap) => ({
-                                      ...pagesMap,
-                                      [season.season]: Math.min(
-                                        totalPagesForSeason,
-                                        (pagesMap[season.season] ?? 1) + 1,
-                                      ),
-                                    })),
-                                  )
-                                }
-                                disabled={safeSeasonPage === totalPagesForSeason}
-                              >
-                                Próxima
-                              </Button>
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                className="h-8 px-2.5 text-[10px]"
-                                onClick={() =>
-                                  startTransition(() =>
-                                    setEpisodePage((pagesMap) => ({
-                                      ...pagesMap,
-                                      [season.season]: totalPagesForSeason,
-                                    })),
-                                  )
-                                }
-                                disabled={safeSeasonPage === totalPagesForSeason}
-                              >
-                                Última
-                              </Button>
-                            </div>
-                          ) : null}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-2.5 text-[10px]"
+                                  onClick={() =>
+                                    startTransition(() =>
+                                      setEpisodePage((pagesMap) => ({
+                                        ...pagesMap,
+                                        [season.season]: Math.max(
+                                          1,
+                                          (pagesMap[season.season] ?? 1) - 1,
+                                        ),
+                                      })),
+                                    )
+                                  }
+                                  disabled={safeSeasonPage === 1}
+                                >
+                                  Anterior
+                                </Button>
+                                {pages.map((page) => (
+                                  <Button
+                                    key={page}
+                                    type="button"
+                                    size="sm"
+                                    variant={page === safeSeasonPage ? "default" : "outline"}
+                                    className="h-8 min-w-8 px-2.5 text-[10px]"
+                                    onClick={() =>
+                                      startTransition(() =>
+                                        setEpisodePage((pagesMap) => ({
+                                          ...pagesMap,
+                                          [season.season]: page,
+                                        })),
+                                      )
+                                    }
+                                  >
+                                    {page}
+                                  </Button>
+                                ))}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-2.5 text-[10px]"
+                                  onClick={() =>
+                                    startTransition(() =>
+                                      setEpisodePage((pagesMap) => ({
+                                        ...pagesMap,
+                                        [season.season]: Math.min(
+                                          totalPagesForSeason,
+                                          (pagesMap[season.season] ?? 1) + 1,
+                                        ),
+                                      })),
+                                    )
+                                  }
+                                  disabled={safeSeasonPage === totalPagesForSeason}
+                                >
+                                  Próxima
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-2.5 text-[10px]"
+                                  onClick={() =>
+                                    startTransition(() =>
+                                      setEpisodePage((pagesMap) => ({
+                                        ...pagesMap,
+                                        [season.season]: totalPagesForSeason,
+                                      })),
+                                    )
+                                  }
+                                  disabled={safeSeasonPage === totalPagesForSeason}
+                                >
+                                  Última
+                                </Button>
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="space-y-1">
+                            {items.map((episode) => (
+                              <CatalogEpisodeButton
+                                key={episode.id}
+                                episode={episode}
+                                loading={loadingId === episode.id}
+                                onActivate={activateEpisode}
+                              />
+                            ))}
+                          </div>
                         </div>
-                        <div className="space-y-1">
-                          {items.map((episode) => (
-                            <CatalogEpisodeButton
-                              key={episode.id}
-                              episode={episode}
-                              loading={loadingId === episode.id}
-                              onActivate={activateEpisode}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                      ),
+                    )}
                   </>
                 )}
               </div>
@@ -898,11 +997,14 @@ export function Catalog({
                   <span className="font-bold">{totalItems}</span> itens
                 </div>
                 <div className="w-[150px]">
-                    <Select
+                  <Select
                     value={String(activePageSize)}
                     onValueChange={(value) =>
                       startTransition(() => {
-                        setPageSize((pages) => ({ ...pages, [kind]: Number(value) as 12 | 24 | 48 }));
+                        setPageSize((pages) => ({
+                          ...pages,
+                          [kind]: Number(value) as 12 | 24 | 48,
+                        }));
                         setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
                       })
                     }
@@ -920,7 +1022,10 @@ export function Catalog({
                   </Select>
                 </div>
               </div>
-              <div id="wp-items-area" className="wp-scroll flex-1 min-h-0 overflow-y-auto px-1 pb-4">
+              <div
+                id="wp-items-area"
+                className="wp-scroll flex-1 min-h-0 overflow-y-auto px-1 pb-4"
+              >
                 {streams.isLoading && !streams.data ? (
                   <div className="flex justify-center p-16">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -970,19 +1075,19 @@ export function Catalog({
                         const isActiveItem = kind !== "series" && playing?.id === item.id;
 
                         return (
-                            <CatalogGridCard
-                              key={`${item.id}-${item.name}`}
-                              item={item}
-                              kind={kind}
-                              serverId={serverId}
-                              active={isActiveItem}
-                              loading={loadingId === item.id}
-                              priority={index < 4}
-                              onActivate={activateCatalogItem}
-                              {...(kind === "series" ? { onHover: prefetchSeriesInfo } : {})}
-                            />
-                          );
-                        })}
+                          <CatalogGridCard
+                            key={`${item.id}-${item.name}`}
+                            item={item}
+                            kind={kind}
+                            serverId={serverId}
+                            active={isActiveItem}
+                            loading={loadingId === item.id}
+                            priority={index < 4}
+                            onActivate={activateCatalogItem}
+                            {...(kind === "series" ? { onHover: prefetchSeriesInfo } : {})}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -999,7 +1104,9 @@ export function Catalog({
                       variant="outline"
                       size="sm"
                       className="h-8 px-3 text-xs"
-                      onClick={() => startTransition(() => setCurrentPage((pages) => ({ ...pages, [kind]: 1 })))}
+                      onClick={() =>
+                        startTransition(() => setCurrentPage((pages) => ({ ...pages, [kind]: 1 })))
+                      }
                       disabled={safePage === 1}
                     >
                       Primeira
@@ -1029,7 +1136,11 @@ export function Catalog({
                         size="sm"
                         variant={page === safePage ? "default" : "outline"}
                         className="h-8 min-w-9 px-3 text-xs"
-                        onClick={() => startTransition(() => setCurrentPage((pages) => ({ ...pages, [kind]: page })))}
+                        onClick={() =>
+                          startTransition(() =>
+                            setCurrentPage((pages) => ({ ...pages, [kind]: page })),
+                          )
+                        }
                       >
                         {page}
                       </Button>
@@ -1057,7 +1168,11 @@ export function Catalog({
                       variant="outline"
                       size="sm"
                       className="h-8 px-3 text-xs"
-                      onClick={() => startTransition(() => setCurrentPage((pages) => ({ ...pages, [kind]: totalPages })))}
+                      onClick={() =>
+                        startTransition(() =>
+                          setCurrentPage((pages) => ({ ...pages, [kind]: totalPages })),
+                        )
+                      }
                       disabled={safePage === totalPages}
                     >
                       Última
@@ -1069,7 +1184,10 @@ export function Catalog({
           )}
         </section>
 
-        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start lg:w-full lg:max-w-[480px] xl:max-w-[520px] lg:justify-self-end">
+        <section
+          id="wp-player-area"
+          className="lg:sticky lg:top-4 lg:self-start lg:w-full lg:max-w-[480px] xl:max-w-[520px] lg:justify-self-end"
+        >
           {playing ? (
             <div className="space-y-2">
               <VideoPlayer
@@ -1081,13 +1199,13 @@ export function Catalog({
                 kind={kind}
               />
               <p className="truncate text-sm font-semibold">{playing.name}</p>
-              
+
               {/* EPG / Metadata Area */}
-              <PlayerInfo 
+              <PlayerInfo
                 streamId={playing.id}
-                kind={kind} 
-                name={playing.name} 
-                fetchEPG={fetchEPG} 
+                kind={kind}
+                name={playing.name}
+                fetchEPG={fetchEPG}
                 fetchTMDB={fetchTMDB}
               />
             </div>
@@ -1108,21 +1226,21 @@ export function Catalog({
   );
 }
 
-function PlayerInfo({ 
-  streamId, 
-  kind, 
-  name, 
-  fetchEPG, 
-  fetchTMDB 
-}: { 
-  streamId: string; 
-  kind: Kind; 
+function PlayerInfo({
+  streamId,
+  kind,
+  name,
+  fetchEPG,
+  fetchTMDB,
+}: {
+  streamId: string;
+  kind: Kind;
   name: string;
   fetchEPG: any;
   fetchTMDB: any;
 }) {
   const { serverId } = usePlayerSession();
-  
+
   const epg = useQuery({
     queryKey: ["epg", serverId, streamId],
     queryFn: () => fetchEPG({ data: { server_id: serverId!, stream_id: streamId } }),
@@ -1147,19 +1265,33 @@ function PlayerInfo({
         </h3>
         <div className="space-y-2 max-h-[200px] overflow-y-auto wp-scroll pr-1">
           {epg.isLoading ? (
-            <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
           ) : (epg.data ?? []).length > 0 ? (
             epg.data.slice(0, 5).map((prog: any, i: number) => (
-              <div key={i} className={cn("text-[11px] border-l-2 pl-2 py-0.5", i === 0 ? "border-primary bg-primary/5" : "border-muted")}>
+              <div
+                key={i}
+                className={cn(
+                  "text-[11px] border-l-2 pl-2 py-0.5",
+                  i === 0 ? "border-primary bg-primary/5" : "border-muted",
+                )}
+              >
                 <div className="flex justify-between font-bold">
                   <span>{prog.title}</span>
-                  <span className="text-[10px] text-muted-foreground">{prog.start.split(' ')[1]}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {prog.start.split(" ")[1]}
+                  </span>
                 </div>
-                {prog.description && <p className="text-muted-foreground line-clamp-2 mt-0.5">{prog.description}</p>}
+                {prog.description && (
+                  <p className="text-muted-foreground line-clamp-2 mt-0.5">{prog.description}</p>
+                )}
               </div>
             ))
           ) : (
-            <p className="text-[10px] text-muted-foreground text-center py-2 italic">Sem guia de programação disponível para este canal.</p>
+            <p className="text-[10px] text-muted-foreground text-center py-2 italic">
+              Sem guia de programação disponível para este canal.
+            </p>
           )}
         </div>
       </div>
@@ -1173,13 +1305,12 @@ function PlayerInfo({
       ? proxyMediaUrl(`https://image.tmdb.org/t/p/w300${data.poster_path}`)
       : null;
 
-    
     return (
       <div className="rounded-xl border border-border bg-card/50 p-3 space-y-3">
         <div className="flex gap-3">
           {posterUrl && (
-            <img 
-              src={posterUrl} 
+            <img
+              src={posterUrl}
               className="w-20 sm:w-24 rounded-lg shadow-2xl border border-primary/20 ring-1 ring-white/10"
               alt="Poster TMDB"
               loading="lazy"
@@ -1195,7 +1326,8 @@ function PlayerInfo({
               )}
             </div>
             <p className="text-[10px] text-muted-foreground">
-              {data.release_date?.split('-')[0] || data.first_air_date?.split('-')[0]} • {data.genres?.map((g: any) => g.name).join(', ')}
+              {data.release_date?.split("-")[0] || data.first_air_date?.split("-")[0]} •{" "}
+              {data.genres?.map((g: any) => g.name).join(", ")}
             </p>
             <p className="text-[11px] text-muted-foreground line-clamp-4 leading-relaxed mt-1">
               {data.overview || "Sem sinopse disponível."}
