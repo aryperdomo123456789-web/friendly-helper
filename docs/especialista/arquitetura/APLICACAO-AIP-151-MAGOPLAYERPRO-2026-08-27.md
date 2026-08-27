@@ -11,13 +11,16 @@ O padrão exige identidade estável, estado observável e resultado posterior. A
 | Princípio | Aplicação no MAGOPLAYERPRO |
 |---|---|
 | Identidade | Refresh de catálogo emite `operation_ref` hash para correlação, sem URL, token ou conteúdo. |
-| Estados | Refresh registra `pending`, `running`, `succeeded` e `failed`. |
-| Etapas | `queued`, `acquiring_lock`, `fetching_m3u`, `parsing_catalog`, `fetching_catalog`, `persisting_cache`, `completed` e `failed`. |
+| Estados | Refresh registra `pending`, `running`, `cancel_requested`, `succeeded`, `failed` e `cancelled`. |
+| Etapas | `queued`, `acquiring_lock`, `fetching_m3u`, `parsing_catalog`, `fetching_catalog`, `persisting_cache`, `completed`, `failed` e `cancelled`. |
 | Progresso | Percentuais são derivados da etapa e `failed` retorna `null`; nenhum percentual é inventado. |
 | Erros | Falha de execução é registrada como estado terminal sanitizado, separada da aceitação inicial. |
-| Concorrência | O `refreshInFlight` existente mantém coalescing por portal e evita downloads duplicados. O lock de filesystem continua protegendo a escrita. |
-| Contratos | `getPlaybackUrl`, catálogo, sessão, leases, pagamentos e endpoints públicos não foram alterados. |
-| Observabilidade | Logs já existentes receberam estado, etapa, duração e referência hash. |
+| Concorrência | O coalescing durável por `(operation_type, server_id)` evita refreshes ativos duplicados; o claim SQL é atômico e o lock de filesystem continua protegendo a escrita. |
+| Persistência | `long_running_operations` guarda o snapshot atual e `long_running_operation_events` guarda eventos sanitizados; ambos ficam no Supabase e sobrevivem aos quatro processos PM2. |
+| Contratos | `getPlaybackUrl`, catálogo, sessão, leases, pagamentos e endpoints públicos não foram alterados. A procedure owner-only agora retorna `operation_ref` imediatamente em estado `running`. |
+| Consulta | `getRefreshOperationStatus` retorna status sanitizado por referência opaca. O painel usa polling com backoff limitado, sem polling de sessão Manus ou job externo. |
+| Cancelamento | `cancelRefreshOperation` grava `cancel_requested`; o worker verifica o pedido antes dos checkpoints M3U, Xtream, lock e persistência e conclui em `cancelled` quando possível. |
+| Observabilidade | Logs já existentes receberam estado, etapa, duração e referência hash; payload de credenciais, URLs e playlists não é retornado. |
 
 ## Onde não aplicar
 
@@ -25,15 +28,17 @@ Playback de canal, filme ou episódio não deve virar uma LRO genérica. A repro
 
 Também não é necessário copiar literalmente o serviço `google.longrunning.Operations`. O projeto usa TanStack Start/server functions e Supabase; o importante é adotar a semântica de identidade, estado, metadados, resultado, erro, cancelamento, retenção e idempotência.
 
-## Próxima evolução recomendada
+## Implementação final entregue
 
-O refresh ainda espera a conclusão quando chamado diretamente pela procedure administrativa. Para uma evolução posterior, a interface poderá receber imediatamente um snapshot `running` e consultar o estado por `operation_ref`, com polling limitado e backoff. Antes disso, é necessário escolher armazenamento durável para o snapshot; memória de processo não é suficiente quando há quatro processos PM2.
+A procedure owner-only agora grava o snapshot e devolve imediatamente `operation_ref`, `operation_state=running`, etapa inicial e percentual inicial. O worker existente possui um segundo ciclo de consumo que reivindica uma operação por vez através de RPC SQL com `FOR UPDATE SKIP LOCKED`; não foi criado um processo PM2 adicional. Refreshes periódicos entram como `pending`, enquanto refreshes administrativos entram diretamente como `running`, conforme o contrato solicitado.
 
-O cancelamento deve ser cooperativo e limitado ao próprio refresh. O sistema deve rejeitar ou coalescer uma segunda operação no mesmo portal, medir fila, duração, falhas e memória do worker, e só então discutir paralelismo.
+O endpoint de status e o cancelamento são server functions owner-only, com referência UUID opaca, resultado limitado a origem e contagens por tipo, e erro genérico sanitizado. O painel consulta por backoff determinístico de 1,0 s até 15 s e para ao atingir estado terminal. O botão de cancelamento comunica que a interrupção é cooperativa, não uma interrupção forçada de uma requisição externa já em curso.
+
+A retenção é executada pelo ciclo de manutenção do worker. Operações expiradas há mais de 30 dias são removidas com seus eventos por `ON DELETE CASCADE`; a rotina registra somente contagem removida e a política aplicada. Operações ativas não são removidas por retenção enquanto ainda possuem heartbeat recente.
 
 ## Resultado do lote
 
-O helper puro de operação longa e o refresh instrumentado passaram 35/35 testes, lint lógico, `git diff --check` e build sanitizado. O incremento não cria job recorrente, não abre rota pública e não toca banco, credenciais ou fontes de clientes.
+O helper, a camada durável, o worker e o painel passaram 39/39 testes determinísticos, `git diff --check` e build sanitizado sem o identificador legado. A migration foi aplicada após backup verificável de 22.293.878 bytes, as tabelas/RPCs/RLS foram confirmadas, e a produção foi observada por mais de 60 segundos após restart real dos quatro processos. O incremento não cria rota pública, não altera contratos do player e não toca credenciais, playlists ou fontes de clientes.
 
 ## Referências
 
