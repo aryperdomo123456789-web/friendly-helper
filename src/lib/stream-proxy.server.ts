@@ -17,6 +17,7 @@ const TEXT = new TextEncoder();
 export const DEFAULT_TTL_SECONDS = 6 * 60 * 60; // playlists/segments live at most 6h
 
 type TokenPayload = {
+  v?: 2; // HMAC envelope version; absent means legacy AES-only token
   u: string; // upstream absolute URL
   e: number; // expiry (epoch seconds)
   s?: string; // subject (user id) — audit binding only
@@ -38,6 +39,23 @@ function bytesFromB64url(value: string): Uint8Array {
 }
 
 let keyPromise: Promise<CryptoKey> | null = null;
+let hmacKeyPromise: Promise<CryptoKey> | null = null;
+
+async function hmacKey(): Promise<CryptoKey> {
+  if (!hmacKeyPromise) {
+    hmacKeyPromise = (async () => {
+      const secret = process.env["STREAM_PROXY_SECRET"];
+      if (!secret || secret.length < 16) {
+        throw new Error("STREAM_PROXY_SECRET ausente ou fraco no ambiente do servidor.");
+      }
+      return crypto.subtle.importKey("raw", TEXT.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
+        "sign",
+        "verify",
+      ]);
+    })();
+  }
+  return hmacKeyPromise;
+}
 
 async function aesKey(): Promise<CryptoKey> {
   if (!keyPromise) {
@@ -61,6 +79,7 @@ export async function signStreamUrl(
   options: { ttlSeconds?: number; subject?: string; reference?: string } = {},
 ): Promise<string> {
   const payload: TokenPayload = {
+    v: 2,
     u: target,
     e: Math.floor(Date.now() / 1000) + (options.ttlSeconds ?? DEFAULT_TTL_SECONDS),
     ...(options.subject ? { s: options.subject } : {}),
@@ -77,11 +96,15 @@ export async function signStreamUrl(
   const packed = new Uint8Array(iv.length + cipher.length);
   packed.set(iv, 0);
   packed.set(cipher, iv.length);
-  return `/api/public/stream?s=${b64urlFromBytes(packed)}`;
+  const signature = new Uint8Array(
+    await crypto.subtle.sign("HMAC", await hmacKey(), packed),
+  );
+  return `/api/public/stream?s=${b64urlFromBytes(packed)}&h=${b64urlFromBytes(signature)}`;
 }
 
 export async function readStreamToken(
   token: string | null,
+  signature: string | null = null,
 ): Promise<{ url: string; expiresAt: number; subject?: string; reference?: string } | null> {
   if (!token || token.length > 4096) return null;
   try {
@@ -95,6 +118,17 @@ export async function readStreamToken(
     );
     const payload = JSON.parse(new TextDecoder().decode(plain)) as TokenPayload;
     if (typeof payload.u !== "string" || typeof payload.e !== "number") return null;
+    if (payload.v === 2) {
+      if (!signature || signature.length > 256) return null;
+      const signatureBytes = bytesFromB64url(signature);
+      const valid = await crypto.subtle.verify(
+        "HMAC",
+        await hmacKey(),
+        signatureBytes as BufferSource,
+        packed as BufferSource,
+      );
+      if (!valid) return null;
+    }
     if (payload.e * 1000 < Date.now()) return null;
     const parsed = new URL(payload.u);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;

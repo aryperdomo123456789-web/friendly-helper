@@ -49,6 +49,13 @@ import { cn } from "@/lib/utils";
 import { ContentEmptyState } from "@/components/ui/content-empty-state";
 import { toast } from "sonner";
 import { proxyMediaUrl } from "@/lib/media-url";
+import {
+  buildEpgIndex,
+  getVirtualWindow,
+  readEpgSnapshot,
+  writeEpgSnapshot,
+  type EpgProgram,
+} from "@/lib/epg-client";
 
 type Kind = "live" | "movie" | "series";
 
@@ -1378,6 +1385,14 @@ export function Catalog({
   );
 }
 
+function formatEpgTime(timestamp: number): string {
+  if (!Number.isFinite(timestamp) || timestamp < 10_000) return "--:--";
+  return new Date(timestamp).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function PlayerInfo({
   streamId,
   kind,
@@ -1391,7 +1406,11 @@ function PlayerInfo({
   fetchEPG: any;
   fetchTMDB: any;
 }) {
-  const { serverId } = usePlayerSession();
+  const { serverId, authUserId } = usePlayerSession();
+  const [offlinePrograms, setOfflinePrograms] = useState<EpgProgram[]>([]);
+  const [epgScrollTop, setEpgScrollTop] = useState(0);
+  const [epgViewportHeight, setEpgViewportHeight] = useState(200);
+  const epgViewportRef = useRef<HTMLDivElement>(null);
 
   const epg = useQuery({
     queryKey: ["epg", serverId, streamId],
@@ -1400,6 +1419,55 @@ function PlayerInfo({
     staleTime: 60_000,
     placeholderData: (previous) => previous,
   });
+
+  useEffect(() => {
+    if (kind !== "live" || !authUserId || !serverId || !streamId) {
+      setOfflinePrograms([]);
+      return;
+    }
+    let cancelled = false;
+    void readEpgSnapshot(authUserId, serverId, streamId)
+      .then((snapshot) => {
+        if (!cancelled && snapshot) setOfflinePrograms(snapshot.programs);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [authUserId, kind, serverId, streamId]);
+
+  useEffect(() => {
+    if (kind !== "live" || !authUserId || !serverId || !streamId || !epg.data?.length) return;
+    void writeEpgSnapshot(authUserId, serverId, streamId, epg.data as EpgProgram[]).catch(
+      () => undefined,
+    );
+  }, [authUserId, epg.data, kind, serverId, streamId]);
+
+  useEffect(() => {
+    const viewport = epgViewportRef.current;
+    if (!viewport) return;
+    const updateViewport = () => setEpgViewportHeight(viewport.clientHeight || 200);
+    updateViewport();
+    const observer =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(updateViewport) : null;
+    observer?.observe(viewport);
+    const onScroll = () => setEpgScrollTop(viewport.scrollTop);
+    viewport.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      observer?.disconnect();
+      viewport.removeEventListener("scroll", onScroll);
+    };
+  }, [kind, streamId]);
+
+  const networkPrograms = Array.isArray(epg.data) ? (epg.data as EpgProgram[]) : [];
+  const displayPrograms = networkPrograms.length > 0 ? networkPrograms : offlinePrograms;
+  const epgIndex = useMemo(() => buildEpgIndex(displayPrograms), [displayPrograms]);
+  const virtualWindow = useMemo(
+    () => getVirtualWindow(epgIndex.programs.length, epgScrollTop, epgViewportHeight),
+    [epgIndex.programs.length, epgScrollTop, epgViewportHeight],
+  );
+  const visiblePrograms = epgIndex.programs.slice(virtualWindow.start, virtualWindow.end);
+  const usingOfflineEpg = networkPrograms.length === 0 && offlinePrograms.length > 0;
 
   const tmdb = useQuery({
     queryKey: ["tmdb", name, kind],
@@ -1415,37 +1483,50 @@ function PlayerInfo({
         <h3 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
           <Info className="h-3 w-3" /> Programação EPG
         </h3>
-        <div className="space-y-2 max-h-[200px] overflow-y-auto wp-scroll pr-1">
-          {epg.isLoading ? (
+        <div
+          ref={epgViewportRef}
+          className="max-h-[200px] min-h-[120px] overflow-y-auto wp-scroll pr-1"
+          aria-label="Eventos de programação"
+        >
+          {epg.isLoading && displayPrograms.length === 0 ? (
             <div className="flex justify-center py-4">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             </div>
-          ) : (epg.data ?? []).length > 0 ? (
-            epg.data.slice(0, 5).map((prog: any, i: number) => (
-              <div
-                key={i}
-                className={cn(
-                  "text-[11px] border-l-2 pl-2 py-0.5",
-                  i === 0 ? "border-primary bg-primary/5" : "border-muted",
-                )}
-              >
-                <div className="flex justify-between font-bold">
-                  <span>{prog.title}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {prog.start.split(" ")[1]}
-                  </span>
-                </div>
-                {prog.description && (
-                  <p className="text-muted-foreground line-clamp-2 mt-0.5">{prog.description}</p>
-                )}
+          ) : displayPrograms.length > 0 ? (
+            <div style={{ height: virtualWindow.totalHeight }}>
+              <div style={{ transform: `translateY(${virtualWindow.offsetTop}px)` }}>
+                {visiblePrograms.map((prog, i) => (
+                  <div
+                    key={prog.id}
+                    className={cn(
+                      "min-h-[76px] border-l-2 py-2 pl-2 text-[11px]",
+                      virtualWindow.start + i === epgIndex.currentIndex
+                        ? "border-primary bg-primary/5"
+                        : "border-muted",
+                    )}
+                  >
+                    <div className="flex justify-between gap-2 font-bold">
+                      <span className="line-clamp-2">{prog.title}</span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground">
+                        {formatEpgTime(prog.startMs)}
+                      </span>
+                    </div>
+                    {prog.description ? (
+                      <p className="mt-0.5 line-clamp-2 text-muted-foreground">{prog.description}</p>
+                    ) : null}
+                  </div>
+                ))}
               </div>
-            ))
+            </div>
           ) : (
-            <p className="text-[10px] text-muted-foreground text-center py-2 italic">
+            <p className="py-2 text-center text-[10px] italic text-muted-foreground">
               Sem guia de programação disponível para este canal.
             </p>
           )}
         </div>
+        {usingOfflineEpg ? (
+          <p className="text-[10px] text-amber-500">Guia local disponível; atualizando quando a conexão voltar.</p>
+        ) : null}
       </div>
     );
   }

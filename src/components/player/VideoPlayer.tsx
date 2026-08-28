@@ -8,6 +8,7 @@ import {
   qualityChangeDetails,
   type PlayerQualityOption,
 } from "@/lib/player-quality";
+import { createHlsPlayerConfig } from "@/lib/hls-player-config";
 
 type Props = {
   url: string;
@@ -74,9 +75,11 @@ export function VideoPlayer({
     let destroyed = false;
     let hls: import("hls.js").default | null = null;
     let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+    let stallTimer: ReturnType<typeof setTimeout> | null = null;
     let startupTimer: ReturnType<typeof setTimeout> | null = null;
     let qualityTimer: ReturnType<typeof setInterval> | null = null;
     let recoveryAttempts = 0;
+    const maxRecoveryAttempts = kind === "live" ? 5 : 4;
     let hasStartedPlaying = false;
     let fallbackIndex = 0;
     let hasNativeError = false;
@@ -131,6 +134,10 @@ export function VideoPlayer({
     const onPlaying = () => {
       if (destroyed) return;
       clearStartupTimer();
+      if (stallTimer) clearTimeout(stallTimer);
+      if (recoveryTimer) clearTimeout(recoveryTimer);
+      stallTimer = null;
+      recoveryTimer = null;
       hasStartedPlaying = true;
       telemetry.markBufferEnd(currentDetails());
       if (!hasReportedPlaying) {
@@ -142,18 +149,29 @@ export function VideoPlayer({
           ...currentDetails(),
           recovery_attempt: recoveryAttempts,
         });
+        recoveryAttempts = 0;
       }
       ready();
     };
 
     const onBufferStart = () => {
       if (destroyed) return;
-      if (hasStartedPlaying) telemetry.markBufferStart(currentDetails());
+      if (hasStartedPlaying) {
+        telemetry.markBufferStart(currentDetails());
+        if (!stallTimer) {
+          stallTimer = setTimeout(() => {
+            stallTimer = null;
+            void scheduleRecovery("buffer_stall");
+          }, 2_500);
+        }
+      }
       setLoading(true);
     };
 
     const onBufferEnd = () => {
       if (destroyed) return;
+      if (stallTimer) clearTimeout(stallTimer);
+      stallTimer = null;
       telemetry.markBufferEnd(currentDetails());
       ready();
     };
@@ -197,6 +215,27 @@ export function VideoPlayer({
 
     let tryNextFallback = (_reason: string) => false;
 
+    const scheduleRecovery = (reason: string): boolean => {
+      if (destroyed || !hls || recoveryTimer) return false;
+      if (recoveryAttempts >= maxRecoveryAttempts) {
+        return tryNextFallback(reason);
+      }
+
+      recoveryAttempts += 1;
+      const delayMs = Math.min(12_000, 500 * 2 ** (recoveryAttempts - 1));
+      telemetry.record("recover_attempt", {
+        recovery_attempt: recoveryAttempts,
+        reason: `silent_backoff:${reason}`,
+      });
+      recoveryTimer = setTimeout(() => {
+        recoveryTimer = null;
+        if (destroyed || !hls) return;
+        if (reason.includes("media")) hls.recoverMediaError();
+        else hls.startLoad();
+      }, delayMs);
+      return true;
+    };
+
     const startSource = async (sourceUrl: string) => {
       clearStartupTimer();
       startupTimer = setTimeout(() => {
@@ -220,21 +259,7 @@ export function VideoPlayer({
         const Hls = mod.default;
         if (destroyed) return;
         if (Hls.isSupported()) {
-          hls = new Hls({
-            lowLatencyMode: false,
-            enableWorker: true,
-            backBufferLength: 90,
-            maxBufferLength: 30,
-            maxMaxBufferLength: 120,
-            maxBufferHole: 0.5,
-            liveSyncDurationCount: 3,
-            liveMaxLatencyDurationCount: 8,
-            manifestLoadingMaxRetry: 15,
-            levelLoadingMaxRetry: 15,
-            fragLoadingMaxRetry: 25,
-            fragLoadingTimeOut: 60_000,
-            manifestLoadingTimeOut: 60_000,
-          });
+          hls = new Hls(createHlsPlayerConfig(kind));
           hls.attachMedia(video);
           hls.loadSource(sourceUrl);
           hls.on(Hls.Events.MANIFEST_PARSED, (_event, data) => {
@@ -278,31 +303,20 @@ export function VideoPlayer({
               ...currentDetails(),
             });
 
-            if (recoveryAttempts >= 2) {
-              if (tryNextFallback("hls_fatal_error")) return;
-              const code = (data.response as { code?: number } | undefined)?.code;
-              setError(
-                code === 404 || code === 502
-                  ? "Canal indisponível no servidor no momento. Tente outro canal ou portal."
-                  : "Não foi possível iniciar o canal. Tente novamente ou escolha outro portal.",
-              );
-              return;
-            }
-
             if (
               data.type === Hls.ErrorTypes.MEDIA_ERROR ||
               data.type === Hls.ErrorTypes.NETWORK_ERROR
             ) {
-              recoveryAttempts += 1;
-              telemetry.record("recover_attempt", {
-                recovery_attempt: recoveryAttempts,
-                error_code: errorCode,
-              });
-              if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls?.recoverMediaError();
-              recoveryTimer = setTimeout(() => {
-                if (!destroyed) hls?.startLoad();
-              }, 250 * recoveryAttempts);
+              if (scheduleRecovery(errorCode)) return;
             }
+
+            if (tryNextFallback("hls_fatal_error")) return;
+            const code = (data.response as { code?: number } | undefined)?.code;
+            setError(
+              code === 404 || code === 502
+                ? "Canal indisponível no servidor no momento. Tente outro canal ou portal."
+                : "Não foi possível iniciar o canal. Tente novamente ou escolha outro portal.",
+            );
           });
           return;
         }
@@ -405,6 +419,7 @@ export function VideoPlayer({
       qualityOptionsLocal = [];
       if (qualityTimer) clearInterval(qualityTimer);
       if (recoveryTimer) clearTimeout(recoveryTimer);
+      if (stallTimer) clearTimeout(stallTimer);
       clearStartupTimer();
       video.removeEventListener("loadeddata", onFirstFrame);
       video.removeEventListener("canplay", ready);

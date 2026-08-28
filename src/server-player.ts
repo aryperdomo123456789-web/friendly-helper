@@ -34,7 +34,10 @@ const playerService = {
     }
 
     try {
-      const token = await readStreamToken(url.searchParams.get("s"));
+      const token = await readStreamToken(
+        url.searchParams.get("s"),
+        url.searchParams.get("h"),
+      );
       if (!token) return textResponse("Token inválido ou expirado.", 403);
 
       const target = token.url;
@@ -121,12 +124,13 @@ const playerService = {
       }
 
       const contentType = upstream.headers.get("content-type") ?? "";
+      const safeContentType = sanitizeContentType(contentType);
       const baseUrl = upstream.url || target;
 
       if (!upstream.ok && upstream.status !== 206) {
         finish("http_error", {
           status: upstream.status,
-          contentType: sanitizeContentType(contentType),
+          ...(safeContentType ? { contentType: safeContentType } : {}),
           reason: "upstream_non_success",
         });
         if (expectsHls) {
@@ -153,13 +157,13 @@ const playerService = {
           headers.set("content-type", "application/vnd.apple.mpegurl");
           finish("playlist_rewritten", {
             status: upstream.status,
-            contentType: sanitizeContentType(contentType),
+            ...(safeContentType ? { contentType: safeContentType } : {}),
           });
           return new Response(rewritten, { status: 200, headers });
         }
         finish("playlist_invalid", {
           status: upstream.status,
-          contentType: sanitizeContentType(contentType),
+          ...(safeContentType ? { contentType: safeContentType } : {}),
           reason: "playlist_signature_missing",
         });
         return unavailableHlsResponse();
@@ -174,7 +178,7 @@ const playerService = {
 
       finish("media_forwarded", {
         status: upstream.status,
-        contentType: sanitizeContentType(contentType),
+        ...(safeContentType ? { contentType: safeContentType } : {}),
       });
       return new Response(upstream.body, { status: upstream.status, headers });
     } catch {

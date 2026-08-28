@@ -61,8 +61,17 @@ test("round-trips the internal server reference inside the encrypted token", asy
     reference: "server-id-for-test",
     subject: "user-id-for-test",
   });
-  const token = new URL(`https://app.test${signed}`).searchParams.get("s");
-  const decoded = await readStreamToken(token);
+  const parsed = new URL(`https://app.test${signed}`);
+  const decoded = await readStreamToken(
+    parsed.searchParams.get("s"),
+    parsed.searchParams.get("h"),
+  );
   assert.equal(decoded?.reference, "server-id-for-test");
   assert.equal(decoded?.subject, "user-id-for-test");
+
+  const tamperedSignature = parsed.searchParams.get("h")?.replace(/^./, "A");
+  assert.equal(
+    await readStreamToken(parsed.searchParams.get("s"), tamperedSignature ?? ""),
+    null,
+  );
 });

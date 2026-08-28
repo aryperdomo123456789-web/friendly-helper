@@ -19,12 +19,16 @@ export const Route = createFileRoute("/api/public/stream")({
         const playerServiceUrl = process.env["STREAM_SERVICE_URL"];
         if (playerServiceUrl) {
           const startedAt = Date.now();
-          const token = await readStreamToken(url.searchParams.get("s"));
+          const token = await readStreamToken(
+            url.searchParams.get("s"),
+            url.searchParams.get("h"),
+          );
           const serverRef = await hashStreamReference(token?.reference);
           const expectsHls =
             url.searchParams.get("hls") === "1" || Boolean(token?.url.includes(".m3u8"));
           try {
             const response = await proxyToInternalService(request, playerServiceUrl);
+            const safeContentType = sanitizeContentType(response.headers.get("content-type"));
             logStreamUpstream({
               service: "main",
               serverRef,
@@ -33,7 +37,7 @@ export const Route = createFileRoute("/api/public/stream")({
                   ? "upstream_response"
                   : "http_error",
               status: response.status,
-              contentType: sanitizeContentType(response.headers.get("content-type")),
+              ...(safeContentType ? { contentType: safeContentType } : {}),
               attempts: 1,
               elapsedMs: Date.now() - startedAt,
               expectsHls,
@@ -56,7 +60,10 @@ export const Route = createFileRoute("/api/public/stream")({
         }
 
         const { looksLikePlaylist, rewritePlaylist } = await import("@/lib/stream-proxy.server");
-        const token = await readStreamToken(url.searchParams.get("s"));
+        const token = await readStreamToken(
+          url.searchParams.get("s"),
+          url.searchParams.get("h"),
+        );
         if (!token) return new Response("Token inválido ou expirado.", { status: 403 });
 
         const target = token.url;
