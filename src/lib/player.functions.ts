@@ -13,6 +13,15 @@ import { getPlaybackExtensions } from "./stream-format";
 
 type Kind = "live" | "movie" | "series";
 
+type EpgProgramPayload = {
+  title: string;
+  description: string;
+  start: string;
+  end: string;
+  start_timestamp: string;
+  stop_timestamp: string;
+};
+
 const kindSchema = z.enum(["live", "movie", "series"]);
 const streamCacheMap: Record<Kind, { categories: string; streams: string }> = {
   live: { categories: "get_live_categories", streams: "get_live_streams" },
@@ -53,7 +62,9 @@ async function claimDeviceSession(params: {
     throw new Error(`Capacidade de conexões do servidor atingida${capacity}.`);
   }
   if (result.reason === "user_limit") {
-    throw new Error(`Limite de ${result.user_limit ?? 0} conexões simultâneas atingido neste acesso.`);
+    throw new Error(
+      `Limite de ${result.user_limit ?? 0} conexões simultâneas atingido neste acesso.`,
+    );
   }
   throw new Error("Servidor indisponível para novas conexões.");
 }
@@ -110,15 +121,16 @@ function normalizeCategoryValue(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function isCategoryScoped<T extends { category_id: string | null }>(items: T[], categoryId: string) {
+function isCategoryScoped<T extends { category_id: string | null }>(
+  items: T[],
+  categoryId: string,
+) {
   if (!items.length) return false;
   const target = normalizeCategoryValue(categoryId);
   if (!target) return false;
 
   const categories = new Set(
-    items
-      .map((item) => normalizeCategoryValue(item.category_id))
-      .filter(Boolean),
+    items.map((item) => normalizeCategoryValue(item.category_id)).filter(Boolean),
   );
 
   return categories.size === 1 && categories.has(target);
@@ -146,8 +158,7 @@ async function resolveAccess(userId: string, serverId: string) {
         .maybeSingle(),
       supabaseAdmin.from("user_roles").select("role").eq("user_id", userId),
     ]);
-    const isOwner =
-      !profile || !!roles?.some((r: any) => r.role === "owner" || r.role === "admin");
+    const isOwner = !profile || !!roles?.some((r: any) => r.role === "owner" || r.role === "admin");
     if (profile && !isOwner) {
       if (!profile.is_active) throw new Error("Acesso desativado. Fale com o suporte.");
       if (profile.expires_at && new Date(profile.expires_at).getTime() < Date.now()) {
@@ -239,14 +250,15 @@ export const getMySession = createServerFn({ method: "GET" })
     }
 
     const { data: servers } = await serverQuery;
-    const expired = !isOwner && profile?.expires_at && new Date(profile.expires_at).getTime() < Date.now();
-    
-    return { 
+    const expired =
+      !isOwner && profile?.expires_at && new Date(profile.expires_at).getTime() < Date.now();
+
+    return {
       authUserId: context.userId,
-      profile, 
-      isOwner, 
+      profile,
+      isOwner,
       servers: servers ?? [],
-      expired: Boolean(expired)
+      expired: Boolean(expired),
     };
   });
 
@@ -417,7 +429,11 @@ export const getStreams = createServerFn({ method: "POST" })
     }
 
     if (data.category_id) {
-      const playlistFallback = await hydrateCatalogFromPlaylist(data.server_id, data.kind, data.category_id);
+      const playlistFallback = await hydrateCatalogFromPlaylist(
+        data.server_id,
+        data.kind,
+        data.category_id,
+      );
       if (playlistFallback) {
         return playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream);
       }
@@ -447,7 +463,11 @@ export const getStreams = createServerFn({ method: "POST" })
       const normalized = Array.isArray(result) ? normalizeStreams(result) : [];
       if (normalized.length > 0) {
         if (data.category_id && !isCategoryScoped(normalized, data.category_id)) {
-          const playlistFallback = await hydrateCatalogFromPlaylist(data.server_id, data.kind, data.category_id);
+          const playlistFallback = await hydrateCatalogFromPlaylist(
+            data.server_id,
+            data.kind,
+            data.category_id,
+          );
           if (playlistFallback) {
             return playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream);
           }
@@ -458,18 +478,18 @@ export const getStreams = createServerFn({ method: "POST" })
 
       if (data.category_id) {
         const fullResult = await xtreamCall<
-        Array<{
-          num?: number;
-          name: string;
-          stream_id?: number;
-          series_id?: number;
-          M_ID?: number | string;
-          m_id?: number | string;
-          stream_icon?: string;
-          cover?: string;
-          container_extension?: string;
-          rating?: string;
-          category_id?: string;
+          Array<{
+            num?: number;
+            name: string;
+            stream_id?: number;
+            series_id?: number;
+            M_ID?: number | string;
+            m_id?: number | string;
+            stream_icon?: string;
+            cover?: string;
+            container_extension?: string;
+            rating?: string;
+            category_id?: string;
             epg_channel_id?: string;
           }>
         >(credential, { action: streamCacheMap[data.kind].streams });
@@ -484,7 +504,11 @@ export const getStreams = createServerFn({ method: "POST" })
       await writeServerCache(data.server_id, cacheKey, normalized);
       return normalized;
     } catch (error) {
-      const playlistFallback = await hydrateCatalogFromPlaylist(data.server_id, data.kind, data.category_id);
+      const playlistFallback = await hydrateCatalogFromPlaylist(
+        data.server_id,
+        data.kind,
+        data.category_id,
+      );
       if (playlistFallback) {
         return playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream);
       }
@@ -526,7 +550,8 @@ export const getSeriesInfo = createServerFn({ method: "POST" })
         Array<{ id: string; title: string; episode_num: number; container_extension?: string }>
       >;
     }>(credential, { action: "get_series_info", series_id: data.series_id });
-    const episodesBySeason = result?.episodes && typeof result.episodes === "object" ? result.episodes : {};
+    const episodesBySeason =
+      result?.episodes && typeof result.episodes === "object" ? result.episodes : {};
     const payload = {
       info: result?.info ?? {},
       seasons: Object.entries(episodesBySeason).map(([season, episodes]) => ({
@@ -536,7 +561,7 @@ export const getSeriesInfo = createServerFn({ method: "POST" })
           title: episode.title,
           episode_num: episode.episode_num,
           ext: episode.container_extension ?? "mp4",
-          })),
+        })),
       })),
     };
     await writeServerCache(data.server_id, cacheKey, payload);
@@ -552,7 +577,14 @@ export const getVodInfo = createServerFn({ method: "POST" })
     const { credential } = await resolveAccess(context.userId, data.server_id);
     const cacheKey = serverCatalogCacheKey("movie", "vod-info", data.vod_id);
     const cached = await readServerCache<{
-      info: { plot?: string; movie_image?: string; genre?: string; releasedate?: string; duration?: string; rating?: string };
+      info: {
+        plot?: string;
+        movie_image?: string;
+        genre?: string;
+        releasedate?: string;
+        duration?: string;
+        rating?: string;
+      };
       name: string;
       ext: string;
     }>(data.server_id, cacheKey);
@@ -560,7 +592,14 @@ export const getVodInfo = createServerFn({ method: "POST" })
 
     const { xtreamCall } = await import("./xtream.server");
     const result = await xtreamCall<{
-      info?: { plot?: string; movie_image?: string; genre?: string; releasedate?: string; duration?: string; rating?: string };
+      info?: {
+        plot?: string;
+        movie_image?: string;
+        genre?: string;
+        releasedate?: string;
+        duration?: string;
+        rating?: string;
+      };
       movie_data?: { name?: string; container_extension?: string };
     }>(credential, { action: "get_vod_info", vod_id: data.vod_id });
     const payload = {
@@ -602,15 +641,21 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
       });
     }
 
-    const { buildStreamUrl } = await import("./xtream.server");
+    const { buildStreamUrlCandidates } = await import("./stream-candidates");
     const { signStreamUrl } = await import("./stream-proxy.server");
     const playbackExtensions = getPlaybackExtensions(data.kind, data.ext);
     const playbackTtlSeconds = 24 * 60 * 60;
     // Proxied through our own origin: the panels only serve plain HTTP and the
     // browser refuses mixed content on an HTTPS page.
+    const streamCandidates = buildStreamUrlCandidates(
+      credential,
+      data.kind,
+      data.stream_id,
+      playbackExtensions,
+      5,
+    );
     const playbackUrls = await Promise.all(
-      playbackExtensions.map(async (extension) => {
-        const direct = buildStreamUrl(credential, data.kind, data.stream_id, extension);
+      streamCandidates.map(async (direct) => {
         const proxied = await signStreamUrl(direct, {
           subject: context.userId,
           reference: data.server_id,
@@ -645,6 +690,7 @@ const playbackTelemetryEventSchema = z.object({
     "quality_change",
     "ended",
     "destroyed",
+    "qoe_summary",
   ]),
   at_ms: z.number().int().min(0).max(86_400_000),
   duration_ms: z.number().int().min(0).max(86_400_000).optional(),
@@ -657,6 +703,10 @@ const playbackTelemetryEventSchema = z.object({
   fatal: z.boolean().optional(),
   error_code: z.string().max(64).optional(),
   recovery_attempt: z.number().int().min(0).max(20).optional(),
+  rebuffer_count: z.number().int().min(0).max(1_000_000).optional(),
+  rebuffer_duration_ms: z.number().int().min(0).max(86_400_000).optional(),
+  playback_duration_ms: z.number().int().min(0).max(86_400_000).optional(),
+  stall_rate_per_min: z.number().min(0).max(10_000).optional(),
   reason: z.string().max(80).optional(),
 });
 
@@ -770,11 +820,16 @@ export const getChannelEPG = createServerFn({ method: "POST" })
         const decoded = atob(str);
         return decodeURIComponent(escape(decoded));
       } catch (e) {
-        return str; 
+        return str;
       }
     };
 
-    if (result && 'epg_listings' in result && Array.isArray(result.epg_listings) && result.epg_listings.length > 0) {
+    if (
+      result &&
+      "epg_listings" in result &&
+      Array.isArray(result.epg_listings) &&
+      result.epg_listings.length > 0
+    ) {
       const payload = result.epg_listings.map((item) => ({
         title: decode(item.title),
         description: decode(item.description),
@@ -791,11 +846,13 @@ export const getChannelEPG = createServerFn({ method: "POST" })
     const config = await getAppConfig();
     if (config.epg_xmltv_url) {
       try {
-        const streams = await xtreamCall<any[]>(credential, { 
-          action: "get_live_streams", 
-          stream_id: data.stream_id 
+        const streams = await xtreamCall<any[]>(credential, {
+          action: "get_live_streams",
+          stream_id: data.stream_id,
         });
-        const targetStream = Array.isArray(streams) ? streams.find(s => String(s.stream_id) === data.stream_id) : null;
+        const targetStream = Array.isArray(streams)
+          ? streams.find((s) => String(s.stream_id) === data.stream_id)
+          : null;
         const channelName = targetStream?.name || "";
 
         if (channelName) {
@@ -816,6 +873,62 @@ export const getChannelEPG = createServerFn({ method: "POST" })
     }> = [];
     await writeServerCache(data.server_id, cacheKey, payload);
     return payload;
+  });
+
+export const getChannelsEPG = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        server_id: z.string().uuid(),
+        stream_ids: z.array(z.string().max(30)).min(1).max(48),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { credential } = await resolveAccess(context.userId, data.server_id);
+    const { xtreamCall } = await import("./xtream.server");
+    const uniqueStreamIds = Array.from(new Set(data.stream_ids));
+    const rows: Array<{ stream_id: string; programs: EpgProgramPayload[] }> = [];
+
+    for (let offset = 0; offset < uniqueStreamIds.length; offset += 6) {
+      const batch = uniqueStreamIds.slice(offset, offset + 6);
+      const batchRows = await Promise.all(
+        batch.map(async (streamId) => {
+          const cacheKey = serverCatalogCacheKey("live", "epg", streamId);
+          const cached = await readServerCache<EpgProgramPayload[]>(data.server_id, cacheKey);
+          if (cached && !cached.stale && Array.isArray(cached.payload)) {
+            return { stream_id: streamId, programs: cached.payload };
+          }
+
+          try {
+            const result = await xtreamCall<{
+              epg_listings?: EpgProgramPayload[];
+            }>(credential, { action: "get_short_epg", stream_id: streamId });
+            const programs = Array.isArray(result?.epg_listings)
+              ? result.epg_listings.map((item) => ({
+                  title: item.title,
+                  description: item.description,
+                  start: item.start,
+                  end: item.end,
+                  start_timestamp: item.start_timestamp,
+                  stop_timestamp: item.stop_timestamp,
+                }))
+              : [];
+            if (programs.length > 0) await writeServerCache(data.server_id, cacheKey, programs);
+            return { stream_id: streamId, programs };
+          } catch {
+            return {
+              stream_id: streamId,
+              programs: Array.isArray(cached?.payload) ? cached.payload : [],
+            };
+          }
+        }),
+      );
+      rows.push(...batchRows);
+    }
+
+    return rows;
   });
 
 async function fetchTMDB(apiKey: string, type: "movie" | "tv", query: string, year?: string) {
@@ -839,33 +952,35 @@ async function fetchTMDB(apiKey: string, type: "movie" | "tv", query: string, ye
 export const getEnrichedMetadata = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ 
-      kind: z.enum(["movie", "series"]), 
-      name: z.string(), 
-      year: z.string().optional() 
-    }).parse(input),
+    z
+      .object({
+        kind: z.enum(["movie", "series"]),
+        name: z.string(),
+        year: z.string().optional(),
+      })
+      .parse(input),
   )
   .handler(async ({ data }) => {
     const config = await getAppConfig();
     if (!config.tmdb_api_key) return null;
 
     const tmdbType = data.kind === "movie" ? "movie" : "tv";
-    
+
     // Sistema Inteligente de TMDB:
     // 1. Limpeza agressiva do nome para match perfeito
     const cleanName = data.name
       .replace(/\[.*?\]|\(.*?\)/g, "") // Remove tags
       .replace(/(1080p|720p|4k|uhd|hdtv|x264|hevc|dual|dublado|legendado)/gi, "") // Remove specs comuns
       .trim();
-    
+
     // 2. Tenta match com o nome limpo
     let meta = await fetchTMDB(config.tmdb_api_key, tmdbType, cleanName, data.year);
-    
+
     // 3. Fallback inteligente: se nao achar, tenta tirar palavras curtas do final
     if (!meta && cleanName.split(" ").length > 2) {
       const shorterName = cleanName.split(" ").slice(0, -1).join(" ");
       meta = await fetchTMDB(config.tmdb_api_key, tmdbType, shorterName, data.year);
     }
-    
+
     return meta;
   });

@@ -9,6 +9,7 @@ import {
   type PlayerQualityOption,
 } from "@/lib/player-quality";
 import { createHlsPlayerConfig } from "@/lib/hls-player-config";
+import { createAutoHealingController } from "@/lib/player-auto-healing";
 
 type Props = {
   url: string;
@@ -80,6 +81,11 @@ export function VideoPlayer({
     let qualityTimer: ReturnType<typeof setInterval> | null = null;
     let recoveryAttempts = 0;
     const maxRecoveryAttempts = kind === "live" ? 5 : 4;
+    const healing = createAutoHealingController({
+      maxRecoveryAttempts,
+      upstreamCount: 1 + fallbackUrls.length,
+      switchAfterFailures: 3,
+    });
     let hasStartedPlaying = false;
     let fallbackIndex = 0;
     let hasNativeError = false;
@@ -134,20 +140,23 @@ export function VideoPlayer({
     const onPlaying = () => {
       if (destroyed) return;
       clearStartupTimer();
+      const healingBeforePlaying = healing.snapshot();
       if (stallTimer) clearTimeout(stallTimer);
       if (recoveryTimer) clearTimeout(recoveryTimer);
       stallTimer = null;
       recoveryTimer = null;
       hasStartedPlaying = true;
       telemetry.markBufferEnd(currentDetails());
+      healing.observeHealthy();
       if (!hasReportedPlaying) {
         hasReportedPlaying = true;
         telemetry.record("playing", currentDetails());
       }
-      if (recoveryAttempts > 0) {
+      if (recoveryAttempts > 0 || healingBeforePlaying.state !== "healthy") {
         telemetry.record("recover_success", {
           ...currentDetails(),
-          recovery_attempt: recoveryAttempts,
+          recovery_attempt: Math.max(recoveryAttempts, healingBeforePlaying.recoveryCount),
+          reason: healingBeforePlaying.state,
         });
         recoveryAttempts = 0;
       }
@@ -215,25 +224,35 @@ export function VideoPlayer({
 
     let tryNextFallback = (_reason: string) => false;
 
-    const scheduleRecovery = (reason: string): boolean => {
+    const scheduleRecovery = (reason: string, status?: number): boolean => {
       if (destroyed || !hls || recoveryTimer) return false;
-      if (recoveryAttempts >= maxRecoveryAttempts) {
-        return tryNextFallback(reason);
+      const decision = healing.observeFailure({ reason, ...(status ? { status } : {}) });
+
+      if (decision.action === "switch_upstream") {
+        const switched = tryNextFallback(`auto_healing:${decision.reason}`);
+        if (switched) {
+          healing.markUpstreamSwitch();
+          return true;
+        }
       }
 
-      recoveryAttempts += 1;
-      const delayMs = Math.min(12_000, 500 * 2 ** (recoveryAttempts - 1));
-      telemetry.record("recover_attempt", {
-        recovery_attempt: recoveryAttempts,
-        reason: `silent_backoff:${reason}`,
-      });
-      recoveryTimer = setTimeout(() => {
-        recoveryTimer = null;
-        if (destroyed || !hls) return;
-        if (reason.includes("media")) hls.recoverMediaError();
-        else hls.startLoad();
-      }, delayMs);
-      return true;
+      if (decision.action === "recover") {
+        recoveryAttempts = decision.recoveryCount;
+        const delayMs = Math.min(12_000, 500 * 2 ** (recoveryAttempts - 1));
+        telemetry.record("recover_attempt", {
+          recovery_attempt: recoveryAttempts,
+          reason: `silent_backoff:${decision.reason}`,
+        });
+        recoveryTimer = setTimeout(() => {
+          recoveryTimer = null;
+          if (destroyed || !hls) return;
+          if (reason.includes("media")) hls.recoverMediaError();
+          else hls.startLoad();
+        }, delayMs);
+        return true;
+      }
+
+      return tryNextFallback(`auto_healing_failed:${decision.reason}`);
     };
 
     const startSource = async (sourceUrl: string) => {
@@ -307,7 +326,14 @@ export function VideoPlayer({
               data.type === Hls.ErrorTypes.MEDIA_ERROR ||
               data.type === Hls.ErrorTypes.NETWORK_ERROR
             ) {
-              if (scheduleRecovery(errorCode)) return;
+              const responseCode = Number((data.response as { code?: number } | undefined)?.code);
+              if (
+                scheduleRecovery(
+                  errorCode,
+                  Number.isFinite(responseCode) ? responseCode : undefined,
+                )
+              )
+                return;
             }
 
             if (tryNextFallback("hls_fatal_error")) return;
@@ -458,7 +484,10 @@ export function VideoPlayer({
       />
       {qualityOptions.length > 1 ? (
         <div className="absolute right-3 top-3 rounded-md bg-black/70 px-2 py-1.5 text-white shadow-lg">
-          <label className="mr-2 text-[10px] font-semibold uppercase tracking-wider" htmlFor="player-quality-select">
+          <label
+            className="mr-2 text-[10px] font-semibold uppercase tracking-wider"
+            htmlFor="player-quality-select"
+          >
             Qualidade
           </label>
           <select

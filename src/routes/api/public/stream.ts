@@ -6,6 +6,7 @@ import {
   sanitizeContentType,
 } from "@/lib/stream-observability";
 import { readStreamToken } from "@/lib/stream-proxy.server";
+import { attachStreamSessionCookie, claimStreamReplay } from "@/lib/stream-replay.server";
 
 // Public because <video>/hls.js cannot attach an Authorization header.
 // Security model: the querystring carries ONLY an AES-256-GCM ciphertext produced
@@ -17,13 +18,23 @@ export const Route = createFileRoute("/api/public/stream")({
       GET: async ({ request }) => {
         const url = new URL(request.url);
         const playerServiceUrl = process.env["STREAM_SERVICE_URL"];
+        const token = await readStreamToken(url.searchParams.get("s"), url.searchParams.get("h"));
+        if (!token) return new Response("Token inválido ou expirado.", { status: 403 });
+        const replay = await claimStreamReplay({
+          request,
+          expiresAt: token.expiresAt,
+          ...(token.replayKey ? { replayKey: token.replayKey } : {}),
+          ...(token.sessionKey ? { sessionKey: token.sessionKey } : {}),
+          ...(token.subject ? { subject: token.subject } : {}),
+          ...(token.isRoot !== undefined ? { isRoot: token.isRoot } : {}),
+        });
+        if (!replay.allowed) return new Response("Sessão de stream inválida.", { status: 403 });
+        const withSessionCookie = (response: Response) =>
+          attachStreamSessionCookie(response, token.sessionKey, replay.setCookie);
+
         if (playerServiceUrl) {
           const startedAt = Date.now();
-          const token = await readStreamToken(
-            url.searchParams.get("s"),
-            url.searchParams.get("h"),
-          );
-          const serverRef = await hashStreamReference(token?.reference);
+          const serverRef = await hashStreamReference(token.reference);
           const expectsHls =
             url.searchParams.get("hls") === "1" || Boolean(token?.url.includes(".m3u8"));
           try {
@@ -43,7 +54,7 @@ export const Route = createFileRoute("/api/public/stream")({
               expectsHls,
               reason: "internal_player_response",
             });
-            return response;
+            return withSessionCookie(response);
           } catch {
             console.error("Falha ao encaminhar a rota de stream para o player dedicado");
             logStreamUpstream({
@@ -60,12 +71,6 @@ export const Route = createFileRoute("/api/public/stream")({
         }
 
         const { looksLikePlaylist, rewritePlaylist } = await import("@/lib/stream-proxy.server");
-        const token = await readStreamToken(
-          url.searchParams.get("s"),
-          url.searchParams.get("h"),
-        );
-        if (!token) return new Response("Token inválido ou expirado.", { status: 403 });
-
         const target = token.url;
         const range = request.headers.get("range");
         const expectsHls = url.searchParams.get("hls") === "1" || target.includes(".m3u8");
@@ -132,8 +137,8 @@ export const Route = createFileRoute("/api/public/stream")({
         }
 
         if (!upstream) {
-          if (expectsHls) return unavailableHlsResponse();
-          return unavailableMediaResponse();
+          if (expectsHls) return withSessionCookie(unavailableHlsResponse());
+          return withSessionCookie(unavailableMediaResponse());
         }
 
         const contentType = upstream.headers.get("content-type") ?? "";
@@ -147,10 +152,10 @@ export const Route = createFileRoute("/api/public/stream")({
           // platform-level 502 and blank error screen.
           if (expectsHls) {
             await upstream.body?.cancel().catch(() => undefined);
-            return unavailableHlsResponse();
+            return withSessionCookie(unavailableHlsResponse());
           }
           await upstream.body?.cancel().catch(() => undefined);
-          return unavailableMediaResponse();
+          return withSessionCookie(unavailableMediaResponse());
         }
 
         if (
@@ -164,12 +169,13 @@ export const Route = createFileRoute("/api/public/stream")({
               ttlSeconds,
               ...(token.subject ? { subject: token.subject } : {}),
               ...(token.reference ? { reference: token.reference } : {}),
+              ...(token.sessionKey ? { sessionId: token.sessionKey } : {}),
             });
             const headers = baseSecurityHeaders();
             headers.set("content-type", "application/vnd.apple.mpegurl");
-            return new Response(rewritten, { status: 200, headers });
+            return withSessionCookie(new Response(rewritten, { status: 200, headers }));
           }
-          return unavailableHlsResponse();
+          return withSessionCookie(unavailableHlsResponse());
         }
 
         const headers = baseSecurityHeaders();
@@ -179,7 +185,7 @@ export const Route = createFileRoute("/api/public/stream")({
           if (value) headers.set(key, value);
         }
 
-        return new Response(upstream.body, { status: upstream.status, headers });
+        return withSessionCookie(new Response(upstream.body, { status: upstream.status, headers }));
       },
     },
   },

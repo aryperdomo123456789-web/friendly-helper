@@ -34,10 +34,7 @@ const playerService = {
     }
 
     try {
-      const token = await readStreamToken(
-        url.searchParams.get("s"),
-        url.searchParams.get("h"),
-      );
+      const token = await readStreamToken(url.searchParams.get("s"), url.searchParams.get("h"));
       if (!token) return textResponse("Token inválido ou expirado.", 403);
 
       const target = token.url;
@@ -152,6 +149,7 @@ const playerService = {
             ttlSeconds,
             ...(token.subject ? { subject: token.subject } : {}),
             ...(token.reference ? { reference: token.reference } : {}),
+            ...(token.sessionKey ? { sessionId: token.sessionKey } : {}),
           });
           const headers = new Headers(SECURITY_HEADERS);
           headers.set("content-type", "application/vnd.apple.mpegurl");

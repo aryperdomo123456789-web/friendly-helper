@@ -22,6 +22,9 @@ type TokenPayload = {
   e: number; // expiry (epoch seconds)
   s?: string; // subject (user id) — audit binding only
   r?: string; // internal server reference for sanitized observability
+  j?: string; // token id used by the durable replay guard
+  sid?: string; // playback session id shared by the root token and its playlist children
+  root?: boolean; // only the root token may bootstrap a playback session
 };
 
 function b64urlFromBytes(bytes: Uint8Array): string {
@@ -48,10 +51,13 @@ async function hmacKey(): Promise<CryptoKey> {
       if (!secret || secret.length < 16) {
         throw new Error("STREAM_PROXY_SECRET ausente ou fraco no ambiente do servidor.");
       }
-      return crypto.subtle.importKey("raw", TEXT.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
-        "sign",
-        "verify",
-      ]);
+      return crypto.subtle.importKey(
+        "raw",
+        TEXT.encode(secret),
+        { name: "HMAC", hash: "SHA-256" },
+        false,
+        ["sign", "verify"],
+      );
     })();
   }
   return hmacKeyPromise;
@@ -76,7 +82,12 @@ async function aesKey(): Promise<CryptoKey> {
 
 export async function signStreamUrl(
   target: string,
-  options: { ttlSeconds?: number; subject?: string; reference?: string } = {},
+  options: {
+    ttlSeconds?: number;
+    subject?: string;
+    reference?: string;
+    sessionId?: string;
+  } = {},
 ): Promise<string> {
   const payload: TokenPayload = {
     v: 2,
@@ -84,6 +95,9 @@ export async function signStreamUrl(
     e: Math.floor(Date.now() / 1000) + (options.ttlSeconds ?? DEFAULT_TTL_SECONDS),
     ...(options.subject ? { s: options.subject } : {}),
     ...(options.reference ? { r: options.reference } : {}),
+    j: crypto.randomUUID(),
+    sid: options.sessionId ?? crypto.randomUUID(),
+    root: !options.sessionId,
   };
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipher = new Uint8Array(
@@ -96,16 +110,22 @@ export async function signStreamUrl(
   const packed = new Uint8Array(iv.length + cipher.length);
   packed.set(iv, 0);
   packed.set(cipher, iv.length);
-  const signature = new Uint8Array(
-    await crypto.subtle.sign("HMAC", await hmacKey(), packed),
-  );
+  const signature = new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(), packed));
   return `/api/public/stream?s=${b64urlFromBytes(packed)}&h=${b64urlFromBytes(signature)}`;
 }
 
 export async function readStreamToken(
   token: string | null,
   signature: string | null = null,
-): Promise<{ url: string; expiresAt: number; subject?: string; reference?: string } | null> {
+): Promise<{
+  url: string;
+  expiresAt: number;
+  subject?: string;
+  reference?: string;
+  replayKey?: string;
+  sessionKey?: string;
+  isRoot?: boolean;
+} | null> {
   if (!token || token.length > 4096) return null;
   try {
     const packed = bytesFromB64url(token);
@@ -137,6 +157,9 @@ export async function readStreamToken(
       expiresAt: payload.e,
       ...(payload.s ? { subject: payload.s } : {}),
       ...(payload.r ? { reference: payload.r } : {}),
+      ...(payload.v === 2 && payload.j ? { replayKey: payload.j } : {}),
+      ...(payload.v === 2 && payload.sid ? { sessionKey: payload.sid } : {}),
+      ...(payload.v === 2 && payload.root ? { isRoot: true } : {}),
     };
   } catch {
     return null;
@@ -155,7 +178,12 @@ export function looksLikePlaylist(contentType: string, body: string): boolean {
 export async function rewritePlaylist(
   body: string,
   baseUrl: string,
-  options: { ttlSeconds?: number; subject?: string; reference?: string } = {},
+  options: {
+    ttlSeconds?: number;
+    subject?: string;
+    reference?: string;
+    sessionId?: string;
+  } = {},
 ): Promise<string> {
   const lines = body.split(/\r?\n/);
   const out: string[] = [];

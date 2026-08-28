@@ -62,16 +62,35 @@ test("round-trips the internal server reference inside the encrypted token", asy
     subject: "user-id-for-test",
   });
   const parsed = new URL(`https://app.test${signed}`);
-  const decoded = await readStreamToken(
-    parsed.searchParams.get("s"),
-    parsed.searchParams.get("h"),
-  );
+  const decoded = await readStreamToken(parsed.searchParams.get("s"), parsed.searchParams.get("h"));
   assert.equal(decoded?.reference, "server-id-for-test");
   assert.equal(decoded?.subject, "user-id-for-test");
+  assert.equal(decoded?.isRoot, true);
+  assert.match(decoded?.replayKey ?? "", /^[A-Za-z0-9_-]{20,128}$/);
+  assert.match(decoded?.sessionKey ?? "", /^[A-Za-z0-9_-]{20,128}$/);
 
-  const tamperedSignature = parsed.searchParams.get("h")?.replace(/^./, "A");
+  const child = await signStreamUrl("https://example.test/live/segment.ts", {
+    sessionId: decoded?.sessionKey,
+  });
+  const childUrl = new URL(`https://app.test${child}`);
+  const childDecoded = await readStreamToken(
+    childUrl.searchParams.get("s"),
+    childUrl.searchParams.get("h"),
+  );
+  assert.equal(childDecoded?.isRoot, undefined);
+  assert.equal(childDecoded?.sessionKey, decoded?.sessionKey);
+
+  const expired = await signStreamUrl("https://example.test/live/expired.ts", {
+    ttlSeconds: -1,
+  });
+  const expiredUrl = new URL(`https://app.test${expired}`);
   assert.equal(
-    await readStreamToken(parsed.searchParams.get("s"), tamperedSignature ?? ""),
+    await readStreamToken(expiredUrl.searchParams.get("s"), expiredUrl.searchParams.get("h")),
     null,
   );
+
+  const originalSignature = parsed.searchParams.get("h") ?? "";
+  const replacement = originalSignature.endsWith("A") ? "B" : "A";
+  const tamperedSignature = `${originalSignature.slice(0, -1)}${replacement}`;
+  assert.equal(await readStreamToken(parsed.searchParams.get("s"), tamperedSignature), null);
 });

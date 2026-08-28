@@ -26,6 +26,36 @@ export type EpgCacheSnapshot = {
   stale: boolean;
 };
 
+export type EpgGridChannel = {
+  id: string;
+  name: string;
+  icon?: string | null;
+  programs: EpgProgram[];
+};
+
+export type IndexedEpgGridChannel = EpgGridChannel & {
+  index: EpgIndex;
+};
+
+export type EpgTimeline = {
+  startMs: number;
+  endMs: number;
+  durationMs: number;
+};
+
+export type EpgEventPosition = {
+  leftPct: number;
+  widthPct: number;
+  program: IndexedEpgProgram;
+};
+
+export type TimelineVirtualWindow = {
+  timeline: EpgTimeline;
+  offsetPx: number;
+  widthPx: number;
+  totalWidth: number;
+};
+
 export type VirtualWindow = {
   start: number;
   end: number;
@@ -94,6 +124,97 @@ export function buildEpgIndex(programs: EpgProgram[], nowMs = Date.now()): EpgIn
     firstStartMs: indexed[0]?.startMs ?? null,
     lastEndMs: indexed.at(-1)?.endMs ?? null,
     currentIndex: currentIndex < 0 ? 0 : currentIndex,
+  };
+}
+
+export function buildEpgGridRows(
+  channels: EpgGridChannel[],
+  nowMs = Date.now(),
+): IndexedEpgGridChannel[] {
+  return channels
+    .filter((channel) => channel.id.trim() && channel.name.trim())
+    .map((channel) => ({
+      ...channel,
+      index: buildEpgIndex(channel.programs, nowMs),
+    }));
+}
+
+export function filterEpgGridRows(
+  rows: IndexedEpgGridChannel[],
+  query: string,
+): IndexedEpgGridChannel[] {
+  const needle = query.trim().toLocaleLowerCase();
+  if (!needle) return rows;
+  return rows.filter((row) => {
+    if (row.name.toLocaleLowerCase().includes(needle)) return true;
+    return row.index.programs.some((program) => program.title.toLocaleLowerCase().includes(needle));
+  });
+}
+
+export function getEpgTimeline(nowMs = Date.now(), durationMs = 6 * 60 * 60 * 1000): EpgTimeline {
+  const slotMs = 30 * 60 * 1000;
+  const startMs = Math.floor(nowMs / slotMs) * slotMs;
+  const safeDuration = Math.max(slotMs, durationMs);
+  return { startMs, endMs: startMs + safeDuration, durationMs: safeDuration };
+}
+
+export function getTimelineVirtualWindow(
+  timeline: EpgTimeline,
+  scrollLeft: number,
+  viewportWidth: number,
+  totalWidth = 1_440,
+  overscanPx = 240,
+): TimelineVirtualWindow {
+  const safeTotalWidth = Math.max(1, totalWidth);
+  const safeViewportWidth = Math.max(1, Math.min(viewportWidth, safeTotalWidth));
+  const maxScrollLeft = Math.max(0, safeTotalWidth - safeViewportWidth);
+  const safeScrollLeft = Math.max(0, Math.min(scrollLeft, maxScrollLeft));
+  const startPx = Math.max(0, safeScrollLeft - overscanPx);
+  const endPx = Math.min(safeTotalWidth, safeScrollLeft + safeViewportWidth + overscanPx);
+  const startMs = timeline.startMs + (startPx / safeTotalWidth) * timeline.durationMs;
+  const endMs = timeline.startMs + (endPx / safeTotalWidth) * timeline.durationMs;
+  return {
+    timeline: { startMs, endMs, durationMs: Math.max(1, endMs - startMs) },
+    offsetPx: startPx,
+    widthPx: Math.max(1, endPx - startPx),
+    totalWidth: safeTotalWidth,
+  };
+}
+
+export function getEpgProgramsInTimeline(
+  index: EpgIndex,
+  timeline: EpgTimeline,
+): IndexedEpgProgram[] {
+  let low = 0;
+  let high = index.programs.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    const program = index.programs[middle];
+    if (!program || program.endMs <= timeline.startMs) low = middle + 1;
+    else high = middle;
+  }
+  const programs: IndexedEpgProgram[] = [];
+  for (let cursor = low; cursor < index.programs.length; cursor += 1) {
+    const program = index.programs[cursor];
+    if (!program || program.startMs >= timeline.endMs) break;
+    programs.push(program);
+  }
+  return programs;
+}
+
+export function getEpgEventPosition(
+  program: IndexedEpgProgram,
+  timeline: EpgTimeline,
+): EpgEventPosition | null {
+  const overlapStart = Math.max(program.startMs, timeline.startMs);
+  const overlapEnd = Math.min(program.endMs, timeline.endMs);
+  if (overlapEnd <= overlapStart) return null;
+  const leftPct = ((overlapStart - timeline.startMs) / timeline.durationMs) * 100;
+  const widthPct = ((overlapEnd - overlapStart) / timeline.durationMs) * 100;
+  return {
+    leftPct: Math.max(0, Math.min(100, leftPct)),
+    widthPct: Math.max(1.5, Math.min(100 - leftPct, widthPct)),
+    program,
   };
 }
 

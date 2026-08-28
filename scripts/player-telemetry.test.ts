@@ -35,6 +35,8 @@ test("agrega primeiro frame e buffering sem duplicar eventos de estado", async (
   assert.equal(summary.startup_success, true);
   assert.equal(summary.rebuffer_count, 1);
   assert.equal(summary.rebuffer_duration_ms, 600);
+  assert.equal(summary.playback_duration_ms, 1_600);
+  assert.equal(summary.stall_rate_per_min, 37.5);
   assert.equal(summary.event_count, 4);
 
   await telemetry.flush();
@@ -47,7 +49,10 @@ test("agrega primeiro frame e buffering sem duplicar eventos de estado", async (
 
   await telemetry.destroy("test_complete");
   assert.equal(sent.length, 2);
-  assert.equal(sent[1]?.events[0]?.name, "destroyed");
+  assert.equal(sent[1]?.events[0]?.name, "qoe_summary");
+  assert.equal(sent[1]?.events[0]?.rebuffer_count, 1);
+  assert.equal(sent[1]?.events[0]?.stall_rate_per_min, 37.5);
+  assert.equal(sent[1]?.events[1]?.name, "destroyed");
 });
 
 test("sanitiza códigos e motivos de erro de playback", () => {

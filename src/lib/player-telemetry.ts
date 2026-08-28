@@ -12,7 +12,8 @@ export type PlaybackTelemetryEventName =
   | "quality_sample"
   | "quality_change"
   | "ended"
-  | "destroyed";
+  | "destroyed"
+  | "qoe_summary";
 
 export type PlaybackTelemetryEvent = {
   name: PlaybackTelemetryEventName;
@@ -27,6 +28,10 @@ export type PlaybackTelemetryEvent = {
   fatal?: boolean;
   error_code?: string;
   recovery_attempt?: number;
+  rebuffer_count?: number;
+  rebuffer_duration_ms?: number;
+  playback_duration_ms?: number;
+  stall_rate_per_min?: number;
   reason?: string;
 };
 
@@ -43,6 +48,8 @@ export type PlaybackTelemetrySummary = {
   startup_success: boolean;
   rebuffer_count: number;
   rebuffer_duration_ms: number;
+  playback_duration_ms: number;
+  stall_rate_per_min: number;
   event_count: number;
 };
 
@@ -141,6 +148,21 @@ export function createPlaybackTelemetry(options: {
     }
     if (details.fatal !== undefined) event.fatal = details.fatal;
     if (details.recovery_attempt !== undefined) event.recovery_attempt = details.recovery_attempt;
+    if (details.rebuffer_count !== undefined) {
+      const rebufferCount = clampNonNegative(details.rebuffer_count, 1_000_000);
+      if (rebufferCount !== undefined) event.rebuffer_count = rebufferCount;
+    }
+    if (details.rebuffer_duration_ms !== undefined) {
+      const rebufferDurationMs = clampNonNegative(details.rebuffer_duration_ms, 86_400_000);
+      if (rebufferDurationMs !== undefined) event.rebuffer_duration_ms = rebufferDurationMs;
+    }
+    if (details.playback_duration_ms !== undefined) {
+      const playbackDurationMs = clampNonNegative(details.playback_duration_ms, 86_400_000);
+      if (playbackDurationMs !== undefined) event.playback_duration_ms = playbackDurationMs;
+    }
+    if (details.stall_rate_per_min !== undefined && Number.isFinite(details.stall_rate_per_min)) {
+      event.stall_rate_per_min = Math.min(10_000, Math.max(0, details.stall_rate_per_min));
+    }
     if (details.error_code !== undefined) {
       event.error_code = sanitizePlaybackErrorCode(details.error_code);
     }
@@ -198,25 +220,36 @@ export function createPlaybackTelemetry(options: {
     timer = setInterval(() => void flush(), options.flushIntervalMs ?? 10_000);
   }
 
+  const getSummary = (): PlaybackTelemetrySummary => {
+    const playbackDurationMs = relativeNow();
+    const minutes = Math.max(1 / 60, playbackDurationMs / 60_000);
+    return {
+      first_frame_ms: firstFrameMs,
+      startup_success: firstFrameMs !== null,
+      rebuffer_count: rebufferCount,
+      rebuffer_duration_ms: rebufferDurationMs,
+      playback_duration_ms: playbackDurationMs,
+      stall_rate_per_min: rebufferCount / minutes,
+      event_count: queue.length,
+    };
+  };
+
   return {
     record,
     markFirstFrame,
     markBufferStart,
     markBufferEnd,
     flush,
-    summary(): PlaybackTelemetrySummary {
-      return {
-        first_frame_ms: firstFrameMs,
-        startup_success: firstFrameMs !== null,
-        rebuffer_count: rebufferCount,
-        rebuffer_duration_ms: rebufferDurationMs,
-        event_count: queue.length,
-      };
-    },
+    summary: getSummary,
     async destroy(reason?: string) {
       if (destroyed) return;
       const reasonDetails = reason ? { reason } : {};
       if (bufferStartedAt !== null) markBufferEnd(reasonDetails);
+      const qoe = {
+        ...getSummary(),
+        ...reasonDetails,
+      };
+      record("qoe_summary", qoe);
       record("destroyed", reasonDetails);
       destroyed = true;
       if (timer) clearInterval(timer);

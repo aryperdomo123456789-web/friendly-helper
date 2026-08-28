@@ -18,6 +18,7 @@ import {
   getPlaybackUrl,
   getSeriesInfo,
   getChannelEPG,
+  getChannelsEPG,
   getEnrichedMetadata,
 } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
@@ -32,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { VideoPlayer } from "./VideoPlayer";
+import { EpgGrid } from "./EpgGrid";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -50,10 +52,16 @@ import { ContentEmptyState } from "@/components/ui/content-empty-state";
 import { toast } from "sonner";
 import { proxyMediaUrl } from "@/lib/media-url";
 import {
+  buildEpgGridRows,
   buildEpgIndex,
+  filterEpgGridRows,
+  getEpgEventPosition,
+  getEpgTimeline,
+  getTimelineVirtualWindow,
   getVirtualWindow,
   readEpgSnapshot,
   writeEpgSnapshot,
+  type EpgGridChannel,
   type EpgProgram,
 } from "@/lib/epg-client";
 
@@ -368,7 +376,7 @@ export function Catalog({
   initialSearch?: string;
   hideHeader?: boolean;
 }) {
-  const { serverId, activeServer, blocked, profile } = usePlayerSession();
+  const { authUserId, serverId, activeServer, blocked, profile } = usePlayerSession();
   const queryClient = useQueryClient();
   const deviceId = getDeviceId();
   const fetchCategories = useServerFn(getCategories);
@@ -376,11 +384,13 @@ export function Catalog({
   const fetchPlayback = useServerFn(getPlaybackUrl);
   const fetchSeries = useServerFn(getSeriesInfo);
   const fetchEPG = useServerFn(getChannelEPG);
+  const fetchChannelsEPG = useServerFn(getChannelsEPG);
   const fetchTMDB = useServerFn(getEnrichedMetadata);
 
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [catTerm, setCatTerm] = useState("");
   const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [offlineEpgGrid, setOfflineEpgGrid] = useState<Record<string, EpgProgram[]>>({});
   const categoryTriggerRef = useRef<HTMLButtonElement>(null);
   const categoryDrawerRef = useRef<HTMLDivElement>(null);
   const categoriesWereOpen = useRef(false);
@@ -755,6 +765,66 @@ export function Catalog({
     () => paginatedItems.slice(0, 4).map((item) => proxyMediaUrl(item.icon, serverId)),
     [paginatedItems, serverId],
   );
+  const liveEpgItems = useMemo(
+    () => (kind === "live" ? paginatedItems.slice(0, 48) : []),
+    [kind, paginatedItems],
+  );
+  const liveEpgStreamIds = useMemo(() => liveEpgItems.map((item) => item.id), [liveEpgItems]);
+  const epgGridQuery = useQuery({
+    queryKey: ["epg-grid", serverId, liveEpgStreamIds],
+    queryFn: () =>
+      fetchChannelsEPG({
+        data: { server_id: serverId!, stream_ids: liveEpgStreamIds },
+      }),
+    enabled: kind === "live" && Boolean(serverId) && liveEpgStreamIds.length > 0,
+    retry: 1,
+    staleTime: 2 * 60_000,
+    placeholderData: (previous) => previous,
+  });
+  const networkEpgRows = Array.isArray(epgGridQuery.data) ? epgGridQuery.data : [];
+
+  useEffect(() => {
+    if (kind !== "live" || !authUserId || !serverId || liveEpgStreamIds.length === 0) {
+      setOfflineEpgGrid({});
+      return;
+    }
+    let cancelled = false;
+    void Promise.all(
+      liveEpgStreamIds.map(async (streamId) => {
+        const snapshot = await readEpgSnapshot(authUserId, serverId, streamId);
+        return [streamId, snapshot?.programs ?? []] as const;
+      }),
+    )
+      .then((entries) => {
+        if (!cancelled) setOfflineEpgGrid(Object.fromEntries(entries));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [authUserId, kind, liveEpgStreamIds, serverId]);
+
+  useEffect(() => {
+    if (kind !== "live" || !authUserId || !serverId || networkEpgRows.length === 0) return;
+    void Promise.all(
+      networkEpgRows.map((row) =>
+        row.programs.length > 0
+          ? writeEpgSnapshot(authUserId, serverId, row.stream_id, row.programs)
+          : Promise.resolve(),
+      ),
+    ).catch(() => undefined);
+  }, [authUserId, kind, networkEpgRows, serverId]);
+
+  const epgGridChannels = useMemo(() => {
+    const networkById = new Map(networkEpgRows.map((row) => [row.stream_id, row.programs]));
+    return liveEpgItems.map((item): EpgGridChannel => ({
+      id: item.id,
+      name: item.name,
+      icon: item.icon,
+      programs: networkById.get(item.id) ?? offlineEpgGrid[item.id] ?? [],
+    }));
+  }, [liveEpgItems, networkEpgRows, offlineEpgGrid]);
+
   const paginationPages = useMemo(() => {
     const windowSize = 5;
     if (totalPages <= windowSize) {
@@ -1250,6 +1320,16 @@ export function Catalog({
                     </div>
                   </div>
                 )}
+                {kind === "live" ? (
+                  <EpgGrid
+                    rows={epgGridChannels}
+                    loading={epgGridQuery.isLoading || epgGridQuery.isFetching}
+                    onSelectChannel={(streamId) => {
+                      const item = liveEpgItems.find((candidate) => candidate.id === streamId);
+                      if (item) activateCatalogItem(item);
+                    }}
+                  />
+                ) : null}
               </div>
               {totalPages > 1 ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 px-1 pt-3">
@@ -1512,7 +1592,9 @@ function PlayerInfo({
                       </span>
                     </div>
                     {prog.description ? (
-                      <p className="mt-0.5 line-clamp-2 text-muted-foreground">{prog.description}</p>
+                      <p className="mt-0.5 line-clamp-2 text-muted-foreground">
+                        {prog.description}
+                      </p>
                     ) : null}
                   </div>
                 ))}
@@ -1525,7 +1607,9 @@ function PlayerInfo({
           )}
         </div>
         {usingOfflineEpg ? (
-          <p className="text-[10px] text-amber-500">Guia local disponível; atualizando quando a conexão voltar.</p>
+          <p className="text-[10px] text-amber-500">
+            Guia local disponível; atualizando quando a conexão voltar.
+          </p>
         ) : null}
       </div>
     );
