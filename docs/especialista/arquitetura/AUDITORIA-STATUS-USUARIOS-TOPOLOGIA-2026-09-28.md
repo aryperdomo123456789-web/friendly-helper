@@ -68,12 +68,15 @@ A ação corretiva foi imediata:
 - Suíte determinística: **65/65 testes aprovados**.
 - Build multi-serviço: aprovado (`server`, `player`, `payments`, `worker`).
 - Health pós-deploy do rebuild correto: root `200`, asset `200`, token inválido `403`, quatro PM2 `online`.
-- Manifesto ativo do rebuild correto: `2158d7836caa6cd0b0482dffc1cffcfa6e2210ab5dee05c143843a78020ede63`.
+- Manifesto ativo do rebuild correto antes do patch do Painel: `2158d7836caa6cd0b0482dffc1cffcfa6e2210ab5dee05c143843a78020ede63`.
 - Chrome owner, após carregamento assíncrono de `/usuarios`: `Todos 34`, `Ativos 5`, `Expirados 29`; linhas com vencimento em agosto e `25/09/2026` renderizaram `Expirado`.
+- Chrome owner, após o deploy do Painel: `/painel` renderizou as linhas de `27/08/2026`, `26/08/2026`, `17/08/2026` e `25/09/2026` como `Expirado`, enquanto os vencimentos de `28/09/2026` e `29/09/2026` permaneceram `Ativo`.
+- Manifesto ativo final após o patch do Painel: `8ca87a8ec4f8963f6d0fb26420abb668bdf4f806ee828e4d98b029022cc382c0`.
+- Commit publicado na branch `backup/stream-mago-bot-2026-08-05`: `44c9cda`.
 
-## Próxima validação obrigatória
+## Resultado da validação final
 
-Após o deploy do ajuste do Painel, abrir `/painel` e conferir as mesmas linhas vencidas. A validação de `/usuarios` não substitui a validação do Painel, porque eram componentes diferentes.
+As duas telas administrativas agora usam a mesma decisão de status. A validação de `/usuarios` e `/painel` foi feita no Chrome owner após o carregamento assíncrono; não há evidência de usuário vencido exibido como ativo nessas duas tabelas.
 
 ## Rollback
 
