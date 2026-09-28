@@ -23,6 +23,8 @@ Nenhuma origem de cliente foi submetida a carga. As medições foram leituras de
 
 Na primeira validação pós-deploy, o vínculo ainda não apareceu porque o código salvo do dono estava em minúsculas (`49d83466`) e a consulta fazia igualdade sensível a caixa depois de normalizar o valor recebido para maiúsculas. A consulta foi ajustada para `ilike`, mantendo a normalização e evitando que a apresentação do link altere o vínculo.
 
+Após o segundo deploy, uma nova conta foi criada pelo mesmo link. A consulta sanitizada confirmou `owner_referral_persisted=true`, código de origem presente e dois vínculos de servidor ativos. O bug de indicação está reproduzivelmente corrigido no fluxo oficial.
+
 ## Evidência do playback real
 
 ### Elemento de mídia e transporte
@@ -82,3 +84,4 @@ A alteração não mexe em contrato de player, proxy, tokens, banco, permissões
 - O próximo gate deve medir no aparelho afetado: TTFF, `currentTime` versus relógio, dropped/decoded frames, stalls, bitrate/qualidade selecionada e janela de 5–10 minutos.
 - Se a reprodução continuar lenta após HLS.js, o próximo suspeito é capacidade/pressão do dispositivo ou bitrate FHD da origem, não o parser do proxy. Nesse caso, testar HD como fallback e comparar QoE, sem mascarar falhas.
 - Não houve carga concorrente contra origem IPTV. A evidência desta auditoria é de uma sessão individual e não certifica estabilidade de 24–72 horas.
+- O browser Sandbox reteve a sessão anterior durante a segunda validação: o login automático concluiu, mas `/canais` não refletiu os dois vínculos recém-criados. Por isso, o playback pós-deploy do novo engine ainda precisa ser repetido com uma sessão realmente nova no dispositivo afetado; não é correto declarar essa etapa física encerrada por causa do deploy saudável.
