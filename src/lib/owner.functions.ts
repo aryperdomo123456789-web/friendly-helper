@@ -2,7 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { ensureUserReferralCode, generateUniqueReferralCode, isReferralEligiblePlan } from "./referral-code";
+import {
+  ensureUserReferralCode,
+  generateUniqueReferralCode,
+  isReferralEligiblePlan,
+} from "./referral-code";
 import { clearServerCache, clearServerPlaylistCache } from "./iptv-cache.server";
 import {
   createRefreshOperation,
@@ -124,28 +128,54 @@ async function hashAdminReference(value: string | null | undefined) {
 }
 
 async function assertNotOwnerAccount(supabase: any, userId: string) {
-  const [{ data: roleRows, error: roleError }, { data: profile, error: profileError }] = await Promise.all([
-    supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .in("role", ["owner"])
-      .limit(1),
-    supabase
-      .from("profiles")
-      .select("username")
-      .eq("id", userId)
-      .maybeSingle(),
-  ]);
+  const [{ data: roleRows, error: roleError }, { data: profile, error: profileError }] =
+    await Promise.all([
+      supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .in("role", ["owner", "admin"])
+        .limit(1),
+      supabase.from("profiles").select("username").eq("id", userId).maybeSingle(),
+    ]);
 
   if (roleError) throw new Error(roleError.message);
   if (profileError) throw new Error(profileError.message);
 
   if ((roleRows ?? []).length > 0 || profile?.username === "magodono") {
-    throw new Error("O usuário administrador (@magodono) não pode ser apagado.");
+    throw new Error("O usuário owner/admin (@magodono) não pode ser apagado.");
   }
 }
 
+async function clearUserRelationsForDeletion(
+  supabaseAdmin: SupabaseClient<Database>,
+  ids: string[],
+) {
+  const cleanupClient = supabaseAdmin as any;
+  const cleanup = await Promise.all([
+    cleanupClient.from("profiles").update({ referred_by_id: null }).in("referred_by_id", ids),
+    cleanupClient.from("profiles").update({ created_by: null }).in("created_by", ids),
+    cleanupClient.from("iptv_servers").update({ created_by: null }).in("created_by", ids),
+    cleanupClient.from("test_links").update({ created_by_id: null }).in("created_by_id", ids),
+    cleanupClient.from("device_sessions").delete().in("user_id", ids),
+    cleanupClient.from("user_server_access").delete().in("user_id", ids),
+    cleanupClient.from("user_roles").delete().in("user_id", ids),
+    cleanupClient.from("notifications").delete().in("user_id", ids),
+    cleanupClient.from("audit_logs").update({ actor_user_id: null }).in("actor_user_id", ids),
+    cleanupClient.from("audit_logs").update({ target_user_id: null }).in("target_user_id", ids),
+    cleanupClient.from("support_messages").update({ sender_id: null }).in("sender_id", ids),
+    cleanupClient
+      .from("support_threads")
+      .update({ assigned_to_user_id: null, closed_by_user_id: null })
+      .or(`assigned_to_user_id.in.(${ids.join(",")}),closed_by_user_id.in.(${ids.join(",")})`),
+    cleanupClient.from("support_threads").delete().in("user_id", ids),
+  ]);
+  const cleanupError = cleanup.find((result) => result.error)?.error;
+  if (cleanupError) throw cleanupError;
+
+  const { error: profilesError } = await cleanupClient.from("profiles").delete().in("id", ids);
+  if (profilesError) throw profilesError;
+}
 
 /* ------------------------------ Servidores ------------------------------ */
 
@@ -154,16 +184,15 @@ export const listServers = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const role = await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const [{ data: servers, error }, { data: credentials, error: credentialsError }] = await Promise.all([
-      supabaseAdmin
-        .from("iptv_servers")
-        .select("id, name, url, is_active, sort_order, created_at, connection_capacity")
-        .order("sort_order")
-        .order("created_at"),
-      supabaseAdmin
-        .from("server_credentials")
-        .select("server_id, username, password, dns"),
-    ]);
+    const [{ data: servers, error }, { data: credentials, error: credentialsError }] =
+      await Promise.all([
+        supabaseAdmin
+          .from("iptv_servers")
+          .select("id, name, url, is_active, sort_order, created_at, connection_capacity")
+          .order("sort_order")
+          .order("created_at"),
+        supabaseAdmin.from("server_credentials").select("server_id, username, password, dns"),
+      ]);
     if (error) throw error;
     if (credentialsError) throw credentialsError;
 
@@ -189,9 +218,7 @@ export const listServers = createServerFn({ method: "GET" })
       created_at: server.created_at,
       owner_note: role === "owner" ? (ownerNoteByServerId.get(server.id) ?? "") : null,
       can_edit_owner_note: role === "owner",
-      credentials: credentialByServerId.has(server.id)
-        ? [credentialByServerId.get(server.id)]
-        : [],
+      credentials: credentialByServerId.has(server.id) ? [credentialByServerId.get(server.id)] : [],
     }));
   });
 
@@ -320,15 +347,19 @@ export const saveServer = createServerFn({ method: "POST" })
           user_id: u.id,
           server_id: serverId!,
         }));
-        await supabaseAdmin.from("user_server_access").upsert(userServerAccess, { onConflict: "user_id,server_id" });
+        await supabaseAdmin
+          .from("user_server_access")
+          .upsert(userServerAccess, { onConflict: "user_id,server_id" });
       }
     } else if (data.bulk_action === "remove_from_all") {
       await supabaseAdmin.from("user_server_access").delete().eq("server_id", serverId);
     }
 
-    void createRefreshOperation(serverId!, context.userId, { initialStatus: "pending" }).catch((error: unknown) => {
-      console.error("Falha ao enfileirar o refresh do servidor", error);
-    });
+    void createRefreshOperation(serverId!, context.userId, { initialStatus: "pending" }).catch(
+      (error: unknown) => {
+        console.error("Falha ao enfileirar o refresh do servidor", error);
+      },
+    );
 
     await recordAdminAudit({
       actorUserId: context.userId,
@@ -352,9 +383,12 @@ export const reorderServers = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => reorderServersSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertOwner(context.supabase, context.userId);
-    const { data: result, error } = await (context.supabase as any).rpc("admin_reorder_iptv_servers", {
-      p_ordered_ids: data.ids,
-    });
+    const { data: result, error } = await (context.supabase as any).rpc(
+      "admin_reorder_iptv_servers",
+      {
+        p_ordered_ids: data.ids,
+      },
+    );
 
     if (error) throw error;
     await recordAdminAudit({
@@ -456,7 +490,9 @@ export const listAccessUsers = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: profiles, error } = await supabaseAdmin
       .from("profiles")
-      .select("id, username, display_name, max_connections, expires_at, is_active, created_at, plan_id, referred_by_id, plan:subscription_plans(*)")
+      .select(
+        "id, username, display_name, max_connections, expires_at, is_active, created_at, plan_id, referred_by_id, plan:subscription_plans(*)",
+      )
       .order("created_at", { ascending: false });
     if (error) throw error;
     const [{ data: access }, { data: devices }] = await Promise.all([
@@ -477,7 +513,6 @@ export const listAccessUsers = createServerFn({ method: "GET" })
         (row: any) => row.user_id === profile.id && new Date(row.last_seen).getTime() > cutoff,
       ).length,
     }));
-
   });
 
 export const listAccessUsersPage = createServerFn({ method: "POST" })
@@ -521,7 +556,11 @@ export const listAdminAuditLogsPage = createServerFn({ method: "POST" })
     const from = (data.page - 1) * data.page_size;
     const to = from + data.page_size - 1;
     const auditClient = supabaseAdmin as any;
-    const { data: rows, count, error } = await (auditClient
+    const {
+      data: rows,
+      count,
+      error,
+    } = await (auditClient
       .from("audit_logs")
       .select(
         "id, actor_user_id, target_user_id, action, entity_type, entity_id, details, source, created_at",
@@ -540,7 +579,9 @@ export const listAdminAuditLogsPage = createServerFn({ method: "POST" })
         entity_type: String(row.entity_type ?? "unknown").slice(0, 80),
         entity_ref: await hashAdminReference(row.entity_id),
         source: String(row.source ?? "server").slice(0, 40),
-        details: sanitizeAdminAuditDetails((row.details ?? {}) as Record<string, boolean | number | string | null>),
+        details: sanitizeAdminAuditDetails(
+          (row.details ?? {}) as Record<string, boolean | number | string | null>,
+        ),
         created_at: row.created_at,
       })),
     );
@@ -708,6 +749,7 @@ export const deleteAccessUser = createServerFn({ method: "POST" })
     await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertNotOwnerAccount(supabaseAdmin, data.id);
+    await clearUserRelationsForDeletion(supabaseAdmin, [data.id]);
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.id);
     if (error) throw error;
     await recordAdminAudit({
@@ -718,6 +760,58 @@ export const deleteAccessUser = createServerFn({ method: "POST" })
       targetUserId: data.id,
     });
     return { ok: true };
+  });
+
+const deleteAccessUsersSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(1000),
+});
+
+export const deleteAccessUsers = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => deleteAccessUsersSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertOwner(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const ids = [...new Set(data.ids)];
+
+    if (ids.includes(context.userId)) {
+      throw new Error("A conta administrativa atual não pode ser excluída.");
+    }
+
+    const [protectedProfilesResult, protectedRolesResult] = await Promise.all([
+      supabaseAdmin.from("profiles").select("id, username").in("id", ids),
+      supabaseAdmin
+        .from("user_roles")
+        .select("user_id, role")
+        .in("user_id", ids)
+        .in("role", ["owner", "admin"]),
+    ]);
+    if (protectedProfilesResult.error) throw protectedProfilesResult.error;
+    if (protectedRolesResult.error) throw protectedRolesResult.error;
+    if (
+      (protectedProfilesResult.data ?? []).some((profile) => profile.username === "magodono") ||
+      (protectedRolesResult.data ?? []).length > 0
+    ) {
+      throw new Error("A conta administrativa/dono não pode ser excluída.");
+    }
+
+    await clearUserRelationsForDeletion(supabaseAdmin, ids);
+
+    for (let offset = 0; offset < ids.length; offset += 5) {
+      const batchResults = await Promise.all(
+        ids.slice(offset, offset + 5).map((id) => supabaseAdmin.auth.admin.deleteUser(id)),
+      );
+      const deleteError = batchResults.find((result) => result.error)?.error;
+      if (deleteError) throw deleteError;
+    }
+
+    await recordAdminAudit({
+      actorUserId: context.userId,
+      action: "user.delete.batch",
+      entityType: "profile",
+      details: { count: ids.length },
+    });
+    return { ok: true, deleted: ids.length };
   });
 
 export const kickDevices = createServerFn({ method: "POST" })

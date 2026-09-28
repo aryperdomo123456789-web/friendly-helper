@@ -9,6 +9,7 @@ import {
   createAccessUser,
   updateAccessUser,
   deleteAccessUser,
+  deleteAccessUsers,
   kickDevices,
 } from "@/lib/owner.functions";
 import { usePlayerSession } from "@/lib/player-store";
@@ -16,6 +17,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -48,8 +50,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { OwnerPageShell } from "@/components/owner-shell/owner-page-shell";
-
-
+import { resolveUserStatus } from "@/lib/user-status";
 
 export const Route = createFileRoute("/_authenticated/usuarios")({
   head: () => ({
@@ -82,21 +83,26 @@ function UsuariosPage() {
     description: string;
   }>(null);
   const [destructiveConfirm, setDestructiveConfirm] = useState<null | {
-    kind: "delete" | "kick";
+    kind: "delete" | "bulk-delete" | "kick";
     title: string;
     description: string;
     actionLabel: string;
     targetId: string;
+    targetIds?: string[];
   }>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "blocked" | "expired" | "online">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "blocked" | "expired" | "online"
+  >("all");
   const [serverFilter, setServerFilter] = useState<string>("all");
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [referralFilter, setReferralFilter] = useState<"all" | "direct" | "referred">("all");
   const [sortOrder, setSortOrder] = useState<"newest" | "oldest" | "expiry">("newest");
   const [pageSize, setPageSize] = useState<10 | 25 | 50 | 250 | 500 | 1000>(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [statusNow, setStatusNow] = useState(() => Date.now());
 
   const fetchServers = useServerFn(listServers);
   const fetchUsersPage = useServerFn(listAccessUsersPage);
@@ -104,6 +110,7 @@ function UsuariosPage() {
   const mutationCreateUser = useServerFn(createAccessUser);
   const mutationUpdateUser = useServerFn(updateAccessUser);
   const mutationDeleteUser = useServerFn(deleteAccessUser);
+  const mutationDeleteUsers = useServerFn(deleteAccessUsers);
   const mutationKick = useServerFn(kickDevices);
 
   const servers = useQuery({
@@ -152,7 +159,33 @@ function UsuariosPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, statusFilter, serverFilter, planFilter, referralFilter, sortOrder, pageSize]);
+  }, [
+    debouncedSearch,
+    statusFilter,
+    serverFilter,
+    planFilter,
+    referralFilter,
+    sortOrder,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    setSelectedUserIds([]);
+  }, [
+    debouncedSearch,
+    statusFilter,
+    serverFilter,
+    planFilter,
+    referralFilter,
+    sortOrder,
+    currentPage,
+    pageSize,
+  ]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setStatusNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const handleSaveUser = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -229,6 +262,37 @@ function UsuariosPage() {
     }
   };
 
+  const handleBulkDelete = () => {
+    if (!selectedUserIds.length) return;
+    setDestructiveConfirm({
+      kind: "bulk-delete",
+      title: "Excluir usuários selecionados?",
+      description: `Tem certeza que deseja excluir os ${selectedUserIds.length} usuários selecionados? Esta ação não pode ser desfeita.`,
+      actionLabel: "Excluir selecionados",
+      targetId: selectedUserIds[0],
+      targetIds: selectedUserIds,
+    });
+  };
+
+  const executeBulkDelete = async (ids: string[]) => {
+    if (destructiveLoading || ids.length === 0) return;
+    setDestructiveLoading(true);
+    try {
+      const result = await mutationDeleteUsers({ data: { ids } });
+      setDestructiveConfirm(null);
+      setSelectedUserIds([]);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["admin-users-page"], refetchType: "active" }),
+        queryClient.invalidateQueries({ queryKey: ["admin-users"], refetchType: "active" }),
+      ]);
+      toast.success(`${result.deleted} usuário(s) excluído(s) com sucesso.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Erro ao excluir usuários selecionados");
+    } finally {
+      setDestructiveLoading(false);
+    }
+  };
+
   const handleKick = async (id: string) => {
     setDestructiveConfirm({
       kind: "kick",
@@ -256,6 +320,10 @@ function UsuariosPage() {
 
   const confirmDestructiveAction = async () => {
     if (!destructiveConfirm) return;
+    if (destructiveConfirm.kind === "bulk-delete") {
+      await executeBulkDelete(destructiveConfirm.targetIds ?? []);
+      return;
+    }
     if (destructiveConfirm.kind === "delete") {
       await executeDeleteUser(destructiveConfirm.targetId);
       return;
@@ -279,6 +347,10 @@ function UsuariosPage() {
   const pageStart = totalUsers === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const pageEnd = Math.min(safePage * pageSize, totalUsers);
   const visibleUsers = usersPage.data?.items ?? [];
+  const deletableVisibleUsers = visibleUsers.filter((user: any) => user.username !== "magodono");
+  const allVisibleSelected =
+    deletableVisibleUsers.length > 0 &&
+    deletableVisibleUsers.every((user: any) => selectedUserIds.includes(user.id));
   const statusCounts = usersPage.data?.status_counts ?? {
     all: 0,
     active: 0,
@@ -304,7 +376,8 @@ function UsuariosPage() {
     return Array.from({ length: end - start + 1 }, (_, index) => start + index);
   }, [safePage, totalPages]);
 
-
+  // Keep the permission guard after every hook so hook order is identical
+  // across authenticated and unauthenticated renders.
   if (!isOwner) {
     return (
       <div className="mx-auto max-w-md rounded-xl border border-border bg-card p-6 text-center">
@@ -321,7 +394,9 @@ function UsuariosPage() {
       icon={Users}
       rightSlot={
         <div className="w-full max-w-[140px] rounded-xl border border-sidebar-border/70 bg-background/60 px-2.5 py-2 text-[10px] leading-snug shadow-sm">
-          <p className="text-[8px] font-black uppercase tracking-[0.16em] text-muted-foreground">Operação</p>
+          <p className="text-[8px] font-black uppercase tracking-[0.16em] text-muted-foreground">
+            Operação
+          </p>
           <p className="mt-0.5 truncate font-semibold text-foreground">Acessos e limites</p>
         </div>
       }
@@ -345,9 +420,17 @@ function UsuariosPage() {
               server_ids: (servers.data ?? []).map((server: any) => server.id),
               is_active: true,
               plan_id: testPlan?.id || null,
-              expires_at: testPlan 
-                ? new Date(Date.now() + testPlan.duration_value * (testPlan.duration_unit === 'minutes' ? 60 * 1000 : testPlan.duration_unit === 'hours' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000)).toISOString()
-                : null
+              expires_at: testPlan
+                ? new Date(
+                    Date.now() +
+                      testPlan.duration_value *
+                        (testPlan.duration_unit === "minutes"
+                          ? 60 * 1000
+                          : testPlan.duration_unit === "hours"
+                            ? 60 * 60 * 1000
+                            : 24 * 60 * 60 * 1000),
+                  ).toISOString()
+                : null,
             });
           }}
         >
@@ -355,11 +438,32 @@ function UsuariosPage() {
         </Button>
       </div>
 
+      {selectedUserIds.length > 0 ? (
+        <div className="sticky top-2 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 shadow-lg backdrop-blur">
+          <p className="text-sm font-semibold text-destructive">
+            {selectedUserIds.length} usuário(s) selecionado(s)
+          </p>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            className="min-h-10 gap-2"
+            onClick={handleBulkDelete}
+          >
+            <Trash2 className="h-4 w-4" />
+            Excluir selecionados
+          </Button>
+        </div>
+      ) : null}
+
       <Card className="border-primary/20 bg-card/50 p-4 backdrop-blur-sm">
         <div className="space-y-5">
           <div className="space-y-2">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">Status</Label>
-            <Tabs value={statusFilter} onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}>
+            <Tabs
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}
+            >
               <TabsList className="grid h-auto w-full grid-cols-5 gap-1 rounded-xl bg-muted/40 p-1">
                 <TabsTrigger value="all" className="h-10 rounded-lg text-xs font-semibold">
                   <span className="flex items-center gap-1.5">
@@ -407,7 +511,9 @@ function UsuariosPage() {
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <div className="space-y-1.5 xl:col-span-2">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Buscar</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Buscar
+              </Label>
               <Input
                 placeholder="Username ou nome..."
                 value={search}
@@ -417,7 +523,9 @@ function UsuariosPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Servidor</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Servidor
+              </Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={serverFilter}
@@ -433,7 +541,9 @@ function UsuariosPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Plano</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Plano
+              </Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={planFilter}
@@ -450,7 +560,9 @@ function UsuariosPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Indicação</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Indicação
+              </Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={referralFilter}
@@ -463,7 +575,9 @@ function UsuariosPage() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-wider text-muted-foreground">Ordenar</Label>
+              <Label className="text-xs uppercase tracking-wider text-muted-foreground">
+                Ordenar
+              </Label>
               <select
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={sortOrder}
@@ -528,132 +642,176 @@ function UsuariosPage() {
       </Card>
 
       <Card className="overflow-x-auto">
-        <div className="min-w-[800px]">
+        <div className="min-w-[860px]">
           <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Usuário</TableHead>
-              <TableHead>Indicação</TableHead>
-              <TableHead>Servidores</TableHead>
-              <TableHead className="text-center">Conexões</TableHead>
-              <TableHead>Vencimento</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {usersPage.isError ? (
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-xs text-destructive">
-                  {usersPage.error instanceof Error ? usersPage.error.message : "Falha ao carregar usuários."}
-                </TableCell>
+                <TableHead className="w-12">
+                  <Checkbox
+                    aria-label="Selecionar todos os usuários visíveis"
+                    checked={allVisibleSelected}
+                    disabled={deletableVisibleUsers.length === 0}
+                    onCheckedChange={(checked) =>
+                      setSelectedUserIds(
+                        checked
+                          ? Array.from(
+                              new Set([
+                                ...selectedUserIds,
+                                ...deletableVisibleUsers.map((user: any) => user.id),
+                              ]),
+                            )
+                          : selectedUserIds.filter(
+                              (id) => !deletableVisibleUsers.some((user: any) => user.id === id),
+                            ),
+                      )
+                    }
+                  />
+                </TableHead>
+                <TableHead>Usuário</TableHead>
+                <TableHead>Indicação</TableHead>
+                <TableHead>Servidores</TableHead>
+                <TableHead className="text-center">Conexões</TableHead>
+                <TableHead>Vencimento</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
-            ) : usersPage.isLoading ? (
-              <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
-                  Carregando usuários...
-                </TableCell>
-              </TableRow>
-            ) : totalUsers === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-xs text-muted-foreground">
-                  Nenhum usuário encontrado com os filtros atuais.
-                </TableCell>
-              </TableRow>
-            ) : (
-              visibleUsers.map((user: any) => (
-                (() => {
-                  const isProtectedOwner = user.username === "magodono";
-                  return (
-                <TableRow key={user.id}>
-                  <TableCell>
-                    <div className="font-medium">{user.display_name || user.username}</div>
-                    <div className="text-xs text-muted-foreground">@{user.username}</div>
-                  </TableCell>
-                  <TableCell>
-                    {user.referred_by ? (
-                      <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
-                        @{user.referred_by.username}
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-tighter">Direto</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-xs">{user.server_ids.length} sv(s)</TableCell>
-                  <TableCell className="text-center">
-                    <span
-                      className={cn(
-                        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
-                        user.online > 0
-                          ? "bg-online/10 text-online"
-                          : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {user.online} / {user.max_connections}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {user.expires_at ? (
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {new Date(user.expires_at).toLocaleDateString("pt-BR")}
-                      </span>
-                    ) : (
-                      "Sem limite"
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {user.is_active ? (
-                      <span className="flex items-center gap-1.5 text-xs text-online">
-                        <Wifi className="h-3 w-3" /> Ativo
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1.5 text-xs text-destructive">
-                        <WifiOff className="h-3 w-3" /> Bloqueado
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Desconectar dispositivos"
-                        onClick={() => handleKick(user.id)}
-                      >
-                        <LogOut className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setUserModal(user)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      {!isProtectedOwner ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => handleDeleteUser(user.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-muted-foreground/40 cursor-not-allowed"
-                          title="O dono não pode ser apagado"
-                          disabled
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
+            </TableHeader>
+            <TableBody>
+              {usersPage.isError ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-24 text-center text-xs text-destructive">
+                    {usersPage.error instanceof Error
+                      ? usersPage.error.message
+                      : "Falha ao carregar usuários."}
                   </TableCell>
                 </TableRow>
-                  );
-                })()
-              ))
-            )}
-          </TableBody>
+              ) : usersPage.isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-24 text-center text-xs text-muted-foreground">
+                    Carregando usuários...
+                  </TableCell>
+                </TableRow>
+              ) : totalUsers === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="h-24 text-center text-xs text-muted-foreground">
+                    Nenhum usuário encontrado com os filtros atuais.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                visibleUsers.map((user: any) =>
+                  (() => {
+                    const isProtectedOwner = user.username === "magodono";
+                    const userStatus = resolveUserStatus(user, statusNow);
+                    return (
+                      <TableRow key={user.id}>
+                        <TableCell className="w-12">
+                          <Checkbox
+                            aria-label={`Selecionar ${user.username}`}
+                            checked={selectedUserIds.includes(user.id)}
+                            disabled={isProtectedOwner}
+                            onCheckedChange={(checked) =>
+                              setSelectedUserIds((current) =>
+                                checked
+                                  ? Array.from(new Set([...current, user.id]))
+                                  : current.filter((id) => id !== user.id),
+                              )
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="font-medium">{user.display_name || user.username}</div>
+                          <div className="text-xs text-muted-foreground">@{user.username}</div>
+                        </TableCell>
+                        <TableCell>
+                          {user.referred_by ? (
+                            <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                              @{user.referred_by.username}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground uppercase tracking-tighter">
+                              Direto
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">{user.server_ids.length} sv(s)</TableCell>
+                        <TableCell className="text-center">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+                              user.online > 0
+                                ? "bg-online/10 text-online"
+                                : "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            {user.online} / {user.max_connections}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {user.expires_at ? (
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(user.expires_at).toLocaleDateString("pt-BR")}
+                            </span>
+                          ) : (
+                            "Sem limite"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {userStatus === "active" ? (
+                            <span className="flex items-center gap-1.5 text-xs text-online">
+                              <Wifi className="h-3 w-3" /> Ativo
+                            </span>
+                          ) : userStatus === "expired" ? (
+                            <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                              <WifiOff className="h-3 w-3" /> Expirado
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1.5 text-xs text-destructive">
+                              <WifiOff className="h-3 w-3" /> Bloqueado
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Desconectar dispositivos"
+                              onClick={() => handleKick(user.id)}
+                            >
+                              <LogOut className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="icon" onClick={() => setUserModal(user)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            {!isProtectedOwner ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive"
+                                onClick={() => handleDeleteUser(user.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-muted-foreground/40 cursor-not-allowed"
+                                title="O dono não pode ser apagado"
+                                disabled
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })(),
+                )
+              )}
+            </TableBody>
           </Table>
         </div>
       </Card>
@@ -747,25 +905,30 @@ function UsuariosPage() {
               </div>
               <div className="grid gap-2">
                 <Label>Plano de assinatura (opcional)</Label>
-                <select 
+                <select
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  value={userModal?.plan_id || ""} 
+                  value={userModal?.plan_id || ""}
                   onChange={(e) => {
                     const planId = e.target.value || null;
                     const selectedPlan = plans.data?.find((p: any) => p.id === planId);
-                    
+
                     const updates: any = { plan_id: planId };
-                    
+
                     if (selectedPlan) {
                       updates.max_connections = selectedPlan.max_connections;
                       const expiry = new Date();
-                      const factor = selectedPlan.duration_unit === 'minutes' ? 60 * 1000 : selectedPlan.duration_unit === 'hours' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+                      const factor =
+                        selectedPlan.duration_unit === "minutes"
+                          ? 60 * 1000
+                          : selectedPlan.duration_unit === "hours"
+                            ? 60 * 60 * 1000
+                            : 24 * 60 * 60 * 1000;
                       const msToAdd = selectedPlan.duration_value * factor;
                       expiry.setTime(expiry.getTime() + msToAdd);
                       updates.expires_at = expiry.toISOString();
                     }
-                    
-                    setUserModal({...userModal, ...updates});
+
+                    setUserModal({ ...userModal, ...updates });
                   }}
                 >
                   <option value="">Personalizado (Sem plano)</option>
@@ -778,27 +941,27 @@ function UsuariosPage() {
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
-                <Label>Usuário</Label>
-                <Input
-                  name="user_username"
-                  autoComplete="off"
-                  value={userModal?.username || ""}
-                  onChange={(e) => setUserModal({ ...userModal, username: e.target.value })}
-                  disabled={!!userModal?.id}
-                  required
-                />
+                  <Label>Usuário</Label>
+                  <Input
+                    name="user_username"
+                    autoComplete="off"
+                    value={userModal?.username || ""}
+                    onChange={(e) => setUserModal({ ...userModal, username: e.target.value })}
+                    disabled={!!userModal?.id}
+                    required
+                  />
                 </div>
                 <div className="grid gap-2">
-                <Label>{userModal?.id ? "Nova senha (opcional)" : "Senha"}</Label>
-                <Input
-                  type="password"
-                  name="user_password"
-                  autoComplete="new-password"
-                  value={userModal?.password || ""}
-                  minLength={6}
-                  placeholder="Mínimo de 6 caracteres"
-                  onChange={(e) => setUserModal({ ...userModal, password: e.target.value })}
-                  required={!userModal?.id}
+                  <Label>{userModal?.id ? "Nova senha (opcional)" : "Senha"}</Label>
+                  <Input
+                    type="password"
+                    name="user_password"
+                    autoComplete="new-password"
+                    value={userModal?.password || ""}
+                    minLength={6}
+                    placeholder="Mínimo de 6 caracteres"
+                    onChange={(e) => setUserModal({ ...userModal, password: e.target.value })}
+                    required={!userModal?.id}
                   />
                 </div>
               </div>
@@ -885,7 +1048,6 @@ function UsuariosPage() {
                     </PopoverContent>
                   </Popover>
                 </div>
-
               </div>
               <div className="grid gap-2">
                 <Label>Servidores liberados</Label>
@@ -937,7 +1099,12 @@ function UsuariosPage() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setSaveConfirm(null)} disabled={loading}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSaveConfirm(null)}
+              disabled={loading}
+            >
               Não, voltar
             </Button>
             <Button type="button" onClick={() => void confirmSaveAction()} disabled={loading}>
@@ -947,7 +1114,10 @@ function UsuariosPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!destructiveConfirm} onOpenChange={(open) => !open && setDestructiveConfirm(null)}>
+      <Dialog
+        open={!!destructiveConfirm}
+        onOpenChange={(open) => !open && setDestructiveConfirm(null)}
+      >
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
             <DialogTitle>{destructiveConfirm?.title ?? "Confirmar ação"}</DialogTitle>
@@ -956,7 +1126,9 @@ function UsuariosPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-muted-foreground">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-destructive">Ação irreversível</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-destructive">
+              Ação irreversível
+            </p>
             <p className="mt-2">
               Esta operação altera dados e não deve ser executada sem intenção explícita.
             </p>
@@ -976,7 +1148,9 @@ function UsuariosPage() {
               onClick={() => void confirmDestructiveAction()}
               disabled={destructiveLoading}
             >
-              {destructiveLoading ? "Executando..." : destructiveConfirm?.actionLabel ?? "Sim, continuar"}
+              {destructiveLoading
+                ? "Executando..."
+                : (destructiveConfirm?.actionLabel ?? "Sim, continuar")}
             </Button>
           </DialogFooter>
         </DialogContent>
