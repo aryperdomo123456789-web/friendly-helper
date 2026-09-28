@@ -172,9 +172,11 @@ async function clearUserRelationsForDeletion(
   ]);
   const cleanupError = cleanup.find((result) => result.error)?.error;
   if (cleanupError) throw cleanupError;
+}
 
-  const { error: profilesError } = await cleanupClient.from("profiles").delete().in("id", ids);
-  if (profilesError) throw profilesError;
+async function deleteProfilesForDeletion(supabaseAdmin: SupabaseClient<Database>, ids: string[]) {
+  const { error } = await (supabaseAdmin as any).from("profiles").delete().in("id", ids);
+  if (error) throw error;
 }
 
 /* ------------------------------ Servidores ------------------------------ */
@@ -752,6 +754,7 @@ export const deleteAccessUser = createServerFn({ method: "POST" })
     await clearUserRelationsForDeletion(supabaseAdmin, [data.id]);
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.id);
     if (error) throw error;
+    await deleteProfilesForDeletion(supabaseAdmin, [data.id]);
     await recordAdminAudit({
       actorUserId: context.userId,
       action: "user.delete",
@@ -804,6 +807,7 @@ export const deleteAccessUsers = createServerFn({ method: "POST" })
       const deleteError = batchResults.find((result) => result.error)?.error;
       if (deleteError) throw deleteError;
     }
+    await deleteProfilesForDeletion(supabaseAdmin, ids);
 
     await recordAdminAudit({
       actorUserId: context.userId,
