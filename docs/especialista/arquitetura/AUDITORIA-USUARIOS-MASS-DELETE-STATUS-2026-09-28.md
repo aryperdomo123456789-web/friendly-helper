@@ -3,7 +3,7 @@
 **Data:** 2026-09-28  
 **Ambiente:** produção `stream.mago-bot.com`  
 **Branch de trabalho:** `backup/stream-mago-bot-2026-08-05`  
-**Commit local:** `ebc8f26` — `fix: harden user bulk deletion and expiry status`
+**Commits locais:** `ebc8f26` — correção funcional; `5f6e057` — confirmação do Auth antes de remover o profile.
 
 ## Resultado executivo
 
@@ -85,6 +85,7 @@ Manifestos sanitizados:
 
 - Manifesto anterior: `855c13ff680c5840962aeca752a8b0e9cbd647a3f0d1bae527dae82a742479b7`
 - Manifesto do stage ativo: `86d80ce9851913c6228107cc30988bb01a251505cd3ab64e74a79c4c8544b57d`
+- Manifesto do stage final após a correção de ordem: `ec3634d01f2238ff2d94a6b5ea3a54d47351693a702f63d2a5682ea2b6c96d92`
 
 Checks pós-troca:
 
@@ -95,16 +96,16 @@ Checks pós-troca:
 - `stream-mago-bot-player`: online
 - `stream-mago-bot-payments`: online
 - `stream-mago-bot-worker`: online
-- Observação: três amostras espaçadas por aproximadamente 60 segundos passaram.
+- Observação final: três amostras espaçadas por aproximadamente 60 segundos passaram sem novo restart durante a janela final.
 
 O browser Sandbox validou a rota `/usuarios` com sessão de usuário comum e mostrou corretamente **“Área restrita ao dono do sistema”**. A sessão de owner não estava disponível no browser desta execução, então não foi acionada uma exclusão real pela UI e nenhum usuário de produção foi apagado.
 
 ## Risco restante observado
 
-O worker incrementou uma reinicialização durante a janela de observação. O log mostra encerramento por `SIGINT` e reinício controlado durante refresh de catálogo, além de timeouts de M3U e mensagens de lock ocupado. Não houve processo offline ao final, mas isso confirma o risco já conhecido de estabilidade prolongada e impede declarar estabilidade de 24–72 horas.
+Na primeira janela pós-publicação houve um restart do worker; o log mostra encerramento por `SIGINT` e reinício controlado durante refresh de catálogo, além de timeouts de M3U e mensagens de lock ocupado. A publicação final ficou estável durante a janela de 60 segundos, mas o histórico confirma o risco de estabilidade prolongada e impede declarar estabilidade de 24–72 horas.
 
 Também permanece pendente uma validação manual autenticada como owner com usuários descartáveis para exercitar o clique do mass delete de ponta a ponta. O código foi compilado e a procedure foi publicada, mas nenhuma exclusão destrutiva real foi executada como “teste”.
 
 ## GitHub
 
-O commit local `ebc8f26` foi criado, mas o push foi rejeitado porque as credenciais GitHub configuradas no Sandbox retornaram `Invalid username or token`. Não foi feito force push nem alteração de histórico. A produção foi publicada de forma controlada e reversível; o repositório precisa ser sincronizado quando a autenticação GitHub for revalidada.
+Os commits locais `ebc8f26`, `2c9e9db` e `5f6e057` foram criados, mas o push foi rejeitado porque as credenciais GitHub configuradas no Sandbox retornaram `Invalid username or token`. Não foi feito force push nem alteração de histórico. A produção foi publicada de forma controlada e reversível; o repositório precisa ser sincronizado quando a autenticação GitHub for revalidada.
