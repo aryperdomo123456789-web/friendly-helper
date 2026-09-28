@@ -49,7 +49,7 @@ A fonte de produção também mostrou duas classes de lock: `storage/locks` e os
 - O spool é copiado atomically para `playlist.m3u` e removido no `finally` do refresh.
 - O snapshot streaming não carrega `playlist_text`; o caminho local continua preservando a compatibilidade do cache em disco.
 - A tabela legada `iptv_server_m3u_cache` não recebe uma string integral quando o refresh usa o caminho streaming, preservando o catálogo já persistido em `iptv_server_cache` e evitando pico de memória no worker.
-- Follow-up pós-deploy: uma origem real informou `item_count=326372`; o parser agora descarta cada tipo assim que atinge o limite contratual de 4.000 streams, em vez de acumular os 326 mil e aplicar `slice` somente no final.
+- Follow-up pós-deploy: uma origem real informou `item_count=326372`; a versão seguinte substituiu o corte global por tetos comerciais de 10.000 Live, 50.000 filmes e 16.000 séries. Episódios M3U são deduplicados por título e a lista de séries é hidratada via Xtream. A evidência completa está em `AUDITORIA-CATALOGO-COMPLETO-2026-09-28.md`.
 
 ### 2. Timeout e retry
 
@@ -132,7 +132,7 @@ Durante a observação do deploy follow-up, o worker ficou entre aproximadamente
 
 Este ciclo não certifica estabilidade de 24–72 horas. A meta de RSS abaixo de 150 MiB é um critério operacional de alerta/observação, não uma garantia matemática para uma origem de playlist arbitrariamente grande. O refresh manual em produção deve usar somente a origem já configurada e autorizada no servidor; não será feito teste de carga contra origens de clientes.
 
-Na primeira observação pós-deploy, o worker oscilou de aproximadamente 95 MiB para 282 MiB durante o refresh real e voltou para aproximadamente 95 MiB após a conclusão. O ciclo concluiu em aproximadamente 11,2 s e selecionou M3U com 326.372 itens declarados. Isso é uma melhora operacional importante, mas ainda não atende a meta conservadora de 150 MiB durante todo o ciclo; a decisão correta é manter a observação e não vender estabilidade premium.
+Na primeira observação pós-deploy, o worker oscilou de aproximadamente 95 MiB para 282 MiB durante o refresh real e voltou para aproximadamente 95 MiB após a conclusão. O follow-up de catálogo completo chegou a 285 MiB, indexou 42.260 filmes e hidratou 9.561 séries, retornando a 98 MiB após o resfriamento. Isso é uma melhora operacional importante, mas ainda não atende a meta conservadora de 150 MiB durante todo o ciclo; a decisão correta é manter a observação e não vender estabilidade premium.
 
 ## Estado
 

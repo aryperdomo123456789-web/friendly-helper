@@ -43,6 +43,7 @@ import {
   updateRefreshOperation,
   type RefreshOperationRow,
 } from "./long-running-operations.server";
+import { getCatalogStreamLimit } from "./catalog-limits";
 
 type Kind = "live" | "movie" | "series";
 
@@ -374,7 +375,7 @@ async function fetchCatalogKind(credential: XtreamCreds, kind: Kind) {
       category_name: item.category_name,
     })),
     streams: normalizeItems(streams)
-      .slice(0, 4000)
+      .slice(0, getCatalogStreamLimit(kind))
       .map((item) => ({
         id: String(item.stream_id ?? item.series_id ?? item.M_ID ?? item.m_id ?? ""),
         name: item.name,
@@ -525,6 +526,29 @@ export async function executeServerCatalogRefresh(
           server_ref: serverRef,
           source,
         });
+      }
+
+      if (source === "m3u" && catalog.series.streams.length > 0) {
+        await assertNotCancelled();
+        await progress("running", "fetching_catalog", { kind: "series" });
+        try {
+          const hydratedSeries = await fetchCatalogKind(credential, "series");
+          if (hydratedSeries.streams.length > 0) {
+            catalog.series = hydratedSeries;
+            workerLog("info", "refresh_series_hydrated", {
+              refresh_ref: hashObservationId(refreshRef),
+              server_ref: serverRef,
+              m3u_series_candidates: playlistSnapshot?.catalog?.series.streams.length ?? 0,
+              hydrated_series: hydratedSeries.streams.length,
+            });
+          }
+        } catch (error) {
+          workerLog("warn", "refresh_series_hydration_failed", {
+            refresh_ref: hashObservationId(refreshRef),
+            server_ref: serverRef,
+            error,
+          });
+        }
       }
 
       await assertNotCancelled();

@@ -10,6 +10,7 @@ import {
 } from "./iptv-cache.server";
 import { parsePlaylistCatalog } from "./iptv-playlist.server";
 import { getPlaybackExtensions } from "./stream-format";
+import { getCatalogStreamLimit } from "./catalog-limits";
 
 type Kind = "live" | "movie" | "series";
 
@@ -89,6 +90,7 @@ const resolveAccessCache = new Map<string, { expiresAt: number; value: ResolvedA
 const resolveAccessPending = new Map<string, Promise<ResolvedAccess>>();
 
 function normalizeStreams(
+  kind: Kind,
   result: Array<{
     num?: number;
     name: string;
@@ -105,7 +107,7 @@ function normalizeStreams(
   }>,
 ) {
   return result
-    .slice(0, 4000)
+    .slice(0, getCatalogStreamLimit(kind))
     .map((item) => ({
       id: String(item.stream_id ?? item.series_id ?? item.num ?? item.M_ID ?? item.m_id ?? ""),
       name: item.name,
@@ -460,7 +462,7 @@ export const getStreams = createServerFn({ method: "POST" })
         action: streamCacheMap[data.kind].streams,
         ...(data.category_id ? { category_id: data.category_id } : {}),
       });
-      const normalized = Array.isArray(result) ? normalizeStreams(result) : [];
+      const normalized = Array.isArray(result) ? normalizeStreams(data.kind, result) : [];
       if (normalized.length > 0) {
         if (data.category_id && !isCategoryScoped(normalized, data.category_id)) {
           const playlistFallback = await hydrateCatalogFromPlaylist(
@@ -493,7 +495,9 @@ export const getStreams = createServerFn({ method: "POST" })
             epg_channel_id?: string;
           }>
         >(credential, { action: streamCacheMap[data.kind].streams });
-        const fullNormalized = Array.isArray(fullResult) ? normalizeStreams(fullResult) : [];
+        const fullNormalized = Array.isArray(fullResult)
+          ? normalizeStreams(data.kind, fullResult)
+          : [];
         const filtered = fullNormalized.filter((item) => item.category_id === data.category_id);
         if (filtered.length > 0) {
           await writeServerCache(data.server_id, cacheKey, filtered);

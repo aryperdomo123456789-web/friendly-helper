@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { normalizeDns, type XtreamCreds } from "./xtream.server.ts";
 import { MAX_PLAYLIST_TEXT_BYTES, readResponseTextWithLimit } from "./response-limit.server.ts";
+import { getCatalogStreamLimit, normalizeSeriesTitle, type CatalogKind } from "./catalog-limits.ts";
 
 type Kind = "live" | "movie" | "series";
 
@@ -59,7 +60,6 @@ const DEFAULT_PLAYLIST_TIMEOUT_MS = 60_000;
 const DEFAULT_PLAYLIST_MAX_ATTEMPTS = 3;
 const DEFAULT_PLAYLIST_BACKOFF_MS = 750;
 const STREAMING_PLAYLIST_MAX_BYTES = 128 * 1024 * 1024;
-const MAX_CATALOG_STREAMS_PER_KIND = 4_000;
 
 function normalizeText(value: string | null | undefined) {
   return (value ?? "").trim();
@@ -143,6 +143,7 @@ function createParserState() {
       movie: new Map<string, string>(),
       series: new Map<string, string>(),
     } satisfies Record<Kind, Map<string, string>>,
+    seriesMaps: new Map<string, string>(),
     pendingEntry: null as { meta: Record<string, string>; displayName: string } | null,
     itemCount: 0,
   };
@@ -186,19 +187,35 @@ function consumePlaylistLine(state: PlaylistParserState, rawLine: string) {
     });
   }
 
-  if (state.catalog[kind].streams.length >= MAX_CATALOG_STREAMS_PER_KIND) {
+  const streamLimit = getCatalogStreamLimit(kind as CatalogKind);
+  if (state.catalog[kind].streams.length >= streamLimit) {
     state.pendingEntry = null;
     return;
   }
 
+  const rawName =
+    normalizeText(
+      state.pendingEntry.meta["tvg-name"] ??
+        state.pendingEntry.meta["tvg_name"] ??
+        state.pendingEntry.displayName,
+    ) || "Conteúdo";
+  const seriesKey = kind === "series" ? normalizeSeriesTitle(rawName) || rawName : null;
+  if (seriesKey && state.seriesMaps.has(seriesKey)) {
+    state.pendingEntry = null;
+    return;
+  }
+  if (seriesKey) state.seriesMaps.set(seriesKey, categoryId);
+  const streamId =
+    kind === "series"
+      ? `m3u-series-${createHash("sha256")
+          .update(seriesKey ?? rawName)
+          .digest("hex")
+          .slice(0, 24)}`
+      : detectId(kind, line);
+
   state.catalog[kind].streams.push({
-    id: detectId(kind, line),
-    name:
-      normalizeText(
-        state.pendingEntry.meta["tvg-name"] ??
-          state.pendingEntry.meta["tvg_name"] ??
-          state.pendingEntry.displayName,
-      ) || "Conteúdo",
+    id: streamId,
+    name: rawName,
     icon:
       normalizeText(
         state.pendingEntry.meta["tvg-logo"] ??
@@ -216,7 +233,7 @@ function consumePlaylistLine(state: PlaylistParserState, rawLine: string) {
 
 function finalizeCatalog(catalog: PlaylistCatalog) {
   for (const kind of Object.keys(catalog) as Kind[]) {
-    catalog[kind].streams = catalog[kind].streams.slice(0, 4000);
+    catalog[kind].streams = catalog[kind].streams.slice(0, getCatalogStreamLimit(kind));
   }
   return catalog;
 }
