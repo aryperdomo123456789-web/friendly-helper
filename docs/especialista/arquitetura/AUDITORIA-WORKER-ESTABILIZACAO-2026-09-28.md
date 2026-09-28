@@ -122,6 +122,12 @@ O deploy deve ser considerado aprovado somente se todos os itens seguintes forem
 - memória, CPU, duração e eventos de skip/fallback registrados de forma sanitizada;
 - rollback preservado.
 
+### Evidência executada
+
+Após o follow-up, foi executado um refresh manual one-shot contra um único servidor ativo, criado pela fila durável já existente e acompanhado pelo status da operação. O fluxo avançou de `pending/queued` para `running/fetching_m3u` e terminou em `succeeded/completed` em **16.336 ms**. O resultado sanitizado foi `source=m3u`, com **54 categorias e 1.724 streams Live**, **46 categorias e 4.000 streams de filme** e **42 categorias e 4.000 streams de série**. A origem declarou 326.372 itens, mas o catálogo entregue respeitou o limite de 4.000 por tipo.
+
+Durante a observação do deploy follow-up, o worker ficou entre aproximadamente 77 e 134 MiB; ao final do refresh manual, o snapshot PM2 mostrou **121,9 MiB**, CPU próxima de 0% e os quatro processos online. A janela não prova 24–72 horas de estabilidade. O relatório ainda aponta dois locks antigos órfãos/stale em `storage/locks`; eles foram preservados neste ciclo, porque a limpeza de histórico não deve ser feita automaticamente.
+
 ## Limitações honestas
 
 Este ciclo não certifica estabilidade de 24–72 horas. A meta de RSS abaixo de 150 MiB é um critério operacional de alerta/observação, não uma garantia matemática para uma origem de playlist arbitrariamente grande. O refresh manual em produção deve usar somente a origem já configurada e autorizada no servidor; não será feito teste de carga contra origens de clientes.
@@ -134,4 +140,5 @@ Na primeira observação pós-deploy, o worker oscilou de aproximadamente 95 MiB
 - Backup: concluído e verificável.
 - Implementação local: concluída.
 - Testes locais: concluídos, 60/60.
-- Deploy: preencher somente após stage, troca atômica, restart real e observação.
+- Deploy: concluído com troca atômica, restart real dos quatro PM2, root/asset 200, token inválido 403 e rollback preservado.
+- Follow-up: concluído; parser limitado durante o streaming, falso timeout removido, refresh manual real aprovado.
