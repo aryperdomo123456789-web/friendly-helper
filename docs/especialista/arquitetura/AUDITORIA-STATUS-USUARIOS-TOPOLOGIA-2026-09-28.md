@@ -46,9 +46,9 @@ A definição anterior do RPC foi salva antes da migration para rollback. O gran
 O app usa Supabase pela URL HTTP configurada em `SUPABASE_URL`/`VITE_SUPABASE_URL`.
 
 - `supabase-db`: PostgreSQL do stack Supabase; contém `public.profiles`, `public.user_roles` e `public.user_server_access`, além do RPC administrativo.
-- `mago-pg`: container PostgreSQL separado/legado; a consulta administrativa do produto não encontrou as tabelas públicas do app e o código-fonte não referencia `mago-pg`, `postgresql://`, `PGHOST` ou `DATABASE_URL` para o fluxo de usuários.
+- `mago-pg`: container PostgreSQL separado/legado; a consulta direta não foi conclusiva neste diagnóstico, mas o código-fonte não referencia `mago-pg`, `postgresql://`, `PGHOST` ou `DATABASE_URL` para o fluxo de usuários.
 
-Portanto, a origem dos usuários do painel é **um único banco Supabase (`supabase-db`)**. Os quatro PM2 são processos da aplicação, não quatro bancos.
+Portanto, a origem confirmada dos usuários do painel é **o banco Supabase (`supabase-db`)**. O host possui outro container PostgreSQL, mas não há evidência no código de que ele participe do cadastro/painel. Os quatro PM2 são processos da aplicação, não quatro bancos.
 
 ## Regressão de autenticação e recuperação
 
