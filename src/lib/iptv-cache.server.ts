@@ -1,8 +1,8 @@
+import { rm } from "node:fs/promises";
 import { xtreamCall, type XtreamCreds } from "./xtream.server";
 import {
   createEmptyPlaylistCatalog,
-  fetchRemotePlaylist,
-  parsePlaylistCatalog,
+  fetchRemotePlaylistStreaming,
   type PlaylistCatalog,
   type PlaylistSnapshot,
 } from "./iptv-playlist.server";
@@ -14,6 +14,7 @@ import {
   writeLocalServerCache,
   writeLocalServerPlaylist,
   withServerFilesystemLock,
+  ServerFilesystemLockBusyError,
   type ServerFilesystemLockObserver,
 } from "./server-filesystem-cache.server";
 import { clearLocalImageCache } from "./server-media-cache.server";
@@ -48,6 +49,7 @@ type Kind = "live" | "movie" | "series";
 type RefreshResult = {
   kinds: Record<Kind, { categories: number; streams: number }>;
   source: "m3u" | "xtream";
+  skipped?: boolean;
 };
 
 type RefreshExecutionHooks = {
@@ -79,6 +81,7 @@ type StreamRow = {
 };
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
+const CACHE_WRITE_BATCH_SIZE = 500;
 const refreshInFlight = new Map<string, Promise<RefreshResult>>();
 
 function normalizeItems<T>(rows: T[] | null | undefined): T[] {
@@ -133,7 +136,7 @@ type DynamicCacheQuery = {
   delete: () => DynamicCacheQuery;
   maybeSingle: () => Promise<DynamicQueryResult>;
   upsert: (
-    values: Record<string, unknown>,
+    values: Record<string, unknown> | Array<Record<string, unknown>>,
     options?: { onConflict?: string },
   ) => Promise<DynamicQueryResult>;
 };
@@ -230,6 +233,34 @@ export async function writeServerCache<T>(serverId: string, cacheKeyName: string
   if (error && !isMissingTableError(error)) throw error;
 }
 
+type CacheWriteRow = {
+  server_id: string;
+  cache_key: string;
+  payload: unknown;
+  fetched_at: string;
+};
+
+async function writeServerCacheBatch(rows: CacheWriteRow[]) {
+  for (let offset = 0; offset < rows.length; offset += CACHE_WRITE_BATCH_SIZE) {
+    const chunk = rows.slice(offset, offset + CACHE_WRITE_BATCH_SIZE);
+    const serverId = chunk[0]?.server_id;
+    if (!serverId) continue;
+
+    await Promise.all(
+      chunk.map((row) =>
+        writeLocalServerCache(row.server_id, row.cache_key, row.payload, row.fetched_at),
+      ),
+    );
+
+    const supabaseAdmin = await getSupabaseAdmin();
+    const cacheClient = supabaseAdmin as unknown as DynamicSupabaseClient;
+    const { error } = await cacheClient
+      .from("iptv_server_cache")
+      .upsert(chunk, { onConflict: "server_id,cache_key" });
+    if (error && !isMissingTableError(error)) throw error;
+  }
+}
+
 export async function clearServerCache(serverId: string) {
   try {
     await clearLocalServerCache(serverId);
@@ -288,6 +319,8 @@ export async function writeServerPlaylistCache(serverId: string, snapshot: Playl
     console.warn("Falha ao gravar playlist local do servidor", { serverId, error });
   }
 
+  if (!snapshot.playlist_text) return;
+
   const supabaseAdmin = await getSupabaseAdmin();
   const cacheClient = supabaseAdmin as unknown as DynamicSupabaseClient;
   const { error } = await cacheClient.from("iptv_server_m3u_cache").upsert(
@@ -320,7 +353,7 @@ async function writeCatalogRows(serverId: string, catalog: PlaylistCatalog) {
     },
   ]);
 
-  await Promise.all(rows.map((row) => writeServerCache(serverId, row.cache_key, row.payload)));
+  await writeServerCacheBatch(rows);
 }
 
 async function fetchCatalogKind(credential: XtreamCreds, kind: Kind) {
@@ -413,10 +446,18 @@ export async function executeServerCatalogRefresh(
         wait_ms: waitMs,
       });
     },
+    onSkipped: () => {
+      recordRefreshCoalesced();
+      workerLog("info", "refresh_lock_skipped", {
+        refresh_ref: hashObservationId(refreshRef),
+        server_ref: serverRef,
+      });
+    },
   };
   if (hooks.isCancellationRequested)
     lockObserver.isCancellationRequested = hooks.isCancellationRequested;
 
+  let streamingPlaylistFilePath: string | null = null;
   const job = withServerFilesystemLock(
     serverId,
     async () => {
@@ -431,10 +472,11 @@ export async function executeServerCatalogRefresh(
       await progress("running", "fetching_m3u");
       try {
         await assertNotCancelled();
-        playlistSnapshot = await fetchRemotePlaylist(credential);
+        playlistSnapshot = await fetchRemotePlaylistStreaming(credential);
+        streamingPlaylistFilePath = playlistSnapshot.playlist_file_path ?? null;
         await assertNotCancelled();
         await progress("running", "parsing_catalog");
-        catalog = parsePlaylistCatalog(playlistSnapshot.playlist_text);
+        catalog = playlistSnapshot.catalog ?? null;
         const hasAnyEntries = (Object.keys(catalog) as Kind[]).some(
           (kind) => catalog![kind].streams.length > 0,
         );
@@ -532,6 +574,25 @@ export async function executeServerCatalogRefresh(
   try {
     return await job;
   } catch (error) {
+    if (error instanceof ServerFilesystemLockBusyError) {
+      await progress("cancelled", "cancelled", { reason: "lock_busy_skip" }).catch(
+        (progressError) =>
+          workerLog("error", "refresh_operation_snapshot_failed", { error: progressError }),
+      );
+      workerLog("info", "refresh_server_skipped_lock_busy", {
+        refresh_ref: hashObservationId(refreshRef),
+        server_ref: serverRef,
+      });
+      return {
+        kinds: {
+          live: { categories: 0, streams: 0 },
+          movie: { categories: 0, streams: 0 },
+          series: { categories: 0, streams: 0 },
+        },
+        source: "xtream",
+        skipped: true,
+      };
+    }
     const cancelled = error instanceof LongOperationCancelledError;
     if (!cancelled) recordRefreshServerFailed();
     const finalState: LongOperationState = cancelled ? "cancelled" : "failed";
@@ -551,6 +612,12 @@ export async function executeServerCatalogRefresh(
       },
     );
     throw cancelled ? error : normalizeRefreshServerError(error);
+  } finally {
+    if (streamingPlaylistFilePath) {
+      await rm(streamingPlaylistFilePath, { force: true }).catch(() => {});
+      const tempDir = streamingPlaylistFilePath.replace(/\/[^/]+$/, "");
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 

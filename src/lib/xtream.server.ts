@@ -1,7 +1,7 @@
 // Server-only Xtream Codes API client (same protocol used by the IPTV backend).
 
-import { MAX_XTREAM_RESPONSE_BYTES, readResponseTextWithLimit } from "./response-limit.server";
-import { normalizeStreamExtension } from "./stream-format";
+import { MAX_XTREAM_RESPONSE_BYTES, readResponseTextWithLimit } from "./response-limit.server.ts";
+import { normalizeStreamExtension } from "./stream-format.ts";
 
 export type XtreamCreds = {
   dns: string;

@@ -11,13 +11,13 @@ const rootDir = resolve(
   rootArg ? rootArg.slice("--root=".length) : process.env.WORKER_REPORT_ROOT || process.cwd(),
 );
 const pm2Name = process.env.WORKER_REPORT_PM2_NAME || "stream-mago-bot-worker";
-const memoryWarnMb = positiveNumber(process.env.WORKER_MEMORY_WARN_MB, 384);
+const memoryWarnMb = positiveNumber(process.env.WORKER_MEMORY_WARN_MB, 128);
 const memoryCriticalMb = Math.max(
   memoryWarnMb + 1,
-  positiveNumber(process.env.WORKER_MEMORY_CRITICAL_MB, 460),
+  positiveNumber(process.env.WORKER_MEMORY_CRITICAL_MB, 150),
 );
 const restartAlertThreshold = positiveNumber(process.env.WORKER_RESTART_ALERT_THRESHOLD, 5);
-const lockStaleSeconds = positiveNumber(process.env.WORKER_LOCK_STALE_SECONDS, 900);
+const lockStaleSeconds = positiveNumber(process.env.WORKER_LOCK_STALE_SECONDS, 480);
 const heartbeatStaleSeconds = positiveNumber(process.env.WORKER_HEARTBEAT_STALE_SECONDS, 180);
 const errorAlertThreshold = positiveNumber(process.env.WORKER_ERROR_ALERT_THRESHOLD, 5);
 const now = Date.now();

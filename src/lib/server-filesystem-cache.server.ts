@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { PlaylistSnapshot } from "./iptv-playlist.server";
@@ -14,8 +14,11 @@ const SERVERS_ROOT = join(LOCAL_CACHE_ROOT, "servers");
 const LOCKS_ROOT = join(LOCAL_CACHE_ROOT, "locks");
 const LEGACY_CACHE_ROOT = join(process.cwd(), ".storage", "server-filesystem-cache");
 const LEGACY_SERVERS_ROOT = join(LEGACY_CACHE_ROOT, "servers");
-const LOCK_TIMEOUT_MS = 30_000;
-const LOCK_STALE_MS = 15 * 60 * 1000;
+const configuredLockLeaseMs = Number(process.env["WORKER_LOCK_LEASE_MS"] ?? 480_000);
+const LOCK_LEASE_MS = Number.isFinite(configuredLockLeaseMs)
+  ? Math.min(Math.max(configuredLockLeaseMs, 5 * 60 * 1000), 10 * 60 * 1000)
+  : 8 * 60 * 1000;
+const LOCK_HEARTBEAT_MS = Math.min(30_000, Math.floor(LOCK_LEASE_MS / 3));
 
 type CachedRow<T> = {
   payload: T;
@@ -136,8 +139,18 @@ export type ServerFilesystemLockObserver = {
   onAcquired?: (waitMs: number) => void;
   onStaleRemoved?: () => void;
   onTimedOut?: (waitMs: number) => void;
+  onSkipped?: () => void;
   isCancellationRequested?: () => Promise<boolean>;
 };
+
+export class ServerFilesystemLockBusyError extends Error {
+  readonly code = "SERVER_FILESYSTEM_LOCK_BUSY";
+
+  constructor(serverId: string) {
+    super(`Outro refresh já está em andamento para o servidor ${serverId}.`);
+    this.name = "ServerFilesystemLockBusyError";
+  }
+}
 
 export async function withServerFilesystemLock<T>(
   serverId: string,
@@ -147,70 +160,72 @@ export async function withServerFilesystemLock<T>(
   await mkdir(LOCKS_ROOT, { recursive: true });
   const lockPath = getLockPath(serverId);
   const startedAt = Date.now();
-  let contentionReported = false;
+  if (await observer.isCancellationRequested?.()) throw new LongOperationCancelledError();
 
-  while (true) {
-    if (await observer.isCancellationRequested?.()) {
-      throw new LongOperationCancelledError();
+  try {
+    const handle = await open(lockPath, "wx");
+    const leaseExpiresAt = Date.now() + LOCK_LEASE_MS;
+    const lockPayload = {
+      server_id: serverId,
+      pid: process.pid,
+      started_at: new Date().toISOString(),
+      lease_expires_at: new Date(leaseExpiresAt).toISOString(),
+      heartbeat_at: new Date().toISOString(),
+    };
+    try {
+      await handle.writeFile(JSON.stringify(lockPayload));
+    } finally {
+      await handle.close();
     }
+
+    observer.onAcquired?.(Date.now() - startedAt);
+    const heartbeat = setInterval(() => {
+      void writeFile(
+        lockPath,
+        JSON.stringify({
+          ...lockPayload,
+          heartbeat_at: new Date().toISOString(),
+          lease_expires_at: new Date(Date.now() + LOCK_LEASE_MS).toISOString(),
+        }),
+        "utf8",
+      ).catch(() => {});
+    }, LOCK_HEARTBEAT_MS);
+    heartbeat.unref?.();
 
     try {
-      const handle = await open(lockPath, "wx");
-      try {
-        await handle.writeFile(
-          JSON.stringify({
-            server_id: serverId,
-            pid: process.pid,
-            started_at: new Date().toISOString(),
-          }),
-        );
-      } finally {
-        await handle.close();
-      }
-
-      observer.onAcquired?.(Date.now() - startedAt);
-
-      try {
-        return await task();
-      } finally {
-        await rm(lockPath, { force: true }).catch(() => {});
-      }
-    } catch (error) {
-      if (!error || typeof error !== "object" || !("code" in error)) {
-        throw error;
-      }
-
-      if ((error as { code?: string }).code !== "EEXIST") {
-        throw error;
-      }
-
-      if (!contentionReported) {
-        contentionReported = true;
-        observer.onContended?.();
-      }
-
-      try {
-        const stats = await stat(lockPath);
-        if (Date.now() - stats.mtimeMs > LOCK_STALE_MS) {
-          await rm(lockPath, { force: true }).catch(() => {});
-          observer.onStaleRemoved?.();
-          continue;
-        }
-      } catch {
-        await rm(lockPath, { force: true }).catch(() => {});
-        continue;
-      }
-
-      if (Date.now() - startedAt > LOCK_TIMEOUT_MS) {
-        observer.onTimedOut?.(Date.now() - startedAt);
-        throw new Error(`Outro refresh já está em andamento para o servidor ${serverId}.`);
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 150));
-      if (await observer.isCancellationRequested?.()) {
-        throw new LongOperationCancelledError();
-      }
+      return await task();
+    } finally {
+      clearInterval(heartbeat);
+      await rm(lockPath, { force: true }).catch(() => {});
     }
+  } catch (error) {
+    if (!error || typeof error !== "object" || !("code" in error)) throw error;
+    if ((error as { code?: string }).code !== "EEXIST") throw error;
+
+    observer.onContended?.();
+    let stale = false;
+    try {
+      const stats = await stat(lockPath);
+      const payload = await readJsonFile<{ lease_expires_at?: string }>(lockPath);
+      const leaseExpiresAt = payload?.lease_expires_at
+        ? Date.parse(payload.lease_expires_at)
+        : Number.NaN;
+      stale = Number.isFinite(leaseExpiresAt)
+        ? leaseExpiresAt <= Date.now()
+        : Date.now() - stats.mtimeMs > LOCK_LEASE_MS;
+    } catch {
+      stale = true;
+    }
+
+    if (stale) {
+      await rm(lockPath, { force: true }).catch(() => {});
+      observer.onStaleRemoved?.();
+      throw new ServerFilesystemLockBusyError(serverId);
+    }
+
+    observer.onSkipped?.();
+    observer.onTimedOut?.(Date.now() - startedAt);
+    throw new ServerFilesystemLockBusyError(serverId);
   }
 }
 
@@ -269,6 +284,22 @@ export async function readLocalServerPlaylist(serverId: string) {
 
 export async function writeLocalServerPlaylist(serverId: string, snapshot: PlaylistSnapshot) {
   await mkdir(getServerDir(serverId), { recursive: true });
-  await writeAtomicJson(getPlaylistJsonPath(serverId), snapshot);
-  await writeAtomicText(getPlaylistTextPath(serverId), snapshot.playlist_text);
+  const textPath = getPlaylistTextPath(serverId);
+  const jsonPath = getPlaylistJsonPath(serverId);
+
+  if (snapshot.playlist_file_path) {
+    const tempTextPath = `${textPath}.${process.pid}.${Date.now()}.tmp`;
+    await copyFile(snapshot.playlist_file_path, tempTextPath);
+    await rename(tempTextPath, textPath);
+    await writeAtomicJson(jsonPath, {
+      ...snapshot,
+      playlist_text: undefined,
+      playlist_file_path: undefined,
+      catalog: undefined,
+    });
+    return;
+  }
+
+  await writeAtomicJson(jsonPath, snapshot);
+  if (snapshot.playlist_text) await writeAtomicText(textPath, snapshot.playlist_text);
 }

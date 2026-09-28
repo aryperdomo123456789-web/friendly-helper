@@ -43,10 +43,10 @@ const OPERATION_POLL_INTERVAL_MS = parseDuration(
   10_000,
 );
 const OPERATION_WORKER_REF = hashObservationId(createObservationId());
-const MEMORY_WARN_MB = parsePositiveNumber(getWorkerEnv("WORKER_MEMORY_WARN_MB") ?? "384", 384);
+const MEMORY_WARN_MB = parsePositiveNumber(getWorkerEnv("WORKER_MEMORY_WARN_MB") ?? "128", 128);
 const MEMORY_CRITICAL_MB = Math.max(
   MEMORY_WARN_MB + 1,
-  parsePositiveNumber(getWorkerEnv("WORKER_MEMORY_CRITICAL_MB") ?? "460", 460),
+  parsePositiveNumber(getWorkerEnv("WORKER_MEMORY_CRITICAL_MB") ?? "150", 150),
 );
 
 const tasks: WorkerTask[] = [];
