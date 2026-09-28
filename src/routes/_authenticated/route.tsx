@@ -19,6 +19,8 @@ import {
   LogOut,
   AlertTriangle,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   UserCog,
   Users,
   MessageSquare,
@@ -85,21 +87,23 @@ function SidebarSection({
   description,
   icon: Icon,
   titleClassName,
+  collapsed = false,
   children,
 }: {
   title: string;
   description?: string;
   icon: ElementType;
   titleClassName?: string;
+  collapsed?: boolean;
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-3">
-      <div className="flex items-start gap-3 px-3">
+    <section className={cn(collapsed ? "space-y-2" : "space-y-3")}>
+      <div className={cn("flex items-start gap-3", collapsed ? "justify-center px-0" : "px-3")}>
         <div className="mt-0.5 grid h-9 w-9 place-items-center rounded-xl border border-sidebar-border bg-sidebar-accent/60 text-sidebar-foreground">
           <Icon className="h-4 w-4" />
         </div>
-        <div className="min-w-0">
+        <div className={cn("min-w-0", collapsed && "hidden")}>
           <p className={cn("text-[11px] font-black uppercase tracking-[0.22em] text-sidebar-foreground/50", titleClassName)}>
             {title}
           </p>
@@ -110,7 +114,7 @@ function SidebarSection({
           ) : null}
         </div>
       </div>
-      <div className="space-y-1.5 px-1">{children}</div>
+      <div className={cn("space-y-1.5", collapsed ? "px-0" : "px-1")}>{children}</div>
     </section>
   );
 }
@@ -124,6 +128,7 @@ function SidebarLink({
   className,
   badge,
   preload = "intent",
+  collapsed = false,
 }: {
   to: string;
   label: string;
@@ -133,6 +138,7 @@ function SidebarLink({
   className?: string;
   badge?: ReactNode;
   preload?: "intent" | false;
+  collapsed?: boolean;
 }) {
   return (
     <Link
@@ -140,15 +146,17 @@ function SidebarLink({
       onClick={onClick}
       preload={preload}
       preloadDelay={80}
+      title={collapsed ? label : undefined}
       activeProps={{ className: activeClassName ?? "bg-sidebar-accent text-sidebar-accent-foreground" }}
       className={cn(
-        "flex items-center justify-between rounded-xl border border-transparent px-3 py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-all hover:border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
+        "flex items-center justify-between rounded-xl border border-transparent py-2.5 text-sm font-medium text-sidebar-foreground/75 transition-all hover:border-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
+        collapsed ? "justify-center px-2" : "px-3",
         className,
       )}
     >
       <span className="flex items-center gap-3">
-        <Icon className="h-4 w-4" />
-        {label}
+        <Icon className="h-4 w-4 shrink-0" />
+        {!collapsed ? label : null}
       </span>
       {badge}
     </Link>
@@ -166,8 +174,10 @@ function Shell() {
 function ShellLayout() {
   const { profile, isOwner, servers, serverId, setServerId, preloadServerCatalog, blocked, expired } = usePlayerSession();
   const [open, setOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const router = useRouter();
   const location = useLocation();
+  const isCatalogViewport = ["/canais", "/filmes", "/series"].includes(location.pathname);
   const queryClient = useQueryClient();
   const fetchConfig = useServerFn(getAppConfig);
   const fetchThreads = useServerFn(listSupportThreads);
@@ -194,6 +204,18 @@ function ShellLayout() {
   });
   const userSectionTitle = profile?.display_name?.trim() || profile?.username || "Seu perfil";
   const showPrimaryTabs = !isOwner && ["/inicio", "/canais", "/filmes", "/series"].includes(location.pathname);
+
+  useEffect(() => {
+    try {
+      setSidebarCollapsed(window.localStorage.getItem("mago-sidebar-collapsed") === "1");
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("mago-sidebar-collapsed", sidebarCollapsed ? "1" : "0");
+    } catch {}
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     if (isOwner || !showPrimaryTabs || !serverId) return;
@@ -406,11 +428,12 @@ function ShellLayout() {
     <div className="relative h-dvh overflow-hidden bg-background text-foreground">
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex h-dvh w-64 flex-col border-r border-sidebar-border bg-sidebar transition-transform lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex h-dvh w-64 flex-col border-r border-sidebar-border bg-sidebar transition-[width,transform] duration-300 lg:translate-x-0",
+          sidebarCollapsed ? "lg:w-[76px]" : "lg:w-64",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
+        <div className={cn("flex h-14 items-center gap-2 border-b border-sidebar-border", sidebarCollapsed ? "justify-center px-2" : "px-4")}>
           <div className="grid h-8 w-8 place-items-center overflow-hidden rounded-lg bg-primary/10 text-sm font-black text-primary-foreground">
             <img
               src={appConfig?.logo_small_url || appConfig?.logo_url || DEFAULT_BRAND_IMAGE_URL}
@@ -418,17 +441,18 @@ function ShellLayout() {
               className="h-full w-full object-contain p-1"
             />
           </div>
-          <span className="text-sm font-bold tracking-[0.18em] text-sidebar-foreground">
-            {appConfig?.short_name || "Sistema IPTV"}
+          <span className={cn("truncate text-sm font-bold tracking-[0.12em] text-sidebar-foreground", sidebarCollapsed && "hidden")}>
+            {appConfig?.short_name || "Mago Player PRO"}
           </span>
         </div>
 
-        <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-4 custom-scrollbar">
+        <nav className={cn("flex-1 overflow-y-auto py-3 custom-scrollbar", sidebarCollapsed ? "space-y-4 px-2" : "space-y-5 px-3")}>
           <SidebarSection
             title={userSectionTitle}
             description={undefined}
             icon={CircleUserRound}
             titleClassName="normal-case tracking-[0.06em] text-sidebar-foreground"
+            collapsed={sidebarCollapsed}
           >
             {USER_NAV.map((item) => {
               const isRestricted = !isOwner && (blocked || expired) && item.restricted;
@@ -441,6 +465,7 @@ function ShellLayout() {
                   onClick={() => setOpen(false)}
                   label={item.label}
                   icon={item.icon}
+                  collapsed={sidebarCollapsed}
                 />
               );
             })}
@@ -449,6 +474,7 @@ function ShellLayout() {
               onClick={() => setOpen(false)}
               label="Conta"
               icon={UserCog}
+              collapsed={sidebarCollapsed}
             />
             <SidebarLink
               to="/suporte"
@@ -463,6 +489,7 @@ function ShellLayout() {
                 ) : null
               ) : null}
               className={cn(!isOwner && "bg-sidebar-accent/20")}
+              collapsed={sidebarCollapsed}
             />
           </SidebarSection>
 
@@ -473,6 +500,7 @@ function ShellLayout() {
                 title="Núcleo administrativo"
                 description="Controles internos, operação e auditoria do sistema."
                 icon={LayoutDashboard}
+                collapsed={sidebarCollapsed}
               >
                 {OWNER_NAV.map((item) => (
                   <SidebarLink
@@ -482,18 +510,19 @@ function ShellLayout() {
                     label={item.label}
                     icon={item.icon}
                     className="text-gold"
+                    collapsed={sidebarCollapsed}
                   />
                 ))}
               </SidebarSection>
             </>
           ) : null}
 
-          <div className="rounded-2xl border border-sidebar-border bg-sidebar-accent/20 p-4">
+          <div className={cn("rounded-2xl border border-sidebar-border bg-sidebar-accent/20", sidebarCollapsed ? "mx-0 p-2" : "p-4")}>
             <div className="flex items-start gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/15 text-primary">
                 <LifeBuoy className="h-4 w-4" />
               </div>
-              <div className="min-w-0">
+              <div className={cn("min-w-0", sidebarCollapsed && "hidden")}>
                 <p className="text-xs font-black uppercase tracking-[0.2em] text-sidebar-foreground/50">
                   Núcleo ativo
                 </p>
@@ -511,8 +540,8 @@ function ShellLayout() {
         </nav>
 
 
-        <div className="space-y-3 border-t border-sidebar-border p-4">
-          <div className="text-xs text-muted-foreground">
+        <div className={cn("border-t border-sidebar-border", sidebarCollapsed ? "space-y-2 p-2" : "space-y-3 p-4")}>
+          <div className={cn("text-xs text-muted-foreground", sidebarCollapsed && "hidden")}>
             <p className="font-semibold text-sidebar-foreground">
               {profile?.display_name || profile?.username || (isOwner ? "Administrador" : "Acesso")}
             </p>
@@ -527,8 +556,8 @@ function ShellLayout() {
               <p>Acesso administrativo</p>
             )}
           </div>
-          <Button variant="secondary" size="sm" className="w-full" onClick={signOut}>
-            <LogOut className="mr-2 h-4 w-4" /> Sair
+          <Button variant="secondary" size="sm" className={cn("w-full", sidebarCollapsed && "px-0")} onClick={signOut} title="Sair">
+            <LogOut className={cn("h-4 w-4", !sidebarCollapsed && "mr-2")} /> {!sidebarCollapsed ? "Sair" : null}
           </Button>
         </div>
       </aside>
@@ -542,16 +571,37 @@ function ShellLayout() {
         />
       ) : null}
 
-      <div className="flex h-dvh min-w-0 w-full flex-1 flex-col overflow-hidden lg:pl-64">
-        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur">
+      <div className={cn("flex h-dvh min-w-0 w-full flex-1 flex-col overflow-hidden transition-[padding] duration-300", sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-64")}>
+        <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur sm:px-4">
           <Button
             variant="ghost"
             size="icon"
-            className="relative z-10 lg:hidden"
+            className="relative z-10 h-9 w-9 lg:hidden"
             onClick={() => setOpen((value) => !value)}
+            aria-label="Abrir menu"
           >
             <Menu className="h-5 w-5" />
           </Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative z-10 hidden h-9 w-9 lg:inline-flex"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+            title={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </Button>
+
+          <div className="flex min-w-0 items-center gap-2 lg:hidden">
+            <img
+              src={appConfig?.logo_small_url || appConfig?.logo_url || DEFAULT_BRAND_IMAGE_URL}
+              alt="Mago Player PRO"
+              className="h-7 w-7 rounded-lg object-contain"
+            />
+            <span className="max-w-[145px] truncate text-sm font-bold text-foreground">{appConfig?.short_name || "Mago Player PRO"}</span>
+          </div>
 
           <div className="relative z-10 flex min-w-0 flex-1 items-center gap-3">
             {showPrimaryTabs ? (
@@ -594,7 +644,7 @@ function ShellLayout() {
             )}
           </div>
 
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex min-w-0 items-center gap-1.5 sm:gap-3">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative h-10 w-10 rounded-full border border-border/50 bg-sidebar/40 hover:bg-primary/10 hover:text-primary transition-all">
@@ -660,7 +710,7 @@ function ShellLayout() {
 
             {servers.length > 0 && location.pathname !== "/painel" && location.pathname !== "/suporte" ? (
               <Select value={serverId ?? ""} onValueChange={setServerId}>
-                <SelectTrigger className="w-[190px] bg-sidebar/50 border-border/50">
+                <SelectTrigger className="w-[132px] bg-sidebar/50 border-border/50 text-xs sm:w-[190px] sm:text-sm">
                   <SelectValue placeholder="Servidor" />
                 </SelectTrigger>
 
@@ -688,7 +738,12 @@ function ShellLayout() {
           </div>
         ) : null}
 
-        <main className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-6 custom-scrollbar">
+        <main
+          className={cn(
+            "min-h-0 flex-1 overflow-x-hidden overflow-y-auto p-3 sm:p-4 lg:p-4",
+            isCatalogViewport ? "lg:overflow-hidden" : "lg:overflow-y-auto",
+          )}
+        >
           <SectionErrorBoundary
             title="Essa área encontrou um problema"
             description="O núcleo principal segue carregado. Você pode tentar novamente sem perder a navegação lateral."

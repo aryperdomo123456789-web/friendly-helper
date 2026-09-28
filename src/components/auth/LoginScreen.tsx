@@ -26,6 +26,46 @@ type LoginScreenProps = {
   autoLogin?: boolean;
 };
 
+const LOGIN_REQUEST_TIMEOUT_MS = 15_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => {
+      reject(new Error("Tempo limite ao conectar ao servidor de autenticação."));
+    }, timeoutMs);
+
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
+function getLoginErrorMessage(error: unknown): string {
+  const candidate = error as { message?: unknown; name?: unknown };
+  const message = typeof candidate?.message === "string" ? candidate.message : "";
+  const name = typeof candidate?.name === "string" ? candidate.name : "";
+  const networkFailure = `${name} ${message}`.toLowerCase();
+
+  if (
+    networkFailure.includes("failed to fetch") ||
+    networkFailure.includes("network") ||
+    networkFailure.includes("status 0") ||
+    networkFailure.includes("authretryablefetcherror") ||
+    networkFailure.includes("tempo limite")
+  ) {
+    return "Não foi possível conectar ao servidor de autenticação. Verifique sua conexão e tente novamente.";
+  }
+
+  return message || "Erro ao acessar o sistema";
+}
+
 export function LoginScreen({
   mode,
   initialUsername = "",
@@ -98,8 +138,8 @@ export function LoginScreen({
   if (hasSession) return null;
 
   const isOwnerMode = mode === "owner";
-  const title = isOwnerMode ? "Acesso administrativo" : (appConfig?.name || "Sistema IPTV");
-  const shortName = appConfig?.short_name || appConfig?.name || "Sistema IPTV";
+  const title = isOwnerMode ? "Acesso administrativo" : (appConfig?.name || "Mago Player PRO");
+  const shortName = appConfig?.short_name || appConfig?.name || "Mago Player PRO";
   const description = isOwnerMode
     ? "Entrada administrativa exclusiva do dono do sistema"
     : (appConfig?.description || "Entre com suas credenciais de acesso");
@@ -135,10 +175,13 @@ export function LoginScreen({
         ? loginUsername
         : `${normalizedUsername}@iptv.local`;
 
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password: loginPassword,
-      });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email,
+          password: loginPassword,
+        }),
+        LOGIN_REQUEST_TIMEOUT_MS,
+      );
 
       if (error) throw error;
 
@@ -152,9 +195,9 @@ export function LoginScreen({
 
       toast.success(isOwnerMode ? "Acesso administrativo autorizado!" : "Acesso autorizado!");
       window.location.replace(isOwnerMode ? "/painel" : "/inicio");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error.message || "Erro ao acessar o sistema");
+      toast.error(getLoginErrorMessage(error));
     } finally {
       setLoading(false);
     }

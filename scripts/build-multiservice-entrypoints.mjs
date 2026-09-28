@@ -4,6 +4,10 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const ROOT_DIR = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const BUN_COMMAND = spawnSync("command", ["-v", "bun"], { encoding: "utf8" }).status === 0
+  ? "bun"
+  : "npx";
+const BUN_ARGS_PREFIX = BUN_COMMAND === "bun" ? [] : ["--yes", "bun"];
 
 const entries = [
   {
@@ -26,8 +30,8 @@ async function main() {
     await mkdir(dirname(outputPath), { recursive: true });
 
     const result = spawnSync(
-      "bun",
-      ["build", entry.source, "--outfile", outputPath, "--target=node", "--format=esm"],
+      BUN_COMMAND,
+      [...BUN_ARGS_PREFIX, "build", entry.source, "--outfile", outputPath, "--target=node", "--format=esm"],
       {
         cwd: ROOT_DIR,
         stdio: "inherit",

@@ -4,6 +4,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { AppConfigSchema } from "./types";
 import { z } from "zod";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 export const DEFAULT_BRAND_IMAGE_URL = "/brand/webplayer-brand.png";
 export const REMOTE_BRAND_IMAGE_URL = "https://i.imgur.com/RrqwMFH.png";
@@ -35,8 +36,8 @@ function mergeRuntimeConfig(config: unknown) {
     logo_url: parsed.logo_url || DEFAULT_BRAND_IMAGE_URL,
     logo_small_url: parsed.logo_small_url || parsed.logo_url || DEFAULT_BRAND_IMAGE_URL,
     favicon_url: parsed.favicon_url || parsed.logo_url || DEFAULT_BRAND_IMAGE_URL,
-    ...(runtimeDomain ? { domain: runtimeDomain } : null),
-    ...(runtimeBaseUrl ? { base_url: runtimeBaseUrl } : null),
+    domain: parsed.domain || runtimeDomain || "stream.mago-bot.com",
+    base_url: parsed.base_url || runtimeBaseUrl || "https://stream.mago-bot.com",
   };
 }
 
@@ -76,22 +77,43 @@ export const getAppConfig = createServerFn({ method: "GET" })
  * Updates the central application configuration.
  */
 export const updateAppConfig = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .validator((data: any) => AppConfigSchema.parse(data))
-  .handler(async ({ data: newConfig }) => {
-    const { data: existing } = await (supabaseAdmin.from('app_config' as any).select('id').limit(1).maybeSingle() as any);
+  .handler(async ({ data: newConfig, context }) => {
+    const { data: roleRows, error: roleError } = await supabaseAdmin
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", context.userId)
+      .in("role", ["owner", "admin"]);
+    if (roleError) throw new Error("Não foi possível validar a permissão de configuração: " + roleError.message);
+    if (!roleRows?.length) throw new Error("Acesso restrito à área administrativa.");
+
+    const { data: existing, error: readError } = await (supabaseAdmin
+      .from('app_config' as any)
+      .select('id, config')
+      .limit(1)
+      .maybeSingle() as any);
+    if (readError) throw new Error("Erro ao ler as configurações atuais: " + readError.message);
+
+    const mergedConfig = AppConfigSchema.parse({
+      ...(existing?.config ?? {}),
+      ...newConfig,
+      theme: { ...(existing?.config?.theme ?? {}), ...(newConfig.theme ?? {}) },
+      copy: { ...(existing?.config?.copy ?? {}), ...(newConfig.copy ?? {}) },
+    });
     
     if (existing) {
       const { error: updateError } = await (supabaseAdmin
         .from('app_config' as any)
-        .update({ config: newConfig })
+        .update({ config: mergedConfig, updated_at: new Date().toISOString() })
         .eq('id', existing.id) as any);
       if (updateError) throw new Error("Erro ao atualizar as configurações: " + updateError.message);
     } else {
       const { error: insertError } = await (supabaseAdmin
         .from('app_config' as any)
-        .insert([{ config: newConfig }]) as any);
+        .insert([{ config: mergedConfig }]) as any);
       if (insertError) throw new Error("Erro ao inserir as configurações: " + insertError.message);
     }
 
-    return { success: true };
+    return { success: true, config: mergeRuntimeConfig(mergedConfig) };
   });

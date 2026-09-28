@@ -14,6 +14,7 @@ import {
   kickDevices,
   testServerConnection
 } from "@/lib/owner.functions";
+import { resolveUserStatus } from "@/lib/user-status";
 import { Badge } from "@/components/ui/badge";
 import {
   listTestLinksPage,
@@ -130,6 +131,7 @@ function PainelDono() {
   const [plansCurrentPage, setPlansCurrentPage] = useState(1);
   const [testLinksCurrentPage, setTestLinksCurrentPage] = useState(1);
   const [threadsPage, setThreadsPage] = useState(1);
+  const [statusNow, setStatusNow] = useState(() => Date.now());
   const threadsPageSize = 10;
 
   // Server functions
@@ -192,6 +194,7 @@ function PainelDono() {
   const [sendingNotif, setSendingNotif] = useState(false);
   const [showNotifDialog, setShowNotifDialog] = useState(false);
   const [showConfigSaveConfirm, setShowConfigSaveConfirm] = useState(false);
+  const [configThemeMode, setConfigThemeMode] = useState<"azul" | "dark" | "light">("azul");
   const configFormRef = useRef<HTMLFormElement>(null);
   const [saveConfirm, setSaveConfirm] = useState<null | {
     kind: "server" | "user" | "testLink" | "plan";
@@ -251,6 +254,12 @@ function PainelDono() {
     enabled: isOwner,
   });
 
+  useEffect(() => {
+    if (configQuery.data?.theme_mode) {
+      setConfigThemeMode(configQuery.data.theme_mode);
+    }
+  }, [configQuery.data?.theme_mode]);
+
   const servers = useQuery({
     queryKey: ["admin-servers"],
     queryFn: () => fetchServers(),
@@ -278,6 +287,11 @@ function PainelDono() {
   useEffect(() => {
     setUsersCurrentPage(1);
   }, [debouncedUsersSearch, usersPageSize]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setStatusNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const users = useQuery({
     queryKey: ["admin-users-page", debouncedUsersSearch, usersCurrentPage, usersPageSize],
@@ -676,7 +690,7 @@ function PainelDono() {
         favicon_url: values["favicon_url"] as string,
         tmdb_api_key: (values["tmdb_api_key"] as string) || undefined,
         epg_xmltv_url: (values["epg_xmltv_url"] as string) || undefined,
-        theme_mode: values["theme_mode"] as "azul" | "dark" | "light",
+        theme_mode: configThemeMode,
         telegram_handle: values["telegram_handle"] as string,
         mp_access_token: values["mp_access_token"] as string,
         mp_public_key: values["mp_public_key"] as string,
@@ -955,6 +969,7 @@ function PainelDono() {
                   usersItems.map((user: any) => (
                     (() => {
                       const isProtectedOwner = user.username === "magodono";
+                      const userStatus = resolveUserStatus(user, statusNow);
                       return (
                     <TableRow key={user.id}>
                       <TableCell>
@@ -1009,9 +1024,13 @@ function PainelDono() {
                         ) : "Sem limite"}
                       </TableCell>
                       <TableCell>
-                        {user.is_active ? (
+                        {userStatus === "active" ? (
                           <span className="flex items-center gap-1.5 text-xs text-online">
                             <Wifi className="h-3 w-3" /> Ativo
+                          </span>
+                        ) : userStatus === "expired" ? (
+                          <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                            <WifiOff className="h-3 w-3" /> Expirado
                           </span>
                         ) : (
                           <span className="flex items-center gap-1.5 text-xs text-destructive">
@@ -1525,7 +1544,10 @@ function PainelDono() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <Label>Tema do Sistema</Label>
-                        <Select name="theme_mode" defaultValue={configQuery.data?.theme_mode || "azul"}>
+                        <Select
+                          value={configThemeMode}
+                          onValueChange={(value) => setConfigThemeMode(value as "azul" | "dark" | "light")}
+                        >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Selecione o tema" />
                           </SelectTrigger>

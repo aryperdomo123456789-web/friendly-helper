@@ -235,6 +235,11 @@ const CatalogGridCard = memo(function CatalogGridCard({
         ) : (
           <PlayCircle className="absolute inset-0 m-auto h-9 w-9 text-primary opacity-0 transition-opacity group-hover:opacity-100" />
         )}
+        {active ? (
+          <span className="absolute left-2 top-2 rounded-full bg-primary px-2 py-1 text-[10px] font-bold text-primary-foreground shadow-lg">
+            Reproduzindo
+          </span>
+        ) : null}
       </div>
       <div className="px-2 py-2 text-xs font-medium">
         <MarqueeText text={item.name} active={active} className="line-clamp-2" />
@@ -307,6 +312,8 @@ export function Catalog({
   });
   const [episodePageSize, setEpisodePageSize] = useState<Record<string, 6 | 12 | 24>>({});
   const [episodePage, setEpisodePage] = useState<Record<string, number>>({});
+  const categoryScrollRef = useRef<HTMLDivElement | null>(null);
+  const categoryScrollTopRef = useRef(0);
   const deferredCatTerm = useDeferredValue(catTerm);
   const deferredTerm = useDeferredValue(term);
   const playbackCacheKey = useCallback(
@@ -440,6 +447,7 @@ export function Catalog({
   }, [openSeries, play]);
 
   const selectCategory = useCallback((categoryId: string) => {
+    categoryScrollTopRef.current = categoryScrollRef.current?.scrollTop ?? 0;
     startTransition(() => {
       setCategoryId(categoryId);
       setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
@@ -449,7 +457,6 @@ export function Catalog({
       if (listArea) listArea.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [kind]);
-
 
   useEffect(() => {
     setCategoryId(null);
@@ -476,7 +483,14 @@ export function Catalog({
   });
 
   const searchAll = Boolean(initialSearch.trim());
-  const activeCategory = searchAll ? null : categoryId ?? categories.data?.[0]?.category_id ?? null;
+  const activeCategory = searchAll ? null : categoryId;
+  const showCategories = !searchAll && !categoryId && !openSeries;
+
+  useEffect(() => {
+    if (showCategories && categoryScrollRef.current) {
+      categoryScrollRef.current.scrollTop = categoryScrollTopRef.current;
+    }
+  }, [showCategories]);
 
   const streams = useQuery({
     queryKey: ["streams", kind, serverId, activeCategory],
@@ -488,7 +502,7 @@ export function Catalog({
           ...(activeCategory ? { category_id: activeCategory } : {}),
         },
     }),
-    enabled: Boolean(serverId) && (kind === "live" ? Boolean(activeCategory) : true),
+    enabled: Boolean(serverId) && (Boolean(activeCategory) || searchAll),
     retry: 1,
     staleTime: 5 * 60_000,
     placeholderData: (previous) => previous,
@@ -656,7 +670,7 @@ export function Catalog({
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col gap-4 overflow-hidden">
+    <div className="flex h-auto min-h-0 w-full min-w-0 flex-col gap-4 overflow-hidden lg:h-full">
       {blocked && (
         <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-destructive/50 bg-destructive/10 p-4 mb-2">
           <div className="flex items-start gap-3">
@@ -692,9 +706,8 @@ export function Catalog({
       ) : null}
 
 
-      {/* Layout do legado: categorias | lista | player sempre na tela */}
-      <div className="grid flex-1 min-h-0 min-w-0 gap-4 lg:grid-cols-[284px_minmax(0,1.14fr)_minmax(360px,420px)] xl:grid-cols-[284px_minmax(0,1.22fr)_minmax(340px,400px)]">
-        <aside className="flex h-full min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-2">
+      <div className="grid flex-none min-h-0 min-w-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(300px,38%)_minmax(0,1fr)]">
+        {showCategories ? <aside className="order-2 flex h-auto min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-3 lg:order-none lg:h-full">
           <p className="px-2 pb-2 text-sm font-semibold">Categorias</p>
           <div className="relative px-1 pb-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -705,7 +718,7 @@ export function Catalog({
               className="h-9 pl-9"
             />
           </div>
-          <div className="wp-scroll flex-1 min-h-0 space-y-1 overflow-y-auto">
+          <div ref={categoryScrollRef} className="wp-scroll flex-1 min-h-0 space-y-1 overflow-y-auto">
             {categories.isLoading ? (
               <div className="flex justify-center p-6">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -731,9 +744,9 @@ export function Catalog({
               </p>
             ) : null}
           </div>
-        </aside>
+        </aside> : null}
 
-        <section className="flex h-full min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-2">
+        {!showCategories ? <section className="order-2 flex h-auto min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-3 lg:order-none lg:h-full">
           {openSeries ? (
             <>
               <div className="flex items-center gap-2 px-1 pb-2">
@@ -825,7 +838,7 @@ export function Catalog({
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                className="h-8 px-2.5 text-[10px]"
+                                className="h-11 px-2.5 text-[10px] sm:h-8"
                                 onClick={() =>
                                   startTransition(() =>
                                     setEpisodePage((pagesMap) => ({ ...pagesMap, [season.season]: 1 })),
@@ -839,7 +852,7 @@ export function Catalog({
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                className="h-8 px-2.5 text-[10px]"
+                                className="h-11 px-2.5 text-[10px] sm:h-8"
                                 onClick={() =>
                                   startTransition(() =>
                                     setEpisodePage((pagesMap) => ({
@@ -858,7 +871,7 @@ export function Catalog({
                                   type="button"
                                   size="sm"
                                   variant={page === safeSeasonPage ? "default" : "outline"}
-                                  className="h-8 min-w-8 px-2.5 text-[10px]"
+                                  className="h-11 min-w-11 px-2.5 text-[10px] sm:h-8 sm:min-w-8"
                                   onClick={() =>
                                     startTransition(() =>
                                       setEpisodePage((pagesMap) => ({ ...pagesMap, [season.season]: page })),
@@ -872,7 +885,7 @@ export function Catalog({
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                className="h-8 px-2.5 text-[10px]"
+                                className="h-11 px-2.5 text-[10px] sm:h-8"
                                 onClick={() =>
                                   startTransition(() =>
                                     setEpisodePage((pagesMap) => ({
@@ -892,7 +905,7 @@ export function Catalog({
                                 type="button"
                                 size="sm"
                                 variant="outline"
-                                className="h-8 px-2.5 text-[10px]"
+                                className="h-11 px-2.5 text-[10px] sm:h-8"
                                 onClick={() =>
                                   startTransition(() =>
                                     setEpisodePage((pagesMap) => ({
@@ -927,7 +940,24 @@ export function Catalog({
             </>
           ) : (
             <>
-              <p className="px-2 pb-2 text-sm font-semibold">{LABEL[kind].list}</p>
+              <div className="flex items-center gap-2 border-b border-border/60 px-1 pb-3">
+                {!searchAll ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-8 shrink-0 gap-1 px-2 text-xs"
+                    onClick={() => setCategoryId(null)}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Voltar para Categorias
+                  </Button>
+                ) : null}
+                <p className="truncate text-sm font-bold uppercase tracking-tight">
+                  {searchAll
+                    ? `Busca em ${LABEL[kind].title}`
+                    : categories.data?.find((category) => category.category_id === activeCategory)?.category_name ?? LABEL[kind].list}
+                </p>
+              </div>
               <div className="relative px-1 pb-2">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -1006,7 +1036,7 @@ export function Catalog({
                       )}
                     >
                       {paginatedItems.map((item, index) => {
-                        const isActiveItem = kind !== "series" && playing?.id === item.id;
+                        const isActiveItem = playing?.id === item.id;
 
                         return (
                             <CatalogGridCard
@@ -1038,7 +1068,7 @@ export function Catalog({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 px-3 text-xs"
+                      className="h-11 px-3 text-xs sm:h-8"
                       onClick={() => startTransition(() => setCurrentPage((pages) => ({ ...pages, [kind]: 1 })))}
                       disabled={safePage === 1}
                     >
@@ -1048,7 +1078,7 @@ export function Catalog({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 px-3 text-xs"
+                      className="h-11 px-3 text-xs sm:h-8"
                       onClick={() =>
                         startTransition(() =>
                           setCurrentPage((pages) => ({
@@ -1068,7 +1098,7 @@ export function Catalog({
                         type="button"
                         size="sm"
                         variant={page === safePage ? "default" : "outline"}
-                        className="h-8 min-w-9 px-3 text-xs"
+                        className="h-11 min-w-11 px-3 text-xs sm:h-8 sm:min-w-9"
                         onClick={() => startTransition(() => setCurrentPage((pages) => ({ ...pages, [kind]: page })))}
                       >
                         {page}
@@ -1079,7 +1109,7 @@ export function Catalog({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 px-3 text-xs"
+                      className="h-11 px-3 text-xs sm:h-8"
                       onClick={() =>
                         startTransition(() =>
                           setCurrentPage((pages) => ({
@@ -1096,7 +1126,7 @@ export function Catalog({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 px-3 text-xs"
+                      className="h-11 px-3 text-xs sm:h-8"
                       onClick={() => startTransition(() => setCurrentPage((pages) => ({ ...pages, [kind]: totalPages })))}
                       disabled={safePage === totalPages}
                     >
@@ -1107,27 +1137,29 @@ export function Catalog({
               ) : null}
             </>
           )}
-        </section>
+        </section> : null}
 
-        <section id="wp-player-area" className="lg:sticky lg:top-4 lg:self-start lg:w-full lg:max-w-[420px] xl:max-w-[400px] lg:justify-self-end">
+        <section id="wp-player-area" className="order-1 min-w-0 lg:order-none lg:sticky lg:top-0 lg:h-full lg:max-h-full lg:overflow-hidden lg:pr-1 lg:self-start lg:w-full">
           {playing ? (
-            <div className="space-y-2">
+            <div className="flex h-full min-h-0 flex-col gap-2">
               <VideoPlayer
                 url={playing.url}
                 poster={proxyMediaUrl(playing.icon, serverId) ?? playing.icon}
                 title={playing.name}
                 kind={kind}
               />
-              <p className="truncate text-sm font-semibold">{playing.name}</p>
+              <p className="shrink-0 truncate text-sm font-semibold">{playing.name}</p>
               
               {/* EPG / Metadata Area */}
-              <PlayerInfo 
-                streamId={playing.id}
-                kind={kind} 
-                name={playing.name} 
-                fetchEPG={fetchEPG} 
-                fetchTMDB={fetchTMDB}
-              />
+              <div className="min-h-0 flex-1">
+                <PlayerInfo
+                  streamId={playing.id}
+                  kind={kind}
+                  name={playing.name}
+                  fetchEPG={fetchEPG}
+                  fetchTMDB={fetchTMDB}
+                />
+              </div>
             </div>
           ) : (
             <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card text-center">
@@ -1179,21 +1211,21 @@ function PlayerInfo({
 
   if (kind === "live") {
     return (
-      <div className="rounded-xl border border-border bg-card/50 p-3 space-y-2">
+      <div className="flex h-full min-h-0 flex-col space-y-2 rounded-xl border border-border bg-card/50 p-3">
         <h3 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
           <Info className="h-3 w-3" /> Programação EPG
         </h3>
-        <div className="space-y-2 max-h-[200px] overflow-y-auto wp-scroll pr-1">
+        <div className="wp-scroll min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
           {epg.isLoading ? (
             <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
           ) : (epg.data ?? []).length > 0 ? (
             epg.data.slice(0, 5).map((prog: any, i: number) => (
-              <div key={i} className={cn("text-[11px] border-l-2 pl-2 py-0.5", i === 0 ? "border-primary bg-primary/5" : "border-muted")}>
-                <div className="flex justify-between font-bold">
-                  <span>{prog.title}</span>
-                  <span className="text-[10px] text-muted-foreground">{prog.start.split(' ')[1]}</span>
+              <div key={i} className={cn("min-w-0 border-l-2 py-1 pl-2 text-[11px]", i === 0 ? "border-primary bg-primary/5" : "border-muted")}>
+                <div className="flex min-w-0 items-start justify-between gap-2 font-bold">
+                  <span className="min-w-0 break-words">{prog.title}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">{prog.start.split(' ')[1]}</span>
                 </div>
-                {prog.description && <p className="text-muted-foreground line-clamp-2 mt-0.5">{prog.description}</p>}
+                {prog.description && <p className="mt-0.5 break-words text-muted-foreground line-clamp-3">{prog.description}</p>}
               </div>
             ))
           ) : (

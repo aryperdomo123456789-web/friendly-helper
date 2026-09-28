@@ -1,0 +1,1 @@
+function e(e){return/^https?:\/\//i.test(e)}function t(t,n){if(!t)return null;let r=t.trim();if(!r)return null;if(!e(r))return r;let i=new URLSearchParams({src:r});return n?.trim()&&i.set(`server_id`,n.trim()),`/api/public/image?${i.toString()}`}export{t};

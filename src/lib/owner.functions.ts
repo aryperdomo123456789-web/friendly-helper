@@ -74,7 +74,7 @@ async function assertNotOwnerAccount(supabase: any, userId: string) {
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
-      .in("role", ["owner"])
+      .in("role", ["owner", "admin"])
       .limit(1),
     supabase
       .from("profiles")
@@ -87,10 +87,38 @@ async function assertNotOwnerAccount(supabase: any, userId: string) {
   if (profileError) throw new Error(profileError.message);
 
   if ((roleRows ?? []).length > 0 || profile?.username === "magodono") {
-    throw new Error("O usuário administrador (@magodono) não pode ser apagado.");
+    throw new Error("O usuário owner/admin (@magodono) não pode ser apagado.");
   }
 }
 
+
+async function clearUserRelationsForDeletion(supabaseAdmin: any, ids: string[]) {
+  const cleanup = await Promise.all([
+    supabaseAdmin.from("profiles").update({ referred_by_id: null }).in("referred_by_id", ids),
+    supabaseAdmin.from("profiles").update({ created_by: null }).in("created_by", ids),
+    supabaseAdmin.from("iptv_servers").update({ created_by: null }).in("created_by", ids),
+    supabaseAdmin.from("test_links").update({ created_by_id: null }).in("created_by_id", ids),
+    supabaseAdmin.from("device_sessions").delete().in("user_id", ids),
+    supabaseAdmin.from("user_server_access").delete().in("user_id", ids),
+    supabaseAdmin.from("user_roles").delete().in("user_id", ids),
+    supabaseAdmin.from("notifications").delete().in("user_id", ids),
+    supabaseAdmin.from("audit_logs").update({ actor_user_id: null }).in("actor_user_id", ids),
+    supabaseAdmin.from("audit_logs").update({ target_user_id: null }).in("target_user_id", ids),
+    supabaseAdmin.from("support_messages").update({ sender_id: null }).in("sender_id", ids),
+    supabaseAdmin
+      .from("support_threads")
+      .update({ assigned_to_user_id: null, closed_by_user_id: null })
+      .or(`assigned_to_user_id.in.(${ids.join(",")}),closed_by_user_id.in.(${ids.join(",")})`),
+    supabaseAdmin.from("support_threads").delete().in("user_id", ids),
+  ]);
+  const cleanupError = cleanup.find((result: any) => result.error)?.error;
+  if (cleanupError) throw cleanupError;
+}
+
+async function deleteProfilesForDeletion(supabaseAdmin: any, ids: string[]) {
+  const { error } = await supabaseAdmin.from("profiles").delete().in("id", ids);
+  if (error) throw error;
+}
 
 /* ------------------------------ Servidores ------------------------------ */
 
@@ -499,9 +527,65 @@ export const deleteAccessUser = createServerFn({ method: "POST" })
     await assertOwner(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertNotOwnerAccount(supabaseAdmin, data.id);
+    await clearUserRelationsForDeletion(supabaseAdmin, [data.id]);
     const { error } = await supabaseAdmin.auth.admin.deleteUser(data.id);
     if (error) throw error;
+    await deleteProfilesForDeletion(supabaseAdmin, [data.id]);
     return { ok: true };
+  });
+
+const deleteAccessUsersSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(1000),
+});
+
+export const deleteAccessUsers = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => deleteAccessUsersSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await assertOwner(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const ids = [...new Set(data.ids)];
+
+    if (ids.includes(context.userId)) {
+      throw new Error("A conta administrativa atual não pode ser excluída.");
+    }
+
+    console.info("[admin-users] bulk_delete_start", { count: ids.length });
+
+    // Protect every selected account server-side, including requests crafted
+    // outside the admin UI. Do this in two queries instead of one round trip
+    // per user; large selections must not appear to hang in the modal.
+    const [protectedProfilesResult, protectedRolesResult] = await Promise.all([
+      supabaseAdmin.from("profiles").select("id, username").in("id", ids),
+      supabaseAdmin.from("user_roles").select("user_id, role").in("user_id", ids).in("role", ["owner", "admin"]),
+    ]);
+    if (protectedProfilesResult.error) throw protectedProfilesResult.error;
+    if (protectedRolesResult.error) throw protectedRolesResult.error;
+    if (
+      (protectedProfilesResult.data ?? []).some((profile) => profile.username === "magodono") ||
+      (protectedRolesResult.data ?? []).length > 0
+    ) {
+      throw new Error("A conta administrativa/dono não pode ser excluída.");
+    }
+
+    await clearUserRelationsForDeletion(supabaseAdmin, ids);
+
+    console.info("[admin-users] bulk_delete_cleanup_complete", { count: ids.length });
+
+    // Auth deletion is still performed per account, but in small controlled
+    // batches so 30+ users do not wait through a long serial request.
+    const batchSize = 5;
+    for (let offset = 0; offset < ids.length; offset += batchSize) {
+      const batchResults = await Promise.all(
+        ids.slice(offset, offset + batchSize).map((id) => supabaseAdmin.auth.admin.deleteUser(id)),
+      );
+      const deleteError = batchResults.find((result) => result.error)?.error;
+      if (deleteError) throw deleteError;
+    }
+
+    await deleteProfilesForDeletion(supabaseAdmin, ids);
+    console.info("[admin-users] bulk_delete_complete", { count: ids.length });
+    return { ok: true, deleted: ids.length };
   });
 
 export const kickDevices = createServerFn({ method: "POST" })

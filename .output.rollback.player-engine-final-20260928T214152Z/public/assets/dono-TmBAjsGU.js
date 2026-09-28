@@ -1,0 +1,1 @@
+import{p as e}from"./utils-D0yxl1VS.js";import{t}from"./LoginScreen-C14nD_ij.js";var n=e();function r(){return(0,n.jsx)(t,{mode:`owner`,initialUsername:`magodono`})}export{r as component};

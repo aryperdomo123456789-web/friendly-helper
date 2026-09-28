@@ -1,0 +1,1 @@
+import{p as e}from"./utils-CYKyIO3g.js";import{t}from"./LoginScreen-BLCymqG3.js";var n=e();function r(){return(0,n.jsx)(t,{mode:`owner`,initialUsername:`magodono`})}export{r as component};

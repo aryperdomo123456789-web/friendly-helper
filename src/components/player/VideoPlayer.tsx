@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { detectPlayerEngine } from "@/lib/player-engine";
 
 type Props = {
   url: string;
@@ -18,6 +19,7 @@ export function VideoPlayer({ url, poster, title, kind }: Props) {
     if (!video || !url) return;
     let destroyed = false;
     let hls: import("hls.js").default | null = null;
+    const engine = detectPlayerEngine(video);
     const ready = () => setLoading(false);
     const buffer = () => {
       if (!destroyed) setLoading(true);
@@ -45,7 +47,7 @@ export function VideoPlayer({ url, poster, title, kind }: Props) {
     video.setAttribute("playsinline", "");
 
     const isHls = url.includes(".m3u8") || url.includes("hls=1");
-    const nativeHls = video.canPlayType("application/vnd.apple.mpegurl") !== "";
+    const nativeHls = engine === "native";
 
     async function start() {
       if (isHls && !nativeHls) {
@@ -54,15 +56,49 @@ export function VideoPlayer({ url, poster, title, kind }: Props) {
         if (destroyed) return;
         if (Hls.isSupported()) {
           let recoveries = 0;
+          let lastStallRecoveryAt = 0;
+          const recoverFromStall = () => {
+            if (destroyed || !hls) return;
+            const now = Date.now();
+            if (now - lastStallRecoveryAt < 1500) return;
+            lastStallRecoveryAt = now;
+
+            // Keep the current live position inside the buffered range. This is
+            // intentionally a small nudge; a full reload would create a visible
+            // gap and restart the channel from the beginning.
+            if (video.buffered.length > 0) {
+              const end = video.buffered.end(video.buffered.length - 1);
+              if (end - video.currentTime < 0.35) {
+                video.currentTime = Math.max(video.currentTime, end - 0.15);
+              }
+            }
+            hls.startLoad();
+            void startPlayback(kind === "live");
+          };
           hls = new Hls({
             lowLatencyMode: false,
             enableWorker: true,
-            backBufferLength: 90,
-            maxBufferLength: 30,
+            // Keep TS fragments on the normal complete-fragment path. Hls.js
+            // defaults this to false, but making it explicit prevents a future
+            // library default from feeding partial PES data to the remuxer.
+            progressive: false,
+            // A little more live cushion avoids riding the provider's edge.
+            backBufferLength: 30,
+            maxBufferLength: 45,
             maxMaxBufferLength: 120,
+            maxBufferSize: 60 * 1000 * 1000,
             maxBufferHole: 0.5,
-            liveSyncDurationCount: 3,
-            liveMaxLatencyDurationCount: 8,
+            liveSyncDurationCount: 4,
+            liveMaxLatencyDurationCount: 10,
+            maxFragLookUpTolerance: 0.2,
+            nudgeOffset: 0.1,
+            nudgeMaxRetry: 5,
+            capLevelToPlayerSize: true,
+            // Do not react to transient decode telemetry by switching levels.
+            // This channel is a single 1080p rendition and has no lower level
+            // to switch to; forcing a switch only causes repeated rebuffering.
+            capLevelOnFPSDrop: false,
+            maxLiveSyncPlaybackRate: 1,
             manifestLoadingMaxRetry: 15,
             levelLoadingMaxRetry: 15,
             fragLoadingMaxRetry: 25,
@@ -78,6 +114,13 @@ export function VideoPlayer({ url, poster, title, kind }: Props) {
           hls.on(Hls.Events.LEVEL_LOADED, ready);
           hls.on(Hls.Events.ERROR, (_event, data) => {
             console.error("[player] hls", data.type, data.details, data.fatal);
+            if (
+              data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR ||
+              data.details === Hls.ErrorDetails.BUFFER_NUDGE_ON_STALL
+            ) {
+              recoverFromStall();
+              return;
+            }
             if (!data.fatal) return;
             if (recoveries < 5 && data.type === Hls.ErrorTypes.MEDIA_ERROR) {
               recoveries += 1;
@@ -143,7 +186,7 @@ export function VideoPlayer({ url, poster, title, kind }: Props) {
         controls
         autoPlay
         playsInline
-        preload="metadata"
+        preload="auto"
         controlsList="nodownload noplaybackrate noremoteplayback"
         disablePictureInPicture
         className="h-full w-full"

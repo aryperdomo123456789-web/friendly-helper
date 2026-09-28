@@ -1,0 +1,409 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Design system definition.
+ *
+ * The @theme inline block maps CSS custom properties to Tailwind utility
+ * classes (e.g. --color-primary -> bg-primary, text-primary).
+ *
+ * The :root and .dark blocks define the actual color values using oklch.
+ * All colors MUST use oklch format.
+ *
+ * To add a new semantic color:
+ * 1. Add the variable to :root (light value) and .dark (dark value)
+ * 2. Register it in @theme inline as --color-<name>: var(--<name>)
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+:root {
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.129 0.042 264.695);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.129 0.042 264.695);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.129 0.042 264.695);
+  --primary: oklch(0.208 0.042 265.755);
+  --primary-foreground: oklch(0.984 0.003 247.858);
+  --secondary: oklch(0.968 0.007 247.896);
+  --secondary-foreground: oklch(0.208 0.042 265.755);
+  --muted: oklch(0.968 0.007 247.896);
+  --muted-foreground: oklch(0.554 0.046 257.417);
+  --accent: oklch(0.968 0.007 247.896);
+  --accent-foreground: oklch(0.208 0.042 265.755);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(0.929 0.013 255.508);
+  --input: oklch(0.929 0.013 255.508);
+  --ring: oklch(0.704 0.04 256.788);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.984 0.003 247.858);
+  --sidebar-foreground: oklch(0.129 0.042 264.695);
+  --sidebar-primary: oklch(0.208 0.042 265.755);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.968 0.007 247.896);
+  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
+  --sidebar-border: oklch(0.929 0.013 255.508);
+  --sidebar-ring: oklch(0.704 0.04 256.788);
+}
+
+.dark {
+  --background: oklch(0.129 0.042 264.695);
+  --foreground: oklch(0.984 0.003 247.858);
+  --card: oklch(0.208 0.042 265.755);
+  --card-foreground: oklch(0.984 0.003 247.858);
+  --popover: oklch(0.208 0.042 265.755);
+  --popover-foreground: oklch(0.984 0.003 247.858);
+  --primary: oklch(0.929 0.013 255.508);
+  --primary-foreground: oklch(0.208 0.042 265.755);
+  --secondary: oklch(0.279 0.041 260.031);
+  --secondary-foreground: oklch(0.984 0.003 247.858);
+  --muted: oklch(0.279 0.041 260.031);
+  --muted-foreground: oklch(0.704 0.04 256.788);
+  --accent: oklch(0.279 0.041 260.031);
+  --accent-foreground: oklch(0.984 0.003 247.858);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.984 0.003 247.858);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.551 0.027 264.364);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.208 0.042 265.755);
+  --sidebar-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-accent: oklch(0.279 0.041 260.031);
+  --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.551 0.027 264.364);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  /* Reset para TVs (WebOS/Tizen costumam ter paddings estranhos) */
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow-x: hidden;
+    /* Suaviza rolagem em hardwares limitados */
+    -webkit-overflow-scrolling: touch;
+    /* Fix para fontes pequenas em resoluções 4K simuladas */
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    scroll-behavior: smooth;
+    /* Força renderização acelerada por GPU */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
+  /* TV Navigation Focus Styles - High Contrast & Stability */
+  :focus-visible {
+    outline: 4px solid var(--primary) !important;
+    outline-offset: 4px;
+    /* Escala menor para evitar trepidação em TVs antigas */
+    transform: scale(1.03);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 9999;
+    position: relative;
+    /* Glow mais forte para visibilidade em telas de TV de longe */
+    box-shadow: 0 0 35px var(--primary), 0 0 10px rgba(0,0,0,0.5);
+    background-color: var(--primary) !important;
+    color: var(--primary-foreground) !important;
+  }
+
+  /* Garante que SVGs dentro de foco também mudem de cor */
+  :focus-visible svg {
+    color: var(--primary-foreground) !important;
+  }
+}
+
+/* 📺 TV Optimized Queries */
+@media screen and (min-width: 1280px) {
+  :root {
+    /* Aumenta a base de fonte para TVs (distância do sofá) */
+    font-size: 18px;
+  }
+}
+
+@media screen and (min-width: 1920px) {
+  :root {
+    font-size: 20px;
+  }
+}
+
+/* Fix para navegadores de TV que não suportam flex-gap ou subgrid */
+@supports not (gap: 1rem) {
+  .flex.gap-4 > * + * { margin-left: 1rem; }
+  .grid.gap-4 > * { margin-bottom: 1rem; }
+}
+
+:root {
+  --scrollbar-track: oklch(0.13 0.018 264 / 0.96);
+  --scrollbar-thumb: oklch(0.68 0.16 249 / 0.92);
+  --scrollbar-thumb-hover: oklch(0.78 0.18 249 / 1);
+}
+
+html,
+body,
+* {
+  scrollbar-gutter: stable;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--scrollbar-thumb), oklch(0.76 0.18 249 / 0.98));
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
+@keyframes wp-marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.wp-marquee {
+  display: inline-block;
+  min-width: max-content;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.wp-marquee-run {
+  animation: wp-marquee 4.8s linear infinite;
+}
+
+.wp-marquee-run-on-hover {
+  animation: none;
+}
+
+.group:hover .wp-marquee-run-on-hover,
+.group:focus-visible .wp-marquee-run-on-hover {
+  animation: wp-marquee 4.8s linear infinite;
+}
+
+/* ------------------------------------------------------------------
+ * Themes definition
+ * ------------------------------------------------------------------ */
+
+/* Default: AZUL (Original MAGOPLAYERPRO) */
+:root,
+[data-theme="azul"] {
+  --radius: 0.875rem;
+  --background: oklch(0.09 0.012 262);
+  --foreground: oklch(0.95 0.008 250);
+  --card: oklch(0.185 0.024 265);
+  --card-foreground: oklch(0.95 0.008 250);
+  --popover: oklch(0.165 0.022 265);
+  --popover-foreground: oklch(0.95 0.008 250);
+  --primary: oklch(0.68 0.16 249);
+  --primary-foreground: oklch(0.12 0.02 262);
+  --secondary: oklch(0.26 0.038 264);
+  --secondary-foreground: oklch(0.95 0.008 250);
+  --muted: oklch(0.24 0.032 264);
+  --muted-foreground: oklch(0.74 0.03 252);
+  --accent: oklch(0.3 0.05 262);
+  --accent-foreground: oklch(0.96 0.01 250);
+  --border: oklch(0.32 0.045 264 / 60%);
+  --input: oklch(0.3 0.04 264 / 70%);
+  --ring: oklch(0.68 0.16 249);
+  --gold: oklch(0.87 0.11 92);
+  --online: oklch(0.78 0.16 158);
+  --sidebar: oklch(0.13 0.018 264);
+  --sidebar-foreground: oklch(0.92 0.01 250);
+  --sidebar-primary: oklch(0.68 0.16 249);
+  --sidebar-primary-foreground: oklch(0.12 0.02 262);
+  --sidebar-accent: oklch(0.24 0.035 264);
+  --sidebar-accent-foreground: oklch(0.96 0.01 250);
+  --sidebar-border: oklch(0.3 0.04 264 / 60%);
+  --sidebar-ring: oklch(0.68 0.16 249);
+}
+
+/* DARK (Preto e Branco) */
+[data-theme="dark"] {
+  --background: oklch(0 0 0);
+  --foreground: oklch(1 0 0);
+  --card: oklch(0.12 0 0);
+  --card-foreground: oklch(1 0 0);
+  --popover: oklch(0.1 0 0);
+  --popover-foreground: oklch(1 0 0);
+  --primary: oklch(1 0 0);
+  --primary-foreground: oklch(0 0 0);
+  --secondary: oklch(0.15 0 0);
+  --secondary-foreground: oklch(0.9 0 0);
+  --muted: oklch(0.15 0 0);
+  --muted-foreground: oklch(0.6 0 0);
+  --accent: oklch(0.2 0 0);
+  --accent-foreground: oklch(1 0 0);
+  --border: oklch(0.3 0 0);
+  --input: oklch(0.2 0 0);
+  --ring: oklch(1 0 0);
+  --sidebar: oklch(0.05 0 0);
+  --sidebar-foreground: oklch(0.9 0 0);
+  --sidebar-primary: oklch(1 0 0);
+  --sidebar-primary-foreground: oklch(0 0 0);
+  --sidebar-border: oklch(0.2 0 0);
+}
+
+/* LIGHT (Branco e Preto) */
+[data-theme="light"] {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0 0 0);
+  --card: oklch(0.97 0 0);
+  --card-foreground: oklch(0.1 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0 0 0);
+  --primary: oklch(0 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.9 0 0);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.9 0 0);
+  --muted-foreground: oklch(0.4 0 0);
+  --accent: oklch(0.85 0 0);
+  --accent-foreground: oklch(0 0 0);
+  --border: oklch(0.8 0 0);
+  --input: oklch(0.9 0 0);
+  --ring: oklch(0 0 0);
+  --sidebar: oklch(0.95 0 0);
+  --sidebar-foreground: oklch(0.1 0 0);
+  --sidebar-primary: oklch(0 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-border: oklch(0.85 0 0);
+}
+
+@theme inline {
+  --color-gold: var(--gold);
+  --color-online: var(--online);
+}
+
+body {
+  background-image: none;
+  background-attachment: fixed;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+[data-theme="azul"] body {
+  background-image:
+    radial-gradient(1000px 500px at 12% -10%, oklch(0.68 0.16 249 / 0.16), transparent 60%),
+    radial-gradient(900px 500px at 105% 0%, oklch(0.6 0.14 300 / 0.12), transparent 60%);
+}
+
+.wp-scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.wp-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--scrollbar-thumb), oklch(0.76 0.18 249 / 0.98));
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+.wp-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--scrollbar-thumb), oklch(0.76 0.18 249 / 0.98));
+  border-radius: 999px;
+  border: 2px solid var(--scrollbar-track);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}

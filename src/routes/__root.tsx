@@ -103,19 +103,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       meta: [
         { charSet: "utf-8" },
         { name: "viewport", content: "width=device-width, initial-scale=1" },
-        { title: "Aplicativo IPTV" },
-        { name: "description", content: "Aplicativo IPTV multi-servidor." },
-        { name: "author", content: "Sistema" },
-        { property: "og:title", content: "Aplicativo IPTV" },
-        { property: "og:description", content: "Aplicativo IPTV multi-servidor." },
+        { title: "Mago Player PRO" },
+        { name: "description", content: "Mago Player PRO multi-servidor." },
+        { name: "author", content: "Mago Player PRO" },
+        { property: "og:title", content: "Mago Player PRO" },
+        { property: "og:description", content: "Mago Player PRO multi-servidor." },
         { property: "og:type", content: "website" },
         { property: "og:image", content: DEFAULT_BRAND_IMAGE_URL },
         { property: "og:image:secure_url", content: DEFAULT_BRAND_IMAGE_URL },
-        { property: "og:image:alt", content: "Aplicativo IPTV" },
+        { property: "og:image:alt", content: "Mago Player PRO" },
         { name: "twitter:card", content: "summary_large_image" },
         { name: "twitter:site", content: "@app" },
         { name: "twitter:image", content: DEFAULT_BRAND_IMAGE_URL },
-        { name: "twitter:image:alt", content: "Aplicativo IPTV" },
+        { name: "twitter:image:alt", content: "Mago Player PRO" },
         { name: "theme-color", content: "#05070b" },
         { name: "apple-mobile-web-app-capable", content: "yes" },
         { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
@@ -179,8 +179,8 @@ function ThemeApplier() {
 
     const primary = config?.theme?.primary || "#3ba0ff";
     const background = config?.theme?.bg || "#05070b";
-    const brandName = config?.short_name || config?.name || "Sistema IPTV";
-    const description = config?.description || "Aplicativo IPTV multi-servidor.";
+    const brandName = config?.short_name || config?.name || "Mago Player PRO";
+    const description = config?.description || "Mago Player PRO multi-servidor.";
     const luminance = (() => {
       const hex = primary.replace("#", "");
       if (hex.length !== 6) return 0.2;
@@ -195,6 +195,16 @@ function ThemeApplier() {
     const primaryForeground = luminance > 0.45 ? "#05070b" : "#ffffff";
 
     document.documentElement.style.setProperty("--background", background);
+    document.documentElement.style.setProperty("--foreground", config?.theme?.text || "#ffffff");
+    document.documentElement.style.setProperty("--card", config?.theme?.surface || background);
+    document.documentElement.style.setProperty("--card-foreground", config?.theme?.text || "#ffffff");
+    document.documentElement.style.setProperty("--popover", config?.theme?.surface || background);
+    document.documentElement.style.setProperty("--popover-foreground", config?.theme?.text || "#ffffff");
+    document.documentElement.style.setProperty("--secondary", config?.theme?.surface_alt || background);
+    document.documentElement.style.setProperty("--secondary-foreground", config?.theme?.text || "#ffffff");
+    document.documentElement.style.setProperty("--sidebar", config?.theme?.surface || background);
+    document.documentElement.style.setProperty("--sidebar-foreground", config?.theme?.text || "#ffffff");
+    document.documentElement.style.setProperty("--radius", config?.theme?.radius || "0.625rem");
     document.documentElement.style.setProperty("--primary", primary);
     document.documentElement.style.setProperty("--primary-foreground", primaryForeground);
     document.documentElement.style.setProperty("--sidebar-primary", primary);

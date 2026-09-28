@@ -3,9 +3,9 @@ import { z } from "zod";
 export const AppConfigSchema = z.object({
   domain: z.string().default("stream.mago-bot.com"),
   base_url: z.string().url().default("https://stream.mago-bot.com"),
-  name: z.string().default("Sistema IPTV"),
-  short_name: z.string().default("Sistema IPTV"),
-  description: z.string().default("Sistema IPTV multi-servidor com navegação centralizada."),
+  name: z.string().default("Mago Player PRO"),
+  short_name: z.string().default("Mago Player PRO"),
+  description: z.string().default("Mago Player PRO multi-servidor com navegação centralizada."),
   tmdb_api_key: z.string().default("56bb2e86749197e89c3dbb878314ea03"),
   epg_xmltv_url: z.string().url().default("http://epgpainel.ddns.net/epg.xml"),
   epg_xmltv_ttl_hours: z.number().default(3),

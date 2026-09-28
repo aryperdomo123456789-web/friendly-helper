@@ -23,14 +23,15 @@ export function UserPageShell({
   contentClassName,
 }: UserPageShellProps) {
   return (
-    <div className={cn("space-y-6 min-w-0 w-full overflow-x-hidden", className)}>
+    <div className={cn("min-w-0 w-full overflow-x-hidden", className)}>
       {!hideHeader ? (
-        <div className="border-b border-border/70 pb-3">
-          <h1 className="text-3xl font-black tracking-tight sm:text-5xl">
+        <div className="mb-3 flex items-center gap-2 border-b border-border/60 pb-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_12px_var(--primary)]" />
+          <h1 className="truncate text-base font-bold tracking-tight sm:text-lg">
             {title}
           </h1>
           {description ? (
-            <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
+            <p className="hidden truncate text-xs text-muted-foreground sm:block">
               {description}
             </p>
           ) : null}
@@ -41,7 +42,7 @@ export function UserPageShell({
         title="Conteúdo do usuário indisponível"
         description="O shell visual permaneceu ativo, mas este bloco da página apresentou uma falha."
         resetKey={title}
-        className={cn("space-y-6", contentClassName)}
+        className={cn("min-w-0", contentClassName)}
       >
         {children}
       </SectionErrorBoundary>

@@ -98,7 +98,7 @@ export const createPaymentPreference = createServerFn({ method: "POST" })
       body: JSON.stringify({
         items: [
           {
-            title: `Plano ${plan.name} - ${config.name || "Sistema IPTV"}`,
+            title: `Plano ${plan.name} - ${config.name || "Mago Player PRO"}`,
             unit_price: Number(plan.price),
             quantity: 1,
             currency_id: "BRL",

@@ -1,0 +1,17 @@
+{
+  "name": "MAGOPLAYERPRO IPTV PRO",
+  "short_name": "MAGOPLAYERPRO",
+  "description": "Advanced MAGOPLAYERPRO with TMDB and EPG integration.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#05070b",
+  "theme_color": "#3ba0ff",
+  "icons": [
+    {
+      "src": "/brand/webplayer-brand.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

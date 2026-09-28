@@ -14,14 +14,32 @@ async function assertOwner(supabase: any, userId: string) {
   if (!data || data.length === 0) throw new Error("Acesso restrito à área administrativa.");
 }
 
-function shouldBypassDeviceTracking(link: any) {
-  return Boolean(link?.allow_repeat_device || link?.owner_only || link?.slug === "dono-livre");
+function isOwnerExclusiveLink(link: any) {
+  return Boolean(link?.owner_only || link?.slug === "dono-livre");
+}
+
+function getClientIp(request: Request | undefined): string | null {
+  if (!request) return null;
+
+  const candidates = [
+    request.headers.get("cf-connecting-ip"),
+    request.headers.get("x-real-ip"),
+    request.headers.get("x-forwarded-for")?.split(",")[0],
+  ];
+
+  for (const candidate of candidates) {
+    const value = candidate?.trim();
+    if (!value || value.length > 128) continue;
+    if (/^[0-9a-f:.]+$/i.test(value)) return value;
+  }
+
+  return null;
 }
 
 export const checkDeviceBlocked = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z.object({
-      fingerprint: z.string(),
+      fingerprint: z.string().trim().min(8).max(200),
       slug: z.string().min(1),
     }).parse(input),
   )
@@ -33,16 +51,31 @@ export const checkDeviceBlocked = createServerFn({ method: "POST" })
       .eq("slug", data.slug)
       .maybeSingle();
 
-    if (shouldBypassDeviceTracking(link)) {
+    if (isOwnerExclusiveLink(link)) {
       return { blocked: false };
     }
 
+    const request = getRequest();
+    const ip = getClientIp(request);
     const { data: existing } = await (supabaseAdmin as any)
       .from("test_device_tracking")
       .select("id")
       .eq("fingerprint", data.fingerprint)
       .maybeSingle();
-    return { blocked: !!existing };
+    if (existing) return { blocked: true, reason: "fingerprint" };
+
+    if (ip) {
+      const { data: existingIp } = await (supabaseAdmin as any)
+        .from("test_device_tracking")
+        .select("id")
+        .eq("ip_address", ip)
+        .gt("created_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+        .limit(1)
+        .maybeSingle();
+      if (existingIp) return { blocked: true, reason: "ip" };
+    }
+
+    return { blocked: false };
   });
 
 
@@ -184,7 +217,7 @@ export const createTestUser = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => 
     z.object({ 
       slug: z.string(),
-      fingerprint: z.string(),
+      fingerprint: z.string().trim().min(8).max(200),
       referral_code: z.string().nullable().optional()
     }).parse(input)
   )
@@ -200,18 +233,7 @@ export const createTestUser = createServerFn({ method: "POST" })
         return `${proto}://${host}`;
       }
     })();
-    const ip = request?.headers.get("x-forwarded-for") || request?.headers.get("x-real-ip") || null;
-
-    // Resolve referred_by if code provided
-    let referredById = null;
-    if (data.referral_code) {
-      const { data: refUser } = await supabaseAdmin
-        .from("profiles")
-        .select("id")
-        .eq("referral_code", data.referral_code)
-        .maybeSingle();
-      if (refUser) referredById = refUser.id;
-    }
+    const ip = getClientIp(request);
     
     // Validate link
     const { data: link, error: linkError } = await (supabaseAdmin as any)
@@ -223,32 +245,52 @@ export const createTestUser = createServerFn({ method: "POST" })
     
     if (linkError || !link) throw new Error("Link de teste inválido ou inativo.");
 
-    if (!shouldBypassDeviceTracking(link)) {
-      // Check if device fingerprint was already used
-      const { data: existingDevice } = await (supabaseAdmin as any)
-        .from("test_device_tracking")
-        .select("id")
-        .eq("fingerprint", data.fingerprint)
+    const ownerExclusive = isOwnerExclusiveLink(link);
+    let referredById: string | null = null;
+    let effectiveReferralCode: string | null = null;
+
+    if (data.referral_code) {
+      const normalizedReferralCode = data.referral_code.trim().toUpperCase();
+      const { data: refUser } = await supabaseAdmin
+        .from("profiles")
+        .select("id, is_active, expires_at, plan_id")
+        .ilike("referral_code", normalizedReferralCode)
         .maybeSingle();
 
-      if (existingDevice) {
-        throw new Error("Você já gerou um teste grátis neste dispositivo. Para novos acessos, entre em contato com o suporte.");
+      if (refUser?.is_active && (!refUser.expires_at || new Date(refUser.expires_at).getTime() > Date.now())) {
+        const { data: refRoles } = await supabaseAdmin
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", refUser.id)
+          .in("role", ["owner", "admin"]);
+        if (!refRoles?.length || ownerExclusive) {
+          referredById = refUser.id;
+          effectiveReferralCode = normalizedReferralCode;
+        }
+      }
+    }
+
+    if (!ownerExclusive) {
+      const { data: claim, error: claimError } = await (supabaseAdmin as any).rpc(
+        "claim_public_test_slot",
+        {
+          p_fingerprint: data.fingerprint,
+          p_ip_address: ip,
+          p_rate_window_seconds: 900,
+          p_max_requests: 3,
+        },
+      );
+
+      if (claimError) {
+        console.error("Falha ao validar limite antifraude do teste:", claimError);
+        throw new Error("Não foi possível validar este teste agora. Tente novamente.");
       }
 
-      // Track this device BEFORE creating the user to avoid race conditions/multiple attempts
-      const { error: trackError } = await (supabaseAdmin as any)
-        .from("test_device_tracking")
-        .insert({
-          fingerprint: data.fingerprint,
-          ip_address: ip
-        });
-
-      if (trackError) {
-        // If it failed because of duplicate (unique constraint), throw friendly error
-        if (trackError.code === '23505') {
-          throw new Error("Este dispositivo já foi utilizado para gerar um teste.");
-        }
-        throw new Error("Erro ao validar o dispositivo. Tente novamente.");
+      if (!claim?.allowed) {
+        const reason = claim?.reason;
+        if (reason === "rate") throw new Error("Muitas tentativas recentes. Aguarde alguns minutos e tente novamente.");
+        if (reason === "ip") throw new Error("Este acesso já gerou um teste recentemente. Para novos acessos, contate o suporte.");
+        throw new Error("Você já gerou um teste grátis neste dispositivo. Para novos acessos, contate o suporte.");
       }
     }
 
@@ -267,7 +309,7 @@ export const createTestUser = createServerFn({ method: "POST" })
         account_kind: "test",
         test_link_slug: link.slug,
         referral_source_slug: link.slug,
-        referral_source_code: data.referral_code ?? null,
+        referral_source_code: effectiveReferralCode,
       },
     });
     if (error || !created.user) throw new Error(error?.message ?? "Falha ao criar teste.");
@@ -293,8 +335,10 @@ export const createTestUser = createServerFn({ method: "POST" })
       referral_code: null,
       referred_by_id: referredById,
       referral_source_slug: link.slug,
-      referral_source_code: data.referral_code ?? null,
-      referral_source_url: `${origin}/teste/${link.slug}?ref=${data.referral_code ?? ""}`,
+      referral_source_code: effectiveReferralCode,
+      referral_source_url: effectiveReferralCode
+        ? `${origin}/teste/${link.slug}?ref=${effectiveReferralCode}`
+        : `${origin}/teste/${link.slug}`,
     });
 
     await supabaseAdmin.from("user_roles").insert({ user_id: newUserId, role: "user" });

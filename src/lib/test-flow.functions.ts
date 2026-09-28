@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { resolveReferralSourceSlug } from "./referral";
 import { ensureUserReferralCode } from "./referral-code";
 import { recordAuditLog } from "./payments-tracking.functions";
 
@@ -70,53 +69,8 @@ export const simulatePaymentSuccess = createServerFn({ method: "POST" })
       source: "system",
     });
 
-    // Reaproveita a mesma lógica de bônus usada no webhook.
-    if (userProfile?.referred_by_id) {
-      let bonusDays = 0;
-      const linkSlug = resolveReferralSourceSlug({
-        referralSourceSlug: userProfile.referral_source_slug ?? null,
-        testLinkSlug: authUser.user?.user_metadata?.test_link_slug ?? null,
-        displayName: userProfile.display_name,
-      });
-
-      if (linkSlug) {
-        const { data: link } = await supabaseAdmin
-          .from("test_links")
-          .select("bonus_days_monthly, bonus_days_quarterly")
-          .eq("slug", linkSlug)
-          .maybeSingle();
-
-        if (link) {
-          const planDays =
-            plan.duration_unit === "days"
-              ? plan.duration_value
-              : plan.duration_unit === "hours"
-                ? plan.duration_value / 24
-                : plan.duration_value / 1440;
-          bonusDays =
-            planDays > 30 ? (link.bonus_days_quarterly ?? 30) : (link.bonus_days_monthly ?? 15);
-        }
-      }
-
-      if (bonusDays > 0) {
-        const { data: referrer } = await supabaseAdmin
-          .from("profiles")
-          .select("expires_at")
-          .eq("id", userProfile.referred_by_id)
-          .single();
-
-        if (referrer) {
-          const currentRefExpiry = referrer.expires_at ? new Date(referrer.expires_at) : new Date();
-          const baseDate = currentRefExpiry > new Date() ? currentRefExpiry : new Date();
-          const newRefExpiry = new Date(baseDate.getTime() + bonusDays * 24 * 60 * 60 * 1000);
-
-          await supabaseAdmin
-            .from("profiles")
-            .update({ expires_at: newRefExpiry.toISOString() })
-            .eq("id", userProfile.referred_by_id);
-        }
-      }
-    }
+    // O modo de simulação não representa um pagamento real e não concede bônus.
+    // O bônus legítimo é aplicado apenas pelo webhook, com idempotência por payment_id.
 
     return { success: true };
   });

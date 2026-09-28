@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { resolveReferralSourceSlug } from "@/lib/referral";
 import { ensureUserReferralCode } from "@/lib/referral-code";
+import { applyReferralBonusOnce } from "@/lib/referral-rewards.server";
 import {
   recordAuditLog,
   recordPaymentEvent,
@@ -110,6 +111,7 @@ const paymentsService = {
             newExpiry.setTime(newExpiry.getTime() + msToAdd);
 
             const paymentReceivedAt = new Date().toISOString();
+            let paymentRecordId: string | null = null;
             try {
               const paymentRecord = await upsertPaymentRecord({
                 user_id: userId,
@@ -125,6 +127,7 @@ const paymentsService = {
                 webhook_received_at: paymentReceivedAt,
                 approved_at: paymentReceivedAt,
               });
+              paymentRecordId = paymentRecord?.id ?? null;
 
               if (paymentRecord?.id) {
                 await recordPaymentEvent({
@@ -167,7 +170,7 @@ const paymentsService = {
 
             await ensureUserReferralCode(supabaseAdmin, userId, plan);
 
-            if (userProfile?.referred_by_id) {
+            if (paymentRecordId && userProfile?.referred_by_id) {
               let bonusDays = 0;
               const linkSlug = resolveReferralSourceSlug({
                 referralSourceSlug: userProfile.referral_source_slug ?? null,
@@ -196,27 +199,16 @@ const paymentsService = {
                 }
               }
 
-              if (bonusDays > 0) {
-                const { data: referrer } = (await supabaseAdmin
-                  .from("profiles")
-                  .select("expires_at")
-                  .eq("id", userProfile.referred_by_id)
-                  .single()) as any;
-
-                if (referrer) {
-                  const currentRefExpiry = referrer.expires_at
-                    ? new Date(referrer.expires_at)
-                    : new Date();
-                  const baseDate =
-                    currentRefExpiry > new Date() ? currentRefExpiry : new Date();
-                  const newRefExpiry = new Date(
-                    baseDate.getTime() + bonusDays * 24 * 60 * 60 * 1000,
-                  );
-
-                  await supabaseAdmin
-                    .from("profiles")
-                    .update({ expires_at: newRefExpiry.toISOString() })
-                    .eq("id", userProfile.referred_by_id);
+              if (bonusDays > 0 && linkSlug !== "dono-livre") {
+                try {
+                  await applyReferralBonusOnce(supabaseAdmin, {
+                    paymentId: paymentRecordId,
+                    referredUserId: userId,
+                    sourceSlug: linkSlug,
+                    bonusDays,
+                  });
+                } catch (bonusError) {
+                  console.error("Falha ao aplicar bônus de indicação:", bonusError);
                 }
               }
             }

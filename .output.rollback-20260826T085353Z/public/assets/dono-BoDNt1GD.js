@@ -1,0 +1,1 @@
+import{f as e}from"./utils-CiNwAlZZ.js";import{t}from"./LoginScreen-BR6QMBrT.js";var n=e();function r(){return(0,n.jsx)(t,{mode:`owner`,initialUsername:`magodono`})}export{r as component};
