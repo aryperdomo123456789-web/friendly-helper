@@ -18,11 +18,26 @@ test("mantém ativo quando está no prazo", () => {
   );
 });
 
+test("bloqueio tem precedência mesmo com vencimento antigo", () => {
+  assert.equal(
+    resolveUserStatus(
+      { is_active: false, is_blocked: true, expires_at: "2026-08-17T23:59:59.000Z" },
+      now,
+    ),
+    "blocked",
+  );
+});
+
 test("mantém bloqueado quando não está ativo e não expirou", () => {
   assert.equal(
     resolveUserStatus({ is_active: false, expires_at: "2026-09-29T00:00:00.000Z" }, now),
     "blocked",
   );
+});
+
+test("interpreta data brasileira no fim do dia local", () => {
+  assert.equal(resolveUserStatus({ is_active: true, expires_at: "17/08/2026" }, now), "expired");
+  assert.equal(resolveUserStatus({ is_active: true, expires_at: "29/09/2026" }, now), "active");
 });
 
 test("considera o instante exato do vencimento ainda válido", () => {

@@ -17,6 +17,7 @@ import {
   getRefreshOperationStatus,
   cancelRefreshOperation,
 } from "@/lib/owner.functions";
+import { resolveUserStatus } from "@/lib/user-status";
 import { Badge } from "@/components/ui/badge";
 import {
   listTestLinksPage,
@@ -161,6 +162,7 @@ function PainelDono() {
   const [testLinksCurrentPage, setTestLinksCurrentPage] = useState(1);
   const [threadsPage, setThreadsPage] = useState(1);
   const [auditPage, setAuditPage] = useState(1);
+  const [statusNow, setStatusNow] = useState(() => Date.now());
   const threadsPageSize = 10;
   const auditPageSize = 10;
 
@@ -342,6 +344,11 @@ function PainelDono() {
   useEffect(() => {
     setUsersCurrentPage(1);
   }, [debouncedUsersSearch, usersPageSize]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setStatusNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const users = useQuery({
     queryKey: ["admin-users-page", debouncedUsersSearch, usersCurrentPage, usersPageSize],
@@ -1082,6 +1089,7 @@ function PainelDono() {
                   usersItems.map((user: any) => (
                     (() => {
                       const isProtectedOwner = user.username === "magodono";
+                      const userStatus = resolveUserStatus(user, statusNow);
                       return (
                     <TableRow key={user.id}>
                       <TableCell>
@@ -1136,9 +1144,13 @@ function PainelDono() {
                         ) : "Sem limite"}
                       </TableCell>
                       <TableCell>
-                        {user.is_active ? (
+                        {userStatus === "active" ? (
                           <span className="flex items-center gap-1.5 text-xs text-online">
                             <Wifi className="h-3 w-3" /> Ativo
+                          </span>
+                        ) : userStatus === "expired" ? (
+                          <span className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                            <WifiOff className="h-3 w-3" /> Expirado
                           </span>
                         ) : (
                           <span className="flex items-center gap-1.5 text-xs text-destructive">
