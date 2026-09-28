@@ -105,10 +105,12 @@ async function clearUserRelationsForDeletion(supabaseAdmin: any, ids: string[]) 
     supabaseAdmin.from("audit_logs").update({ actor_user_id: null }).in("actor_user_id", ids),
     supabaseAdmin.from("audit_logs").update({ target_user_id: null }).in("target_user_id", ids),
     supabaseAdmin.from("support_messages").update({ sender_id: null }).in("sender_id", ids),
-    supabaseAdmin
-      .from("support_threads")
-      .update({ assigned_to_user_id: null, closed_by_user_id: null })
-      .or(`assigned_to_user_id.in.(${ids.join(",")}),closed_by_user_id.in.(${ids.join(",")})`),
+    // Keep these as two independent filters. The PostgREST `or(...)` syntax
+    // is not reliable for this UUID list in the installed client and was
+    // being parsed as a column named `orassigned_to_user_id`, aborting the
+    // whole bulk deletion before Auth was reached.
+    supabaseAdmin.from("support_threads").update({ assigned_to_user_id: null }).in("assigned_to_user_id", ids),
+    supabaseAdmin.from("support_threads").update({ closed_by_user_id: null }).in("closed_by_user_id", ids),
     supabaseAdmin.from("support_threads").delete().in("user_id", ids),
   ]);
   const cleanupError = cleanup.find((result: any) => result.error)?.error;
