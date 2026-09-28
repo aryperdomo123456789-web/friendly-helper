@@ -10,6 +10,7 @@ import {
 } from "@/lib/player-quality";
 import { createHlsPlayerConfig } from "@/lib/hls-player-config";
 import { createAutoHealingController } from "@/lib/player-auto-healing";
+import { detectPlayerEngine } from "@/lib/player-engine";
 
 type Props = {
   url: string;
@@ -93,7 +94,7 @@ export function VideoPlayer({
     let qualityOptionsLocal: PlayerQualityOption[] = [];
     const sessionId = createPlaybackSessionId();
 
-    const engine = video.canPlayType("application/vnd.apple.mpegurl") !== "" ? "native" : "hls.js";
+    const engine = detectPlayerEngine(video);
     const telemetry = createPlaybackTelemetry({
       sessionId,
       serverId,
@@ -271,7 +272,7 @@ export function VideoPlayer({
       }, 20_000);
 
       const isHls = sourceUrl.includes(".m3u8") || sourceUrl.includes("hls=1");
-      const nativeHls = video.canPlayType("application/vnd.apple.mpegurl") !== "";
+      const nativeHls = engine === "native";
 
       if (isHls && !nativeHls) {
         const mod = await import("hls.js");

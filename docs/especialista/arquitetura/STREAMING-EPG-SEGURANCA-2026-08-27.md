@@ -12,6 +12,8 @@ As políticas `fragLoadPolicy`, `playlistLoadPolicy` e `manifestLoadPolicy` usam
 
 Essa escolha segue a API oficial do HLS.js, que diferencia `maxBufferLength`, `maxMaxBufferLength`, back buffer, políticas de loader e `recoverMediaError()`. Buffer maior não é tratado como sinônimo automático de qualidade: ele aumenta consumo potencial de memória e pode piorar o tempo de início.
 
+O seletor de engine em `src/lib/player-engine.ts` evita interpretar `canPlayType() === "maybe"` como motivo suficiente para bypassar HLS.js. Em navegadores com MSE e suporte ao codec H.264/AAC, o player prioriza HLS.js para que os presets acima sejam efetivamente aplicados. Safari e iOS continuam em native HLS por compatibilidade; quando MSE não está disponível, native permanece o fallback. A auditoria física sanitizada de 2026-09-28 está em `AUDITORIA-LIVE-REAL-2026-09-28.md`.
+
 ## EPG offline e virtualização
 
 `src/lib/epg-client.ts` fornece parsing/normalização determinística de timestamps, ordenação estável, índice do programa corrente e cálculo de janela virtual. O `PlayerInfo` renderiza somente os eventos visíveis mais quatro itens de overscan por lado, mantendo a altura total do viewport para scroll contínuo. O modelo é intencionalmente sem dependência adicional de virtualização, pois a lista atual é de eventos do canal selecionado e pode ser virtualizada com uma estratégia fixa e auditável.
