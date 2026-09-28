@@ -388,7 +388,19 @@ export const listAccessUsersPage = createServerFn({ method: "POST" })
     });
 
     if (error) throw error;
-    return result as {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const items = (result?.items ?? []) as any[];
+    const itemIds = items.map((item) => item.id).filter(Boolean);
+    const { data: protectedRoles, error: protectedRolesError } = itemIds.length
+      ? await supabaseAdmin.from("user_roles").select("user_id, role").in("user_id", itemIds).in("role", ["owner", "admin"])
+      : { data: [], error: null };
+    if (protectedRolesError) throw protectedRolesError;
+    const protectedIds = new Set(
+      (protectedRoles ?? []).map((roleRow: any) => roleRow.user_id).filter(Boolean),
+    );
+    const protectedNames = new Set(["magodono", "magoadm"]);
+    return {
+      ...(result as {
       items: any[];
       total: number;
       status_counts: {
@@ -400,6 +412,11 @@ export const listAccessUsersPage = createServerFn({ method: "POST" })
       };
       page: number;
       page_size: number;
+      }),
+      items: items.map((item) => ({
+        ...item,
+        is_protected: protectedIds.has(item.id) || protectedNames.has(item.username),
+      })),
     };
   });
 
@@ -548,11 +565,7 @@ export const deleteAccessUsers = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const ids = [...new Set(data.ids)];
 
-    if (ids.includes(context.userId)) {
-      throw new Error("A conta administrativa atual não pode ser excluída.");
-    }
-
-    console.info("[admin-users] bulk_delete_start", { count: ids.length });
+    console.info("[admin-users] bulk_delete_start", { selected: ids.length });
 
     // Protect every selected account server-side, including requests crafted
     // outside the admin UI. Do this in two queries instead of one round trip
@@ -563,31 +576,55 @@ export const deleteAccessUsers = createServerFn({ method: "POST" })
     ]);
     if (protectedProfilesResult.error) throw protectedProfilesResult.error;
     if (protectedRolesResult.error) throw protectedRolesResult.error;
-    if (
-      (protectedProfilesResult.data ?? []).some((profile) => profile.username === "magodono") ||
-      (protectedRolesResult.data ?? []).length > 0
-    ) {
-      throw new Error("A conta administrativa/dono não pode ser excluída.");
+    const protectedIds = new Set(
+      (protectedProfilesResult.data ?? [])
+        .filter((profile) => profile.username === "magodono" || profile.username === "magoadm")
+        .map((profile) => profile.id),
+    );
+    for (const roleRow of protectedRolesResult.data ?? []) protectedIds.add(roleRow.user_id);
+    protectedIds.add(context.userId);
+    const idsToDelete = ids.filter((id) => !protectedIds.has(id));
+    const protectedCount = ids.length - idsToDelete.length;
+
+    console.info("[admin-users] bulk_delete_filtered", {
+      selected: ids.length,
+      protected: protectedCount,
+      to_delete: idsToDelete.length,
+    });
+
+    if (idsToDelete.length === 0) {
+      return { ok: true, deleted: 0, protected: protectedCount };
     }
 
-    await clearUserRelationsForDeletion(supabaseAdmin, ids);
+    // Keep dependency cleanup in bounded chunks to avoid oversized requests
+    // and stay below the reverse-proxy request timeout for large selections.
+    const cleanupBatchSize = 10;
+    for (let offset = 0; offset < idsToDelete.length; offset += cleanupBatchSize) {
+      await clearUserRelationsForDeletion(
+        supabaseAdmin,
+        idsToDelete.slice(offset, offset + cleanupBatchSize),
+      );
+    }
 
-    console.info("[admin-users] bulk_delete_cleanup_complete", { count: ids.length });
+    console.info("[admin-users] bulk_delete_cleanup_complete", { count: idsToDelete.length });
 
     // Auth deletion is still performed per account, but in small controlled
     // batches so 30+ users do not wait through a long serial request.
     const batchSize = 5;
-    for (let offset = 0; offset < ids.length; offset += batchSize) {
+    for (let offset = 0; offset < idsToDelete.length; offset += batchSize) {
       const batchResults = await Promise.all(
-        ids.slice(offset, offset + batchSize).map((id) => supabaseAdmin.auth.admin.deleteUser(id)),
+        idsToDelete.slice(offset, offset + batchSize).map((id) => supabaseAdmin.auth.admin.deleteUser(id)),
       );
       const deleteError = batchResults.find((result) => result.error)?.error;
       if (deleteError) throw deleteError;
     }
 
-    await deleteProfilesForDeletion(supabaseAdmin, ids);
-    console.info("[admin-users] bulk_delete_complete", { count: ids.length });
-    return { ok: true, deleted: ids.length };
+    await deleteProfilesForDeletion(supabaseAdmin, idsToDelete);
+    console.info("[admin-users] bulk_delete_complete", {
+      count: idsToDelete.length,
+      protected: protectedCount,
+    });
+    return { ok: true, deleted: idsToDelete.length, protected: protectedCount };
   });
 
 export const kickDevices = createServerFn({ method: "POST" })

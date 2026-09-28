@@ -285,7 +285,10 @@ function UsuariosPage() {
         queryClient.invalidateQueries({ queryKey: ["admin-users-page"], refetchType: "active" }),
         queryClient.invalidateQueries({ queryKey: ["admin-users"], refetchType: "active" }),
       ]);
-      toast.success(`${result.deleted} usuário(s) excluído(s) com sucesso.`);
+      const protectedMessage = result.protected
+        ? ` (${result.protected} conta(s) administrativa(s) preservada(s))`
+        : " (contas administrativas foram preservadas)";
+      toast.success(`${result.deleted} usuário(s) excluído(s) com sucesso${protectedMessage}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao excluir usuários selecionados");
     } finally {
@@ -347,7 +350,7 @@ function UsuariosPage() {
   const pageStart = totalUsers === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const pageEnd = Math.min(safePage * pageSize, totalUsers);
   const visibleUsers = usersPage.data?.items ?? [];
-  const deletableVisibleUsers = visibleUsers.filter((user: any) => user.username !== "magodono");
+  const deletableVisibleUsers = visibleUsers.filter((user: any) => !user.is_protected);
   const allVisibleSelected =
     deletableVisibleUsers.length > 0 &&
     deletableVisibleUsers.every((user: any) => selectedUserIds.includes(user.id));
@@ -700,7 +703,7 @@ function UsuariosPage() {
               ) : (
                 visibleUsers.map((user: any) =>
                   (() => {
-                    const isProtectedOwner = user.username === "magodono";
+                    const isProtectedOwner = Boolean(user.is_protected);
                     const userStatus = resolveUserStatus(user, statusNow);
                     return (
                       <TableRow key={user.id}>
