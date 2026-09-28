@@ -261,7 +261,7 @@ export const createTestUser = createServerFn({ method: "POST" })
       const { data: refUser } = await supabaseAdmin
         .from("profiles")
         .select("id, is_active, expires_at, plan_id")
-        .eq("referral_code", normalizedReferralCode)
+        .ilike("referral_code", normalizedReferralCode)
         .maybeSingle();
 
       if (

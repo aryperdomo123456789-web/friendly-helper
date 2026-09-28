@@ -21,6 +21,8 @@ Nenhuma origem de cliente foi submetida a carga. As medições foram leituras de
 
 `src/lib/test-links.functions.ts` resolvia o código somente dentro do ramo de antifraude público. O link `dono-livre` é `owner_only`, portanto pulava esse ramo por desenho e descartava o código do dono. A correção move a resolução do código para antes do claim antifraude e permite owner/admin somente quando o link é explicitamente owner-only. Links públicos continuam impedindo que owner/admin sejam usados como referenciadores, preservando a proteção contra abuso.
 
+Na primeira validação pós-deploy, o vínculo ainda não apareceu porque o código salvo do dono estava em minúsculas (`49d83466`) e a consulta fazia igualdade sensível a caixa depois de normalizar o valor recebido para maiúsculas. A consulta foi ajustada para `ilike`, mantendo a normalização e evitando que a apresentação do link altere o vínculo.
+
 ## Evidência do playback real
 
 ### Elemento de mídia e transporte
