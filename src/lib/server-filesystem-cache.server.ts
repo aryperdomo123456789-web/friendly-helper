@@ -224,7 +224,6 @@ export async function withServerFilesystemLock<T>(
     }
 
     observer.onSkipped?.();
-    observer.onTimedOut?.(Date.now() - startedAt);
     throw new ServerFilesystemLockBusyError(serverId);
   }
 }

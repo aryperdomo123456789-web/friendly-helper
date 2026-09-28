@@ -59,6 +59,7 @@ const DEFAULT_PLAYLIST_TIMEOUT_MS = 60_000;
 const DEFAULT_PLAYLIST_MAX_ATTEMPTS = 3;
 const DEFAULT_PLAYLIST_BACKOFF_MS = 750;
 const STREAMING_PLAYLIST_MAX_BYTES = 128 * 1024 * 1024;
+const MAX_CATALOG_STREAMS_PER_KIND = 4_000;
 
 function normalizeText(value: string | null | undefined) {
   return (value ?? "").trim();
@@ -183,6 +184,11 @@ function consumePlaylistLine(state: PlaylistParserState, rawLine: string) {
       category_id: categoryId,
       category_name: groupName,
     });
+  }
+
+  if (state.catalog[kind].streams.length >= MAX_CATALOG_STREAMS_PER_KIND) {
+    state.pendingEntry = null;
+    return;
   }
 
   state.catalog[kind].streams.push({

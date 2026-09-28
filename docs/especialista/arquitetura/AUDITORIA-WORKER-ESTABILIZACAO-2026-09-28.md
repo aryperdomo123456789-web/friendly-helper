@@ -24,17 +24,17 @@ A auditoria encontrou **drift entre a branch e a fonte carregada no servidor**. 
 
 Na janela agregada observada nos logs do worker:
 
-| Indicador | Antes |
-|---|---:|
-| Falhas M3U/fallback observadas | 5.339 / 1 h |
-| Locks ocupados | 918 / 1 h |
-| Encerramentos `SIGINT` | 749 / janela agregada dos logs |
-| Tasks iniciadas | 4.795 |
-| Tasks concluídas com duração registrada | 12 |
-| Duração média registrada | 64.865 ms |
-| Duração máxima registrada | 94.170 ms |
-| RSS do worker no diagnóstico | ~156 MiB |
-| Limite PM2 configurado | 512M |
+| Indicador                               |                          Antes |
+| --------------------------------------- | -----------------------------: |
+| Falhas M3U/fallback observadas          |                    5.339 / 1 h |
+| Locks ocupados                          |                      918 / 1 h |
+| Encerramentos `SIGINT`                  | 749 / janela agregada dos logs |
+| Tasks iniciadas                         |                          4.795 |
+| Tasks concluídas com duração registrada |                             12 |
+| Duração média registrada                |                      64.865 ms |
+| Duração máxima registrada               |                      94.170 ms |
+| RSS do worker no diagnóstico            |                       ~156 MiB |
+| Limite PM2 configurado                  |                           512M |
 
 A fonte de produção também mostrou duas classes de lock: `storage/locks` e os locks legados em `.storage/server-filesystem-cache/locks/`. O patch não remove locks automaticamente nem toca os locks legados fora da rotina do lock ativo.
 
@@ -49,6 +49,7 @@ A fonte de produção também mostrou duas classes de lock: `storage/locks` e os
 - O spool é copiado atomically para `playlist.m3u` e removido no `finally` do refresh.
 - O snapshot streaming não carrega `playlist_text`; o caminho local continua preservando a compatibilidade do cache em disco.
 - A tabela legada `iptv_server_m3u_cache` não recebe uma string integral quando o refresh usa o caminho streaming, preservando o catálogo já persistido em `iptv_server_cache` e evitando pico de memória no worker.
+- Follow-up pós-deploy: uma origem real informou `item_count=326372`; o parser agora descarta cada tipo assim que atinge o limite contratual de 4.000 streams, em vez de acumular os 326 mil e aplicar `slice` somente no final.
 
 ### 2. Timeout e retry
 
@@ -65,6 +66,7 @@ A fonte de produção também mostrou duas classes de lock: `storage/locks` e os
 - Heartbeat atualiza o lease a cada até 30 segundos.
 - Contenção não espera em fila: registra `refresh_lock_skipped` e retorna `SERVER_FILESYSTEM_LOCK_BUSY` como skip operacional.
 - Lease expirado é removido na próxima tentativa; lock ativo não é removido apenas porque existe outro refresh concorrente.
+- Follow-up pós-deploy: `onTimedOut` deixou de ser chamado no caminho de skip, pois o evento estava aparecendo como erro mesmo sem espera ou falha do refresh.
 
 ### 4. Persistência em lotes
 
@@ -123,6 +125,8 @@ O deploy deve ser considerado aprovado somente se todos os itens seguintes forem
 ## Limitações honestas
 
 Este ciclo não certifica estabilidade de 24–72 horas. A meta de RSS abaixo de 150 MiB é um critério operacional de alerta/observação, não uma garantia matemática para uma origem de playlist arbitrariamente grande. O refresh manual em produção deve usar somente a origem já configurada e autorizada no servidor; não será feito teste de carga contra origens de clientes.
+
+Na primeira observação pós-deploy, o worker oscilou de aproximadamente 95 MiB para 282 MiB durante o refresh real e voltou para aproximadamente 95 MiB após a conclusão. O ciclo concluiu em aproximadamente 11,2 s e selecionou M3U com 326.372 itens declarados. Isso é uma melhora operacional importante, mas ainda não atende a meta conservadora de 150 MiB durante todo o ciclo; a decisão correta é manter a observação e não vender estabilidade premium.
 
 ## Estado
 
