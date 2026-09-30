@@ -1,5 +1,9 @@
 import { readStreamToken, looksLikePlaylist, rewritePlaylist } from "@/lib/stream-proxy.server";
+import { validateStreamTokenSession } from "@/lib/stream-token-session.server";
 import { isMainModule, startFetchService } from "@/lib/node-fetch-server.server";
+import { CircuitBreaker } from "@/lib/media-adapters/circuit-breaker";
+import { isMediaMTXInternalUrl, MediaMTXAdapter } from "@/lib/media-adapters/mediamtx.server";
+import type { PlaybackInput } from "@/lib/media-adapters/types";
 
 type PlayerServiceEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -14,6 +18,24 @@ const SECURITY_HEADERS = {
   "x-robots-tag": "noindex, nofollow",
   "x-served-by": "stream-mago-bot-player",
 };
+
+const DEFAULT_MEDIAMTX_CANARY_SERVER_ID = "7f1cc55f-e847-43a3-88dc-9a466afe5aee";
+const mediamtxAdapter = new MediaMTXAdapter();
+const mediamtxBreaker = new CircuitBreaker({ failureThreshold: 3, cooldownMs: 30_000 });
+
+function isMediaMTXCanaryServer(serverId: string): boolean {
+  const configured = process.env["MEDIAMTX_CANARY_SERVER_IDS"] ?? DEFAULT_MEDIAMTX_CANARY_SERVER_ID;
+  return configured.split(",").map((value) => value.trim()).filter(Boolean).includes(serverId);
+}
+
+function streamIdFromUrl(target: string): string {
+  try {
+    const pathname = new URL(target).pathname.replace(/\/$/, "");
+    return pathname.split("/").pop() || "stream";
+  } catch {
+    return "stream";
+  }
+}
 
 const playerService = {
   async fetch(request: Request) {
@@ -31,22 +53,80 @@ const playerService = {
       const token = await readStreamToken(url.searchParams.get("s"));
       if (!token) return textResponse("Token inválido ou expirado.", 403);
 
-      const target = token.url;
+      const requestIp =
+        request.headers.get("cf-connecting-ip") ||
+        request.headers.get("x-real-ip") ||
+        request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        null;
+      if (token.clientIp && requestIp && token.clientIp !== requestIp) {
+        return textResponse("Token não pertence a este contexto de rede.", 403);
+      }
+      if (
+        !token.sessionKey ||
+        !token.subject ||
+        !(await validateStreamTokenSession({
+          sessionKey: token.sessionKey,
+          subject: token.subject,
+          serverId: token.serverId,
+        }))
+      ) {
+        return textResponse("Sessão de playback inválida ou expirada.", 403);
+      }
+
+      console.info("player_stream_request", {
+        server_id: token.serverId,
+        subject: token.subject ?? null,
+        playlist: url.searchParams.get("hls") === "1" || token.url.includes(".m3u8"),
+      });
+
+      let target = token.url;
+      let mediaPlane: "gateway" | "mediamtx" = "gateway";
+      if (
+        isMediaMTXCanaryServer(token.serverId) &&
+        !isMediaMTXInternalUrl(token.url) &&
+        mediamtxBreaker.canAttempt()
+      ) {
+        const input: PlaybackInput = {
+          serverId: token.serverId,
+          streamId: streamIdFromUrl(token.url),
+          sessionId: token.sessionKey,
+          protocol: "hls",
+          sourceUrl: token.url,
+        };
+        try {
+          const endpoint = await mediamtxAdapter.start(input);
+          target = endpoint.url;
+          mediaPlane = "mediamtx";
+          mediamtxBreaker.recordSuccess();
+          console.info("player_media_plane_selected", {
+            server_id: token.serverId,
+            adapter: mediaPlane,
+          });
+        } catch (error) {
+          mediamtxBreaker.recordFailure();
+          console.warn("player_media_plane_fallback", {
+            server_id: token.serverId,
+            adapter: "gateway",
+            reason: error instanceof Error ? error.message.slice(0, 120) : "adapter_error",
+          });
+        }
+      }
       const range = request.headers.get("range");
-      const expectsHls = url.searchParams.get("hls") === "1" || target.includes(".m3u8");
+      const expectsHls = mediaPlane === "mediamtx" || url.searchParams.get("hls") === "1" || target.includes(".m3u8");
       const requestSignal = request.signal;
 
       const attemptFetch = async (): Promise<Response | null> => {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 60_000);
         const abortForwarded = () => controller.abort();
+        let headersReceived = false;
         if (requestSignal.aborted) {
           controller.abort();
         } else {
           requestSignal.addEventListener("abort", abortForwarded, { once: true });
         }
           try {
-            return await fetch(target, {
+            const response = await fetch(target, {
               redirect: "follow",
               signal: controller.signal,
               headers: {
@@ -57,11 +137,17 @@ const playerService = {
                 ...(range ? { Range: range } : {}),
               },
             });
+            headersReceived = true;
+            return response;
         } catch {
           return null;
         } finally {
           clearTimeout(timer);
-          requestSignal.removeEventListener("abort", abortForwarded);
+          // Keep the abort bridge attached until the upstream body ends or the
+          // client closes the response. Removing it here leaks live streams.
+          if (!headersReceived) {
+            requestSignal.removeEventListener("abort", abortForwarded);
+          }
         }
       };
 
@@ -101,32 +187,43 @@ const playerService = {
       if (!upstream.ok && upstream.status !== 206) {
         if (expectsHls) {
           await upstream.body?.cancel().catch(() => undefined);
-          return unavailableHlsResponse();
+          return unavailableStreamResponse(502);
         }
         await upstream.body?.cancel().catch(() => undefined);
-        return unavailableMediaResponse();
+        return unavailableStreamResponse(502);
       }
 
-      if (
-        /mpegurl|application\/vnd\.apple|text\/plain|text\/html/i.test(contentType) ||
-        target.includes(".m3u8")
-      ) {
+      // The provider may return MPEG-TS after a redirect even when the
+      // requested URL ends in .m3u8. The response Content-Type is authoritative.
+      const isMpegTs = /video\/mp2t/i.test(contentType);
+      const isPlaylist = !isMpegTs && /mpegurl|application\/vnd\.apple/i.test(contentType);
+      if (isPlaylist) {
         const body = await upstream.text();
         if (looksLikePlaylist(contentType, body)) {
           const ttlSeconds = Math.max(60, token.expiresAt - Math.floor(Date.now() / 1000));
           const rewritten = await rewritePlaylist(body, baseUrl, {
+            serverId: token.serverId,
             ttlSeconds,
+            sessionKey: token.sessionKey,
+            clientIp: token.clientIp ?? null,
             ...(token.subject ? { subject: token.subject } : {}),
           });
           const headers = new Headers(SECURITY_HEADERS);
           headers.set("content-type", "application/vnd.apple.mpegurl");
+          headers.set("x-stream-format", "hls");
           return new Response(rewritten, { status: 200, headers });
         }
-        return unavailableHlsResponse();
+        return unavailableStreamResponse(502);
       }
 
       const headers = new Headers(SECURITY_HEADERS);
-      headers.set("content-type", contentType || "video/mp2t");
+      headers.set("content-type", isMpegTs ? "video/mp2t" : contentType || "application/octet-stream");
+      if (isMpegTs) {
+        headers.set("x-stream-format", "mpegts");
+        headers.set("cache-control", "no-cache, no-store, must-revalidate, private");
+        headers.set("x-accel-buffering", "no");
+        headers.set("connection", "keep-alive");
+      }
       for (const key of ["content-length", "content-range", "accept-ranges"]) {
         const value = upstream.headers.get(key);
         if (value) headers.set(key, value);
@@ -134,8 +231,11 @@ const playerService = {
 
       return new Response(upstream.body, { status: upstream.status, headers });
     } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return unavailableStreamResponse(502);
+      }
       console.error("Player service failed", error);
-      return unavailableMediaResponse();
+      return unavailableStreamResponse(502);
     }
   },
 } satisfies PlayerServiceEntry;
@@ -166,23 +266,12 @@ function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
-function unavailableHlsResponse(): Response {
+function unavailableStreamResponse(status: 502 | 503): Response {
   const headers = new Headers(SECURITY_HEADERS);
-  headers.set("content-type", "application/vnd.apple.mpegurl");
+  headers.set("content-type", "application/json; charset=utf-8");
   headers.set("x-stream-status", "unavailable");
-  const playlist = [
-    "#EXTM3U",
-    "#EXT-X-VERSION:3",
-    "#EXT-X-TARGETDURATION:1",
-    "#EXT-X-MEDIA-SEQUENCE:0",
-    "#EXT-X-ENDLIST",
-    "",
-  ].join("\n");
-  return new Response(playlist, { status: 200, headers });
-}
-
-function unavailableMediaResponse(): Response {
-  const headers = new Headers(SECURITY_HEADERS);
-  headers.set("x-stream-status", "unavailable");
-  return new Response(null, { status: 204, headers });
+  return new Response(JSON.stringify({ error: "stream_unavailable" }), {
+    status,
+    headers,
+  });
 }
