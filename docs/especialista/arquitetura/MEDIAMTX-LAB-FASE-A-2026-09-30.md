@@ -78,6 +78,8 @@ Durante a leitura do manifesto e inspeção com `ffprobe`:
 | Estado do path                |             `ready` |
 | Estado das 3 unidades         |            `active` |
 
+Após configurar `hlsMuxerCloseAfter: 10s` exclusivamente no laboratório, um cliente HLS foi encerrado e, depois de 14 segundos, a métrica `hls_muxers` caiu para `0`. O path permaneceu `ready` porque a fixture RTSP continuava publicando; isso confirma a liberação do muxer/cliente, não o encerramento do publicador sintético.
+
 Os valores são uma amostra de laboratório, não uma capacidade comercial certificada.
 
 ## Adapter e circuit breaker preparatórios
@@ -105,6 +107,7 @@ O protótipo suporta:
 - Build sanitizado local: **aprovado**.
 - Nenhum entrypoint de produção foi alterado.
 - Nenhum deploy do app foi executado.
+- Fechamento do muxer HLS após cliente: **validado em 14 s** no laboratório.
 
 ## Limitações honestas
 
