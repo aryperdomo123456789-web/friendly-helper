@@ -23,6 +23,7 @@ const mediamtxAdapter = new MediaMTXAdapter();
 const mediamtxBreaker = new CircuitBreaker({ failureThreshold: 3, cooldownMs: 30_000 });
 
 function mediamtxCanaryEnabled(serverId: string): boolean {
+  if (process.env["MEDIAMTX_CANARY_ENABLED"] !== "true") return false;
   const configured = (process.env["MEDIAMTX_CANARY_SERVER_IDS"] || process.env["MEDIAMTX_CANARY_SERVER_ID"] || "")
     .split(",")
     .map((value) => value.trim().toLowerCase())
