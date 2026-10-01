@@ -1,8 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getAppConfig } from "./config.functions";
 import {
+  readActiveServerCache,
   readServerCache,
   readServerPlaylistCache,
   serverCatalogCacheKey,
@@ -138,6 +140,104 @@ function isCategoryScoped<T extends { category_id: string | null }>(
   return categories.size === 1 && categories.has(target);
 }
 
+type CatalogStreamCacheItem = {
+  id: string;
+  name: string;
+  icon: string | null;
+  ext: string | null;
+  rating: string | null;
+  category_id: string | null;
+};
+
+type CatalogCategoryCacheItem = {
+  category_id: string;
+  category_name: string;
+  item_count?: number;
+};
+
+function normalizeCatalogSearch(value: string | undefined) {
+  return value?.trim()
+    ? value.trim().toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    : "";
+}
+
+async function readCatalogCache<T>(serverId: string, cacheKey: string) {
+  return (await readActiveServerCache<T>(serverId, cacheKey)) ??
+    (await readServerCache<T>(serverId, cacheKey));
+}
+
+async function readCategoryScopedCounts(
+  serverId: string,
+  kind: Kind,
+  categories: CatalogCategoryCacheItem[],
+) {
+  const counts = new Map<string, number>();
+  const batchSize = 16;
+  for (let offset = 0; offset < categories.length; offset += batchSize) {
+    const batch = categories.slice(offset, offset + batchSize);
+    const results = await Promise.all(
+      batch.map(async (category) => {
+        const cached = await readCatalogCache<CatalogStreamCacheItem[]>(
+          serverId,
+          serverCatalogCacheKey(kind, "streams", category.category_id),
+        );
+        if (!cached || !Array.isArray(cached.payload)) return null;
+        return { categoryId: category.category_id, count: cached.payload.length };
+      }),
+    );
+    for (const result of results) {
+      if (result) counts.set(result.categoryId, result.count);
+    }
+  }
+  return counts.size === categories.length ? counts : null;
+}
+
+async function readPagedCatalogFromCategoryCaches(
+  serverId: string,
+  kind: Kind,
+  categories: CatalogCategoryCacheItem[],
+  page: number,
+  pageSize: number,
+  search: string | undefined,
+) {
+  const needle = normalizeCatalogSearch(search);
+  const start = (page - 1) * pageSize;
+  let total = 0;
+  let complete = true;
+  const items: CatalogStreamCacheItem[] = [];
+  for (const category of categories) {
+    const cached = await readCatalogCache<CatalogStreamCacheItem[]>(
+      serverId,
+      serverCatalogCacheKey(kind, "streams", category.category_id),
+    );
+    if (!cached || !Array.isArray(cached.payload)) {
+      complete = false;
+      continue;
+    }
+    for (const item of cached.payload) {
+      const normalizedName = normalizeCatalogSearch(item.name);
+      if (needle && !normalizedName.includes(needle)) continue;
+      total += 1;
+      if (total > start && items.length < pageSize) items.push(item);
+    }
+  }
+  if (!complete) return null;
+  if (needle) {
+    items.sort((left, right) => {
+      const leftName = normalizeCatalogSearch(left.name);
+      const rightName = normalizeCatalogSearch(right.name);
+      return Number(rightName.startsWith(needle)) - Number(leftName.startsWith(needle));
+    });
+  }
+  return {
+    items,
+    total,
+    page,
+    page_size: pageSize,
+    has_more: start + pageSize < total,
+  };
+}
+
 async function resolveAccess(userId: string, serverId: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const cacheKey = `${userId}:${serverId}`;
@@ -183,7 +283,7 @@ async function resolveAccess(userId: string, serverId: string) {
 
     const { data: creds } = await supabaseAdmin
       .from("server_credentials")
-      .select("username, password, dns")
+      .select("username, password, dns, m3u_url")
       .eq("server_id", serverId)
       .order("created_at", { ascending: false })
       .limit(1);
@@ -193,6 +293,7 @@ async function resolveAccess(userId: string, serverId: string) {
     const value: ResolvedAccess = {
       credential: {
         ...first,
+        m3u_url: (first as any).m3u_url ?? undefined,
         dnsPool: (creds ?? []).map((c: any) => c.dns).filter(Boolean),
       },
       server: {
@@ -225,7 +326,7 @@ export const getMySession = createServerFn({ method: "GET" })
     const [{ data: profile }, { data: roles }] = await Promise.all([
       supabaseAdmin
         .from("profiles")
-        .select("id, username, display_name, max_connections, expires_at, is_active")
+        .select("id, username, display_name, needs_credential_setup, max_connections, expires_at, is_active")
         .eq("id", context.userId)
         .maybeSingle(),
       supabaseAdmin.from("user_roles").select("role").eq("user_id", context.userId),
@@ -368,14 +469,44 @@ export const getCategories = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { credential } = await resolveAccess(context.userId, data.server_id);
+    const attachCategoryCounts = async (
+      categories: Array<{ category_id: string; category_name: string; item_count?: number }>,
+    ) => {
+      const globalCache = await readCatalogCache<CatalogStreamCacheItem[]>(
+        data.server_id,
+        serverCatalogCacheKey(data.kind, "streams"),
+      );
+      if (globalCache && Array.isArray(globalCache.payload)) {
+        const counts = new Map<string, number>();
+        for (const item of globalCache.payload) {
+          const categoryId = String(item.category_id ?? "");
+          counts.set(categoryId, (counts.get(categoryId) ?? 0) + 1);
+        }
+        return categories.map((category) => ({
+          ...category,
+          item_count: counts.get(String(category.category_id)) ?? 0,
+        }));
+      }
+
+      const scopedCounts = await readCategoryScopedCounts(
+        data.server_id,
+        data.kind,
+        categories,
+      );
+      if (!scopedCounts) return categories;
+      return categories.map((category) => ({
+        ...category,
+        item_count: scopedCounts.get(String(category.category_id)) ?? 0,
+      }));
+    };
     const cacheKey = serverCatalogCacheKey(data.kind, "categories");
-    const cached = await readServerCache<Array<{ category_id: string; category_name: string }>>(
+    const cached = await readCatalogCache<Array<{ category_id: string; category_name: string; item_count?: number }>>(
       data.server_id,
       cacheKey,
     );
-    if (cached && !cached.stale) {
+    if (cached) {
       const payload = Array.isArray(cached.payload) ? cached.payload : [];
-      if (payload.length > 0) return payload;
+      if (payload.length > 0) return attachCategoryCounts(payload);
     }
 
     const { xtreamCall } = await import("./xtream.server");
@@ -386,11 +517,11 @@ export const getCategories = createServerFn({ method: "POST" })
       );
       const normalized = Array.isArray(result) ? result : [];
       await writeServerCache(data.server_id, cacheKey, normalized);
-      return normalized;
+      return attachCategoryCounts(normalized);
     } catch (error) {
       const playlistFallback = await hydrateCatalogFromPlaylist(data.server_id, data.kind);
-      if (playlistFallback) return playlistFallback.categories;
-      if (cached) return Array.isArray(cached.payload) ? cached.payload : [];
+      if (playlistFallback) return attachCategoryCounts(playlistFallback.categories);
+      if (cached) return attachCategoryCounts(Array.isArray(cached.payload) ? cached.payload : []);
       throw error;
     }
   });
@@ -403,13 +534,64 @@ export const getStreams = createServerFn({ method: "POST" })
         server_id: z.string().uuid(),
         kind: kindSchema,
         category_id: z.string().optional(),
+        stream_ids: z.array(z.string().trim().min(1).max(200)).max(500).optional(),
+        paged: z.boolean().optional(),
+        page: z.number().int().min(1).optional(),
+        page_size: z.number().int().min(12).max(100).optional(),
+        search: z.string().max(120).optional(),
       })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
     const { credential } = await resolveAccess(context.userId, data.server_id);
     const cacheKey = serverCatalogCacheKey(data.kind, "streams", data.category_id ?? "all");
-    const cached = await readServerCache<
+    const isPaged = data.paged === true;
+    const page = data.page ?? 1;
+    const pageSize = data.page_size ?? 48;
+    const search = data.search?.trim()
+      ? data.search
+          .trim()
+          .toLocaleLowerCase("pt-BR")
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+      : "";
+    const formatResult = <T extends { name: string; id?: string }>(items: T[]) => {
+      const scopedItems = Array.isArray(data.stream_ids)
+        ? items.filter((item) => data.stream_ids!.includes(String(item.id ?? "")))
+        : items;
+      if (!isPaged) return scopedItems;
+      const filtered = search
+        ? scopedItems.filter((item) =>
+            item.name
+              .toLocaleLowerCase("pt-BR")
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .includes(search),
+          )
+        : scopedItems;
+      if (search) {
+        filtered.sort((left, right) => {
+          const leftName = left.name
+            .toLocaleLowerCase("pt-BR")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+          const rightName = right.name
+            .toLocaleLowerCase("pt-BR")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+          return Number(rightName.startsWith(search)) - Number(leftName.startsWith(search));
+        });
+      }
+      const start = (page - 1) * pageSize;
+      return {
+        items: filtered.slice(start, start + pageSize),
+        total: filtered.length,
+        page,
+        page_size: pageSize,
+        has_more: start + pageSize < filtered.length,
+      };
+    };
+    const cached = await readCatalogCache<
       Array<{
         id: string;
         name: string;
@@ -420,13 +602,62 @@ export const getStreams = createServerFn({ method: "POST" })
       }>
     >(data.server_id, cacheKey);
 
-    if (cached && !cached.stale) {
+    // Category snapshots created by older builds may contain only the first
+    // page. Prefer the complete server snapshot whenever it is available so
+    // a category cannot be silently capped by stale legacy cache data.
+    let globalCached = null as Awaited<ReturnType<typeof readCatalogCache<
+      Array<{
+        id: string;
+        name: string;
+        icon: string | null;
+        ext: string | null;
+        rating: string | null;
+        category_id: string | null;
+      }>
+    >>>;
+    if (data.category_id) {
+      globalCached = await readCatalogCache<
+        Array<{
+          id: string;
+          name: string;
+          icon: string | null;
+          ext: string | null;
+          rating: string | null;
+          category_id: string | null;
+        }>
+      >(data.server_id, serverCatalogCacheKey(data.kind, "streams"));
+    }
+
+    if (globalCached && Array.isArray(globalCached.payload)) {
+      const globalItems = globalCached.payload.filter((item) => item.category_id === data.category_id);
+      if (globalItems.length > 0) return formatResult(globalItems);
+    }
+
+    if (!data.category_id && isPaged && !Array.isArray(data.stream_ids)) {
+      const categoryCache = await readCatalogCache<CatalogCategoryCacheItem[]>(
+        data.server_id,
+        serverCatalogCacheKey(data.kind, "categories"),
+      );
+      if (categoryCache && Array.isArray(categoryCache.payload)) {
+        const pagedFromCategories = await readPagedCatalogFromCategoryCaches(
+          data.server_id,
+          data.kind,
+          categoryCache.payload,
+          page,
+          pageSize,
+          search,
+        );
+        if (pagedFromCategories) return pagedFromCategories;
+      }
+    }
+
+    if (cached) {
       const list = Array.isArray(cached.payload) ? cached.payload : [];
       if (!data.category_id) {
-        if (list.length > 0) return list;
+        if (list.length > 0) return formatResult(list);
       } else if (isCategoryScoped(list, data.category_id)) {
         const filtered = list.filter((item) => item.category_id === data.category_id);
-        if (filtered.length > 0) return filtered;
+        if (filtered.length > 0) return formatResult(filtered);
       }
     }
 
@@ -437,7 +668,7 @@ export const getStreams = createServerFn({ method: "POST" })
         data.category_id,
       );
       if (playlistFallback) {
-        return playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream);
+        return formatResult(playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream));
       }
     }
 
@@ -471,11 +702,11 @@ export const getStreams = createServerFn({ method: "POST" })
             data.category_id,
           );
           if (playlistFallback) {
-            return playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream);
+            return formatResult(playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream));
           }
         }
         await writeServerCache(data.server_id, cacheKey, normalized);
-        return normalized;
+        return formatResult(normalized);
       }
 
       if (data.category_id) {
@@ -501,12 +732,12 @@ export const getStreams = createServerFn({ method: "POST" })
         const filtered = fullNormalized.filter((item) => item.category_id === data.category_id);
         if (filtered.length > 0) {
           await writeServerCache(data.server_id, cacheKey, filtered);
-          return filtered;
+          return formatResult(filtered);
         }
       }
 
       await writeServerCache(data.server_id, cacheKey, normalized);
-      return normalized;
+      return formatResult(normalized);
     } catch (error) {
       const playlistFallback = await hydrateCatalogFromPlaylist(
         data.server_id,
@@ -514,11 +745,11 @@ export const getStreams = createServerFn({ method: "POST" })
         data.category_id,
       );
       if (playlistFallback) {
-        return playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream);
+        return formatResult(playlistFallback.streams.map(({ kind: _kind, ...stream }) => stream));
       }
       if (cached) {
         const list = Array.isArray(cached.payload) ? cached.payload : [];
-        return list;
+        return formatResult(list);
       }
       throw error;
     }
@@ -615,6 +846,70 @@ export const getVodInfo = createServerFn({ method: "POST" })
     return payload;
   });
 
+const variantSearchSchema = z.object({
+  server_id: z.string().uuid(),
+  current_item_name: z.string().min(1).max(240),
+  tmdb_id: z.string().max(40).optional(),
+});
+
+function normalizeVariantTitle(value: string) {
+  return value
+    .toLocaleLowerCase("pt-BR")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(4k|uhd|hdr|dolby vision|dv|full hd|fhd|1080p|720p)\b/gi, " ")
+    .replace(/\[(l|dub|legendado|dublado|hdr|dv|4k)\]/gi, " ")
+    .replace(/\b(19|20)\d{2}\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+const highResolutionMarker = /\b(4k|uhd|hdr|dolby vision|dv|2160p)\b|\[(4k|hdr|dv)\]/i;
+
+export const findCompatibleVariant = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => variantSearchSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    await resolveAccess(context.userId, data.server_id);
+    const [streamsCache, categoriesCache] = await Promise.all([
+      readCatalogCache<CatalogStreamCacheItem[]>(
+        data.server_id,
+        serverCatalogCacheKey("movie", "streams", "all"),
+      ),
+      readCatalogCache<CatalogCategoryCacheItem[]>(
+        data.server_id,
+        serverCatalogCacheKey("movie", "categories"),
+      ),
+    ]);
+    const streams = Array.isArray(streamsCache?.payload) ? streamsCache.payload : [];
+    const categories = Array.isArray(categoriesCache?.payload) ? categoriesCache.payload : [];
+    const categoryNames = new Map(
+      categories.map((category) => [
+        String(category.category_id),
+        String(category.category_name ?? ""),
+      ]),
+    );
+    const target = normalizeVariantTitle(data.current_item_name);
+    if (!target) return null;
+
+    const candidate = streams.find((item) => {
+      const categoryName = categoryNames.get(String(item.category_id ?? "")) ?? "";
+      return (
+        normalizeVariantTitle(item.name) === target &&
+        !highResolutionMarker.test(item.name) &&
+        !highResolutionMarker.test(categoryName)
+      );
+    });
+    return candidate
+      ? {
+          id: candidate.id,
+          name: candidate.name,
+          icon: candidate.icon,
+          ext: candidate.ext,
+        }
+      : null;
+  });
 export const getPlaybackUrl = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
@@ -647,8 +942,27 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
 
     const { buildStreamUrlCandidates } = await import("./stream-candidates");
     const { signStreamUrl } = await import("./stream-proxy.server");
+    const { createStreamTokenSession } = await import("./stream-token-session.server");
     const playbackExtensions = getPlaybackExtensions(data.kind, data.ext);
-    const playbackTtlSeconds = 24 * 60 * 60;
+    const playbackTtlSeconds = 30 * 60;
+    const request = getRequest();
+    const clientIp = request
+      ? (
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-real-ip") ||
+          request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+          null
+        )
+      : null;
+    const sessionKey = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + playbackTtlSeconds * 1000).toISOString();
+    await createStreamTokenSession({
+      sessionKey,
+      subject: context.userId,
+      serverId: data.server_id,
+      deviceId: data.device_id,
+      expiresAt,
+    });
     // Proxied through our own origin: the panels only serve plain HTTP and the
     // browser refuses mixed content on an HTTPS page.
     const streamCandidates = buildStreamUrlCandidates(
@@ -662,8 +976,10 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
       streamCandidates.map(async (direct) => {
         const proxied = await signStreamUrl(direct, {
           subject: context.userId,
-          reference: data.server_id,
+          serverId: data.server_id,
           ttlSeconds: playbackTtlSeconds,
+          sessionKey,
+          clientIp,
         });
         const isHls = /\.m3u8(?:$|[?#])/i.test(direct);
         // Só força HLS quando o URL final não selecionou explicitamente TS.
@@ -676,6 +992,37 @@ export const getPlaybackUrl = createServerFn({ method: "POST" })
       url: playbackUrls[0]!,
       ...(playbackUrls.length > 1 ? { fallback_urls: playbackUrls.slice(1) } : {}),
     };
+  });
+
+export const touchPlaybackSession = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ playback_url: z.string().min(1).max(8192) }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { readStreamToken } = await import("./stream-proxy.server");
+    const request = getRequest();
+    const playbackUrl = new URL(data.playback_url, request?.url ?? "https://stream.mago-bot.com/");
+    const token = await readStreamToken(playbackUrl.searchParams.get("s"));
+    if (!token?.sessionKey || token.subject !== context.userId) {
+      throw new Error("Sessão de playback inválida.");
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const { data: touched, error } = await supabaseAdmin
+      .from("stream_token_sessions")
+      .update({ expires_at: expiresAt, last_seen_at: now })
+      .eq("session_key", token.sessionKey)
+      .eq("subject", context.userId)
+      .eq("server_id", token.serverId)
+      .is("revoked_at", null)
+      .gt("expires_at", now)
+      .select("session_key")
+      .maybeSingle();
+    if (error || !touched) throw new Error("Sessão de playback expirada ou revogada.");
+    return { expires_at: expiresAt };
   });
 
 const playbackTelemetryEventSchema = z.object({

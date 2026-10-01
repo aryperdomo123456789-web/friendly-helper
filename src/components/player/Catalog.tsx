@@ -14,9 +14,11 @@ import {
   getCategories,
   getStreams,
   getPlaybackUrl,
+  findCompatibleVariant,
   getSeriesInfo,
   getChannelEPG,
-  getEnrichedMetadata
+  getEnrichedMetadata,
+  touchPlaybackSession,
 } from "@/lib/player.functions";
 import { usePlayerSession } from "@/lib/player-store";
 import { getDeviceId } from "@/lib/device";
@@ -24,10 +26,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VideoPlayer } from "./VideoPlayer";
-import { ChevronLeft, Loader2, PlayCircle, Search, Tv, Info, AlertTriangle } from "lucide-react";
+import { ChevronLeft, Heart, Loader2, PlayCircle, Search, Tv, Info, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { proxyMediaUrl } from "@/lib/media-url";
+import { useChannelFavorites } from "@/hooks/use-channel-favorites";
 
 
 type Kind = "live" | "movie" | "series";
@@ -84,6 +87,18 @@ type CatalogStreamItem = {
 type CatalogCategory = {
   category_id: string;
   category_name: string;
+  item_count?: number;
+};
+
+const ALL_CATEGORY_ID = "all";
+const ALL_CATEGORY: CatalogCategory = {
+  category_id: ALL_CATEGORY_ID,
+  category_name: "⭐ Tudo",
+};
+const FAVORITES_CATEGORY_ID = "__favorites__";
+const FAVORITES_CATEGORY: CatalogCategory = {
+  category_id: FAVORITES_CATEGORY_ID,
+  category_name: "★ Favoritos",
 };
 
 type CatalogEpisode = {
@@ -164,7 +179,14 @@ const CatalogCategoryButton = memo(function CatalogCategoryButton({
           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
       )}
     >
-      <MarqueeText text={category.category_name} active={active} className="pr-2" />
+      <span className="flex min-w-0 items-center gap-2">
+        <MarqueeText text={category.category_name} active={active} className="min-w-0 flex-1 pr-2" />
+        {category.item_count !== undefined ? (
+          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+            {category.item_count.toLocaleString("pt-BR")}
+          </span>
+        ) : null}
+      </span>
     </button>
   );
 });
@@ -179,6 +201,9 @@ const CatalogGridCard = memo(function CatalogGridCard({
   onPrefetch,
   onActivate,
   onHover,
+  isFavorite,
+  onToggleFavorite,
+  favoriteLoading,
 }: {
   item: CatalogStreamItem;
   kind: Kind;
@@ -189,19 +214,28 @@ const CatalogGridCard = memo(function CatalogGridCard({
   onPrefetch: (item: CatalogStreamItem) => void;
   onActivate: (item: CatalogStreamItem) => void;
   onHover?: (item: CatalogStreamItem) => void;
+  isFavorite: boolean;
+  onToggleFavorite: (channelId: string) => void;
+  favoriteLoading: boolean;
 }) {
   const imageUrl = proxyMediaUrl(item.icon, serverId);
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onActivate(item);
+        }
+      }}
       onMouseEnter={() => onPrefetch(item)}
       onMouseEnterCapture={() => onHover?.(item)}
       onFocus={() => onPrefetch(item)}
       onFocusCapture={() => onHover?.(item)}
       onTouchStart={() => onPrefetch(item)}
       onClick={() => onActivate(item)}
-      tabIndex={0}
       data-tv-focus
       aria-label={item.name}
       className={cn(
@@ -224,7 +258,8 @@ const CatalogGridCard = memo(function CatalogGridCard({
             decoding="async"
             className={cn("h-full w-full", kind === "live" ? "object-contain p-3" : "object-cover")}
             onError={(event) => {
-              event.currentTarget.style.display = "none";
+              event.currentTarget.onerror = null;
+              event.currentTarget.src = "/icon.png";
             }}
           />
         ) : (
@@ -240,11 +275,25 @@ const CatalogGridCard = memo(function CatalogGridCard({
             Reproduzindo
           </span>
         ) : null}
+        {kind === "live" ? <button
+          type="button"
+          data-tv-focus
+          aria-label={isFavorite ? `Remover ${item.name} dos favoritos` : `Favoritar ${item.name}`}
+          aria-pressed={isFavorite}
+          disabled={favoriteLoading}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleFavorite(item.id);
+          }}
+          className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/55 text-white shadow-lg backdrop-blur transition hover:bg-black/75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-60"
+        >
+          <Heart className={cn("h-4 w-4", isFavorite && "fill-current text-primary")} />
+        </button> : null}
       </div>
       <div className="px-2 py-2 text-xs font-medium">
         <MarqueeText text={item.name} active={active} className="line-clamp-2" />
       </div>
-    </button>
+    </div>
   );
 });
 
@@ -278,32 +327,57 @@ const CatalogEpisodeButton = memo(function CatalogEpisodeButton({
 export function Catalog({
   kind,
   initialSearch = "",
+  initialCategory = "",
   hideHeader = false,
 }: {
   kind: Kind;
   initialSearch?: string;
+  initialCategory?: string;
   hideHeader?: boolean;
 }) {
-  const { serverId, activeServer, blocked, profile } = usePlayerSession();
+  const { serverId, activeServer, blocked, profile, authUserId } = usePlayerSession();
+  const {
+    favoriteIds,
+    favoriteSet,
+    togglingId,
+    toggle: toggleFavorite,
+    isLoading: favoritesLoading,
+    isError: favoritesError,
+  } = useChannelFavorites(authUserId, kind === "live" ? serverId : null);
   const queryClient = useQueryClient();
-  const deviceId = getDeviceId();
+  const deviceId = getDeviceId(authUserId);
   const fetchCategories = useServerFn(getCategories);
   const fetchStreams = useServerFn(getStreams);
   const fetchPlayback = useServerFn(getPlaybackUrl);
+  const touchPlayback = useServerFn(touchPlaybackSession);
   const fetchSeries = useServerFn(getSeriesInfo);
   const fetchEPG = useServerFn(getChannelEPG);
   const fetchTMDB = useServerFn(getEnrichedMetadata);
 
-  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const fetchCompatibleVariant = useServerFn(findCompatibleVariant);
+  const [categoryId, setCategoryId] = useState<string | null>(initialCategory === ALL_CATEGORY_ID ? ALL_CATEGORY_ID : null);
   const [catTerm, setCatTerm] = useState("");
   const [term, setTerm] = useState(initialSearch);
+  const [debouncedTerm, setDebouncedTerm] = useState(initialSearch);
   const [loadingId, setLoadingId] = useState<string | null>(null);
-  const [playing, setPlaying] = useState<{ id: string; url: string; name: string; icon: string | null } | null>(null);
+  const [playing, setPlaying] = useState<{
+    id: string;
+    url: string;
+    name: string;
+    icon: string | null;
+    ext: string | null;
+  } | null>(null);
+  const [fallbackVariant, setFallbackVariant] = useState<{
+    id: string;
+    name: string;
+    icon: string | null;
+    ext: string | null;
+  } | null>(null);
   const [openSeries, setOpenSeries] = useState<{ id: string; name: string } | null>(null);
   const [pageSize, setPageSize] = useState<Record<Kind, 12 | 24 | 48>>({
-    live: 24,
-    movie: 24,
-    series: 24,
+    live: 48,
+    movie: 48,
+    series: 48,
   });
   const [currentPage, setCurrentPage] = useState<Record<Kind, number>>({
     live: 1,
@@ -319,13 +393,14 @@ export function Catalog({
   const playbackCacheKey = useCallback(
     (item: { id: string; ext?: string | null }) => [
       "playback-url",
+      authUserId,
       serverId,
       kind,
       item.id,
       item.ext ?? "",
       deviceId,
     ],
-    [serverId, kind, deviceId],
+    [authUserId, serverId, kind, deviceId],
   );
   const playbackQueryFn = useCallback(
     (item: { id: string; ext?: string | null; name: string; icon: string | null }) =>
@@ -342,6 +417,46 @@ export function Catalog({
     [fetchPlayback, serverId, kind, deviceId],
   );
 
+  useEffect(() => {
+    if (!playing || !serverId) return;
+    const item = { id: playing.id, name: playing.name, icon: playing.icon };
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let active = true;
+    const refreshPlayback = async () => {
+      if (!active) return;
+      try {
+        const result = await queryClient.fetchQuery({
+          queryKey: playbackCacheKey(item),
+          queryFn: playbackQueryFn(item),
+          staleTime: 0,
+        });
+        setPlaying((current) =>
+          current?.id === item.id ? { ...current, url: result.url } : current,
+        );
+      } catch {
+        // Retry before the current 30-minute token expires.
+        if (active) retryTimer = setTimeout(() => void refreshPlayback(), 60_000);
+      }
+    };
+    refreshTimer = setTimeout(() => void refreshPlayback(), 20 * 60_000);
+    return () => {
+      active = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [playing?.id, playing?.name, playing?.icon, serverId, queryClient, playbackCacheKey, playbackQueryFn]);
+
+  useEffect(() => {
+    if (!playing?.url || !serverId) return;
+    const heartbeat = window.setInterval(() => {
+      void touchPlayback({ data: { playback_url: playing.url } }).catch(() => {
+        // Uma falha transitória não deve interromper o stream atual.
+      });
+    }, 10 * 60_000);
+    return () => window.clearInterval(heartbeat);
+  }, [playing?.url, serverId, touchPlayback]);
+
   const play = useCallback(async (item: {
     id: string;
     name: string;
@@ -349,13 +464,20 @@ export function Catalog({
     ext?: string | null;
   }) => {
     setLoadingId(item.id);
+    setFallbackVariant(null);
     try {
       const result = await queryClient.fetchQuery({
         queryKey: playbackCacheKey(item),
         queryFn: playbackQueryFn(item),
-        staleTime: 24 * 60 * 60 * 1000,
+        staleTime: 20 * 60_000,
       });
-      setPlaying({ id: item.id, url: result.url, name: item.name, icon: item.icon });
+      setPlaying({
+        id: item.id,
+        url: result.url,
+        name: item.name,
+        icon: item.icon,
+        ext: item.ext ?? null,
+      });
       if (typeof window !== "undefined" && window.innerWidth < 1024) {
         // Comportamento mobile: scroll imediato para o player
         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -384,19 +506,36 @@ export function Catalog({
     }
   }, [queryClient, playbackCacheKey, playbackQueryFn]);
 
+  const findFallback = useCallback(async () => {
+    if (!serverId || kind === "live" || !playing) return null;
+    try {
+      const result = await fetchCompatibleVariant({
+        data: {
+          server_id: serverId,
+          current_item_name: playing.name,
+        },
+      });
+      setFallbackVariant(result);
+      return result;
+    } catch {
+      setFallbackVariant(null);
+      return null;
+    }
+  }, [fetchCompatibleVariant, kind, playing, serverId]);
+
   const prefetchPlayback = useCallback((item: { id: string; name: string; icon: string | null; ext?: string | null }) => {
     if (!serverId) return;
     void queryClient.prefetchQuery({
       queryKey: playbackCacheKey(item),
       queryFn: playbackQueryFn(item),
-      staleTime: 24 * 60 * 60 * 1000,
+      staleTime: 20 * 60_000,
     });
   }, [queryClient, serverId, playbackCacheKey, playbackQueryFn]);
 
   const prefetchCategoryStreams = useCallback((targetCategoryId: string) => {
     if (!serverId || !targetCategoryId) return;
     void queryClient.prefetchQuery({
-      queryKey: ["streams", kind, serverId, targetCategoryId],
+      queryKey: ["streams", authUserId, kind, serverId, targetCategoryId],
       queryFn: () =>
         fetchStreams({
           data: {
@@ -407,16 +546,16 @@ export function Catalog({
         }),
       staleTime: 5 * 60_000,
     });
-  }, [queryClient, serverId, kind, fetchStreams]);
+  }, [queryClient, authUserId, serverId, kind, fetchStreams]);
 
   const prefetchSeriesInfo = useCallback((series: { id: string; name: string }) => {
     if (!serverId || kind !== "series") return;
     void queryClient.prefetchQuery({
-      queryKey: ["series-info", serverId, series.id],
+      queryKey: ["series-info", authUserId, serverId, series.id],
       queryFn: () => fetchSeries({ data: { server_id: serverId, series_id: series.id } }),
       staleTime: 10 * 60_000,
     });
-  }, [queryClient, serverId, kind, fetchSeries]);
+  }, [queryClient, authUserId, serverId, kind, fetchSeries]);
 
   const activateCatalogItem = useCallback((item: { id: string; name: string; icon: string | null; ext?: string | null }) => {
     if (kind === "series") {
@@ -459,32 +598,41 @@ export function Catalog({
   }, [kind]);
 
   useEffect(() => {
-    setCategoryId(null);
+    setCategoryId(initialCategory === ALL_CATEGORY_ID ? ALL_CATEGORY_ID : null);
     setCatTerm("");
     setTerm(initialSearch);
     setPlaying(null);
     setOpenSeries(null);
     setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
     setEpisodePage({});
-  }, [kind, serverId, initialSearch, queryClient]);
+  }, [kind, serverId, initialSearch, initialCategory, queryClient]);
 
   useEffect(() => {
     setTerm(initialSearch);
   }, [initialSearch]);
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedTerm(term), 280);
+    return () => clearTimeout(timer);
+  }, [term]);
+
 
   const categories = useQuery({
-    queryKey: ["categories", kind, serverId],
+    queryKey: ["categories", authUserId, kind, serverId],
     queryFn: () => fetchCategories({ data: { server_id: serverId!, kind } }),
     enabled: Boolean(serverId),
     retry: 1,
     staleTime: 10 * 60_000,
-    placeholderData: (previous) => previous,
   });
 
-  const searchAll = Boolean(initialSearch.trim());
-  const activeCategory = searchAll ? null : categoryId;
-  const showCategories = !searchAll && !categoryId && !openSeries;
+  const isAllCategory = categoryId === ALL_CATEGORY_ID;
+  const isFavoritesCategory = categoryId === FAVORITES_CATEGORY_ID;
+  // A busca inicial abre o catalogo global, mas o usuario pode sair dele pelo
+  // botao de retorno sem ficar preso ao parametro original da rota.
+  const globalCatalog = isAllCategory || (Boolean(initialSearch.trim()) && Boolean(term.trim()));
+  const activeCategory = globalCatalog || isFavoritesCategory ? null : categoryId;
+  const activePageSize = pageSize[kind];
+  const showCategories = !globalCatalog && !categoryId && !openSeries;
 
   useEffect(() => {
     if (showCategories && categoryScrollRef.current) {
@@ -493,27 +641,54 @@ export function Catalog({
   }, [showCategories]);
 
   const streams = useQuery({
-    queryKey: ["streams", kind, serverId, activeCategory],
+    queryKey: [
+      "streams",
+      authUserId,
+      kind,
+      serverId,
+      activeCategory,
+      isFavoritesCategory,
+      favoriteIds,
+      globalCatalog,
+      currentPage[kind],
+      activePageSize,
+      debouncedTerm,
+    ],
     queryFn: () =>
       fetchStreams({
         data: {
           server_id: serverId!,
           kind,
-          ...(activeCategory ? { category_id: activeCategory } : {}),
+          ...(isFavoritesCategory
+            ? {
+                paged: true,
+                page: currentPage[kind],
+                page_size: activePageSize,
+                stream_ids: favoriteIds,
+                search: debouncedTerm,
+              }
+            : globalCatalog
+            ? {
+                paged: true,
+                page: currentPage[kind],
+                page_size: activePageSize,
+                search: debouncedTerm,
+              }
+            : activeCategory
+              ? { category_id: activeCategory }
+              : {}),
         },
     }),
-    enabled: Boolean(serverId) && (Boolean(activeCategory) || searchAll),
+    enabled: Boolean(serverId) && (Boolean(activeCategory) || globalCatalog || (isFavoritesCategory && !favoritesLoading)),
     retry: 1,
     staleTime: 5 * 60_000,
-    placeholderData: (previous) => previous,
   });
 
   const seriesInfo = useQuery({
-    queryKey: ["series-info", serverId, openSeries?.id],
+    queryKey: ["series-info", authUserId, serverId, openSeries?.id],
     queryFn: () => fetchSeries({ data: { server_id: serverId!, series_id: openSeries!.id } }),
     enabled: Boolean(serverId && openSeries?.id),
     retry: 1,
-    placeholderData: (previous) => previous,
   });
 
   useEffect(() => {
@@ -522,27 +697,71 @@ export function Catalog({
   }, [openSeries?.id]);
 
   const visibleCategories = useMemo(() => {
-    const list = categories.data ?? [];
+    const totalCatalogCount = (categories.data ?? []).reduce(
+      (total, category) => total + (Number(category.item_count) || 0),
+      0,
+    );
+    const allCategory = {
+      ...ALL_CATEGORY,
+      item_count: totalCatalogCount,
+    };
+    const list = [
+      ...(kind === "live" ? [FAVORITES_CATEGORY] : []),
+      allCategory,
+      ...(categories.data ?? []),
+    ];
     if (!deferredCatTerm.trim()) return list;
-    const needle = deferredCatTerm.trim().toLowerCase();
-    return list.filter((item) => item.category_name.toLowerCase().includes(needle));
-  }, [categories.data, deferredCatTerm]);
+    const needle = deferredCatTerm
+      .trim()
+      .toLocaleLowerCase("pt-BR")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return list.filter((item) =>
+      item.category_name
+        .toLocaleLowerCase("pt-BR")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .includes(needle),
+    );
+  }, [categories.data, deferredCatTerm, kind]);
 
   useEffect(() => {
     if (!serverId || categories.isLoading || categories.isError) return;
     const warmTargets = visibleCategories.slice(0, 2);
     for (const category of warmTargets) {
+      if (category.category_id === ALL_CATEGORY_ID || category.category_id === FAVORITES_CATEGORY_ID) continue;
       if (category.category_id === activeCategory) continue;
       prefetchCategoryStreams(category.category_id);
     }
   }, [serverId, categories.isLoading, categories.isError, visibleCategories, activeCategory, prefetchCategoryStreams]);
 
   const filtered = useMemo(() => {
-    const list = streams.data ?? [];
+    const list = Array.isArray(streams.data) ? streams.data : streams.data?.items ?? [];
+    if (globalCatalog) return list;
     if (!deferredTerm.trim()) return list;
-    const needle = deferredTerm.trim().toLowerCase();
-    return list.filter((item) => item.name.toLowerCase().includes(needle));
-  }, [streams.data, deferredTerm]);
+    const needle = deferredTerm
+      .trim()
+      .toLocaleLowerCase("pt-BR")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    return list.filter((item) =>
+      item.name
+        .toLocaleLowerCase("pt-BR")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .includes(needle),
+    );
+  }, [streams.data, deferredTerm, globalCatalog]);
+
+  const pagedStreamMeta = !Array.isArray(streams.data) ? streams.data : null;
+  const totalCatalogCount = useMemo(
+    () => (categories.data ?? []).reduce((total, category) => total + (Number(category.item_count) || 0), 0),
+    [categories.data],
+  );
+  const activeCategoryData = categories.data?.find((category) => category.category_id === activeCategory);
+  const activeCategoryCount = globalCatalog
+    ? (pagedStreamMeta?.total ?? totalCatalogCount)
+    : activeCategoryData?.item_count;
 
   const currentEpisodeGroups = useMemo(() => {
     const seasons = seriesInfo.data?.seasons ?? [];
@@ -579,17 +798,21 @@ export function Catalog({
 
   useEffect(() => {
     setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
-  }, [kind, activeCategory, term, activeServer?.id]);
+  }, [kind, activeCategory, debouncedTerm, activeServer?.id]);
 
-  const totalItems = filtered.length;
-  const activePageSize = pageSize[kind];
-  const totalPages = Math.max(1, Math.ceil(totalItems / activePageSize));
+  const totalItems = globalCatalog ? (pagedStreamMeta?.total ?? 0) : filtered.length;
+  const totalPages = globalCatalog
+    ? Math.max(1, Math.ceil(totalItems / activePageSize))
+    : Math.max(1, Math.ceil(totalItems / activePageSize));
   const safePage = Math.min(currentPage[kind], totalPages);
   const pageStart = totalItems === 0 ? 0 : (safePage - 1) * activePageSize + 1;
   const pageEnd = Math.min(safePage * activePageSize, totalItems);
   const paginatedItems = useMemo(
-    () => filtered.slice((safePage - 1) * activePageSize, safePage * activePageSize),
-    [filtered, safePage, activePageSize],
+    () =>
+      globalCatalog
+        ? filtered
+        : filtered.slice((safePage - 1) * activePageSize, safePage * activePageSize),
+    [filtered, safePage, activePageSize, globalCatalog],
   );
   const warmPlaybackItems = useMemo(() => paginatedItems.slice(0, kind === "live" ? 3 : 4), [kind, paginatedItems]);
   const pageImageSources = useMemo(
@@ -670,7 +893,7 @@ export function Catalog({
   }
 
   return (
-    <div className="flex h-auto min-h-0 w-full min-w-0 flex-col gap-4 overflow-hidden lg:h-full">
+    <div className="flex h-auto min-h-0 w-full min-w-0 flex-col gap-4 overflow-visible lg:h-full lg:overflow-hidden">
       {blocked && (
         <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-destructive/50 bg-destructive/10 p-4 mb-2">
           <div className="flex items-start gap-3">
@@ -707,7 +930,7 @@ export function Catalog({
 
 
       <div className="grid flex-none min-h-0 min-w-0 gap-4 lg:flex-1 lg:grid-cols-[minmax(300px,38%)_minmax(0,1fr)]">
-        {showCategories ? <aside className="order-2 flex h-auto min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-3 lg:order-none lg:h-full">
+        {showCategories ? <aside data-tv-region="categories" className="order-2 flex h-auto min-h-0 min-w-0 flex-col rounded-xl border border-border bg-card p-3 lg:order-none lg:h-full">
           <p className="px-2 pb-2 text-sm font-semibold">Categorias</p>
           <div className="relative px-1 pb-2">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -718,7 +941,7 @@ export function Catalog({
               className="h-9 pl-9"
             />
           </div>
-          <div ref={categoryScrollRef} className="wp-scroll flex-1 min-h-0 space-y-1 overflow-y-auto">
+          <div ref={categoryScrollRef} className="wp-mobile-scroll wp-scroll flex-1 min-h-0 space-y-1 overflow-y-auto">
             {categories.isLoading ? (
               <div className="flex justify-center p-6">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
@@ -732,7 +955,13 @@ export function Catalog({
                 <CatalogCategoryButton
                   key={category.category_id}
                   category={category}
-                  active={activeCategory === category.category_id}
+                  active={
+                    isFavoritesCategory
+                      ? category.category_id === FAVORITES_CATEGORY_ID
+                      : isAllCategory
+                      ? category.category_id === ALL_CATEGORY_ID
+                      : activeCategory === category.category_id
+                  }
                   onSelect={selectCategory}
                   onHover={prefetchCategoryStreams}
                 />
@@ -761,7 +990,7 @@ export function Catalog({
                 </Button>
                 <p className="truncate text-sm font-bold uppercase tracking-tight">{openSeries.name}</p>
               </div>
-              <div className="wp-scroll flex-1 min-h-0 space-y-3 overflow-y-auto px-1 pb-4">
+              <div className="wp-mobile-scroll wp-scroll flex-1 min-h-0 space-y-3 overflow-y-auto px-1 pb-4">
 
                 {seriesInfo.isLoading && !seriesInfo.data ? (
                   <div className="flex justify-center p-8">
@@ -941,21 +1170,29 @@ export function Catalog({
           ) : (
             <>
               <div className="flex items-center gap-2 border-b border-border/60 px-1 pb-3">
-                {!searchAll ? (
+                {categoryId ? (
                   <Button
                     size="sm"
                     variant="ghost"
                     className="h-8 shrink-0 gap-1 px-2 text-xs"
-                    onClick={() => setCategoryId(null)}
+                    onClick={() => {
+                      setCategoryId(null);
+                      setTerm("");
+                      setCurrentPage((pages) => ({ ...pages, [kind]: 1 }));
+                    }}
                   >
                     <ChevronLeft className="h-4 w-4" />
                     Voltar para Categorias
                   </Button>
                 ) : null}
                 <p className="truncate text-sm font-bold uppercase tracking-tight">
-                  {searchAll
-                    ? `Busca em ${LABEL[kind].title}`
-                    : categories.data?.find((category) => category.category_id === activeCategory)?.category_name ?? LABEL[kind].list}
+                  {globalCatalog
+                    ? `${ALL_CATEGORY.category_name} (${activeCategoryCount?.toLocaleString("pt-BR") ?? "..."} ${kind === "movie" ? "filmes" : kind === "series" ? "séries" : "canais"})`
+                    : isAllCategory
+                      ? `${ALL_CATEGORY.category_name} (${activeCategoryCount?.toLocaleString("pt-BR") ?? "..."})`
+                    : isFavoritesCategory
+                      ? FAVORITES_CATEGORY.category_name
+                      : `${activeCategoryData?.category_name ?? LABEL[kind].list}${activeCategoryCount !== undefined ? ` (${activeCategoryCount.toLocaleString("pt-BR")})` : ""}`}
                 </p>
               </div>
               <div className="relative px-1 pb-2">
@@ -996,12 +1233,12 @@ export function Catalog({
                   </Select>
                 </div>
               </div>
-              <div id="wp-items-area" className="wp-scroll flex-1 min-h-0 overflow-y-auto px-1 pb-4">
+              <div id="wp-items-area" data-tv-region="catalog_grid" className="wp-mobile-scroll wp-scroll flex-1 min-h-0 overflow-y-auto px-1 pb-4">
                 {streams.isLoading && !streams.data ? (
                   <div className="flex justify-center p-16">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   </div>
-                ) : streams.isError && !streams.data?.length ? (
+                ) : streams.isError && !filtered.length ? (
                   <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
                     Não foi possível carregar os conteúdos deste servidor no momento.
                     <div className="pt-3">
@@ -1017,7 +1254,13 @@ export function Catalog({
                   </div>
                 ) : filtered.length === 0 ? (
                   <p className="p-8 text-center text-sm text-muted-foreground">
-                    {LABEL[kind].empty}
+                    {isFavoritesCategory
+                      ? favoritesError
+                        ? "Não foi possível carregar seus favoritos neste servidor."
+                        : favoritesLoading
+                          ? "Carregando favoritos..."
+                          : "Nenhum canal favoritado neste servidor. Clique na estrela de um canal para salvá-lo aqui."
+                      : LABEL[kind].empty}
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -1032,7 +1275,7 @@ export function Catalog({
                         kind === "live"
                           ? "grid-cols-2 xl:grid-cols-3"
                           : "grid-cols-2 xl:grid-cols-4",
-                        streams.isFetching && streams.data?.length ? "opacity-80" : "opacity-100",
+                        streams.isFetching && filtered.length ? "opacity-80" : "opacity-100",
                       )}
                     >
                       {paginatedItems.map((item, index) => {
@@ -1050,6 +1293,9 @@ export function Catalog({
                               onPrefetch={prefetchPlayback}
                               onActivate={activateCatalogItem}
                               onHover={kind === "series" ? prefetchSeriesInfo : undefined}
+                              isFavorite={favoriteSet.has(item.id)}
+                              onToggleFavorite={toggleFavorite}
+                              favoriteLoading={togglingId === item.id}
                             />
                           );
                         })}
@@ -1139,7 +1385,7 @@ export function Catalog({
           )}
         </section> : null}
 
-        <section id="wp-player-area" className="order-1 min-w-0 lg:order-none lg:sticky lg:top-0 lg:h-full lg:max-h-full lg:overflow-hidden lg:pr-1 lg:self-start lg:w-full">
+        <section id="wp-player-area" data-tv-region="player_controls" className="order-1 min-w-0 lg:order-none lg:sticky lg:top-0 lg:h-full lg:max-h-full lg:overflow-hidden lg:pr-1 lg:self-start lg:w-full">
           {playing ? (
             <div className="flex h-full min-h-0 flex-col gap-2">
               <VideoPlayer
@@ -1147,6 +1393,13 @@ export function Catalog({
                 poster={proxyMediaUrl(playing.icon, serverId) ?? playing.icon}
                 title={playing.name}
                 kind={kind}
+                fallbackVariant={fallbackVariant}
+                onFindFallback={findFallback}
+                onUseFallback={
+                  fallbackVariant
+                    ? () => void play(fallbackVariant)
+                    : undefined
+                }
               />
               <p className="shrink-0 truncate text-sm font-semibold">{playing.name}</p>
               
@@ -1162,12 +1415,12 @@ export function Catalog({
               </div>
             </div>
           ) : (
-            <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card text-center">
+            <div className="wp-player-placeholder flex aspect-[2.4/1] min-h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card text-center sm:aspect-video sm:min-h-0">
               <PlayCircle className="h-10 w-10 text-primary/50" />
               <p className="text-sm font-semibold">
                 {kind === "live" ? "Selecione um canal" : "Selecione um conteúdo"}
               </p>
-              <p className="px-6 text-xs text-muted-foreground">
+              <p className="hidden px-6 text-xs text-muted-foreground sm:block">
                 O player abre aqui ao lado, com navegação integrada.
               </p>
             </div>
@@ -1191,14 +1444,13 @@ function PlayerInfo({
   fetchEPG: any;
   fetchTMDB: any;
 }) {
-  const { serverId } = usePlayerSession();
+  const { serverId, authUserId } = usePlayerSession();
   
   const epg = useQuery({
-    queryKey: ["epg", serverId, streamId],
+    queryKey: ["epg", authUserId, serverId, streamId],
     queryFn: () => fetchEPG({ data: { server_id: serverId!, stream_id: streamId } }),
     enabled: kind === "live" && !!serverId && !!streamId,
     staleTime: 60_000,
-    placeholderData: (previous) => previous,
   });
 
   const tmdb = useQuery({
@@ -1206,7 +1458,6 @@ function PlayerInfo({
     queryFn: () => fetchTMDB({ data: { kind: kind as "movie" | "series", name } }),
     enabled: (kind === "movie" || kind === "series") && !!name,
     staleTime: 24 * 60 * 60 * 1000,
-    placeholderData: (previous) => previous,
   });
 
   if (kind === "live") {
@@ -1215,19 +1466,24 @@ function PlayerInfo({
         <h3 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
           <Info className="h-3 w-3" /> Programação EPG
         </h3>
-        <div className="wp-scroll min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
+        <div className="wp-mobile-scroll wp-scroll min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain pr-1">
           {epg.isLoading ? (
             <div className="flex justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /></div>
           ) : (epg.data ?? []).length > 0 ? (
-            epg.data.slice(0, 5).map((prog: any, i: number) => (
-              <div key={i} className={cn("min-w-0 border-l-2 py-1 pl-2 text-[11px]", i === 0 ? "border-primary bg-primary/5" : "border-muted")}>
+            epg.data.slice(0, 5).map((prog: any, i: number) => {
+              const programKey = [prog.id ?? prog.program_id, prog.start, prog.stop, prog.title]
+                .filter(Boolean)
+                .join("|") || `program-${i}`;
+              return (
+              <div key={programKey} className={cn("min-w-0 border-l-2 py-1 pl-2 text-[11px]", i === 0 ? "border-primary bg-primary/5" : "border-muted")}>
                 <div className="flex min-w-0 items-start justify-between gap-2 font-bold">
                   <span className="min-w-0 break-words">{prog.title}</span>
                   <span className="shrink-0 text-[10px] text-muted-foreground">{prog.start.split(' ')[1]}</span>
                 </div>
                 {prog.description && <p className="mt-0.5 break-words text-muted-foreground line-clamp-3">{prog.description}</p>}
               </div>
-            ))
+              );
+            })
           ) : (
             <p className="text-[10px] text-muted-foreground text-center py-2 italic">Sem guia de programação disponível para este canal.</p>
           )}
