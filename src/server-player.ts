@@ -19,13 +19,15 @@ const SECURITY_HEADERS = {
   "x-served-by": "stream-mago-bot-player",
 };
 
-const DEFAULT_MEDIAMTX_CANARY_SERVER_ID = "7f1cc55f-e847-43a3-88dc-9a466afe5aee";
 const mediamtxAdapter = new MediaMTXAdapter();
 const mediamtxBreaker = new CircuitBreaker({ failureThreshold: 3, cooldownMs: 30_000 });
 
-function isMediaMTXCanaryServer(serverId: string): boolean {
-  const configured = process.env["MEDIAMTX_CANARY_SERVER_IDS"] ?? DEFAULT_MEDIAMTX_CANARY_SERVER_ID;
-  return configured.split(",").map((value) => value.trim()).filter(Boolean).includes(serverId);
+function mediamtxCanaryEnabled(serverId: string): boolean {
+  const configured = (process.env["MEDIAMTX_CANARY_SERVER_IDS"] || process.env["MEDIAMTX_CANARY_SERVER_ID"] || "")
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+  return configured.length > 0 && configured.includes(serverId.toLowerCase());
 }
 
 function streamIdFromUrl(target: string): string {
@@ -34,6 +36,38 @@ function streamIdFromUrl(target: string): string {
     return pathname.split("/").pop() || "stream";
   } catch {
     return "stream";
+  }
+}
+
+async function probeMediaKind(
+  target: string,
+  signal: AbortSignal,
+): Promise<"hls" | "mpegts" | "unavailable" | "unknown"> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8_000);
+  const abort = () => controller.abort();
+  signal.addEventListener("abort", abort, { once: true });
+  try {
+    const response = await fetch(target, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "VLC/3.0.21 LibVLC/3.0.21",
+        Range: "bytes=0-1023",
+        Accept: "*/*",
+      },
+    });
+    const contentType = response.headers.get("content-type") ?? "";
+    void response.body?.cancel().catch(() => undefined);
+    if (!response.ok && response.status !== 206) return "unavailable";
+    if (/video\/mp2t/i.test(contentType)) return "mpegts";
+    if (/mpegurl|application\/vnd\.apple/i.test(contentType)) return "hls";
+    return "unknown";
+  } catch {
+    return "unknown";
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener("abort", abort);
   }
 }
 
@@ -81,11 +115,14 @@ const playerService = {
 
       let target = token.url;
       let mediaPlane: "gateway" | "mediamtx" = "gateway";
-      if (
-        isMediaMTXCanaryServer(token.serverId) &&
-        !isMediaMTXInternalUrl(token.url) &&
-        mediamtxBreaker.canAttempt()
-      ) {
+      const requestSignal = request.signal;
+      const canaryEnabled = mediamtxCanaryEnabled(token.serverId);
+      const mediaKind = !canaryEnabled
+        ? (isMediaMTXInternalUrl(token.url) ? "hls" : "unknown")
+        : (isMediaMTXInternalUrl(token.url)
+          ? "hls"
+          : await probeMediaKind(token.url, requestSignal));
+      if (canaryEnabled && mediaKind === "mpegts" && mediamtxBreaker.canAttempt()) {
         const input: PlaybackInput = {
           serverId: token.serverId,
           streamId: streamIdFromUrl(token.url),
@@ -101,7 +138,11 @@ const playerService = {
           console.info("player_media_plane_selected", {
             server_id: token.serverId,
             adapter: mediaPlane,
+            detected_format: mediaKind,
           });
+          const release = () => void mediamtxAdapter.releaseMediaSession(input.sessionId);
+          if (requestSignal.aborted) release();
+          else requestSignal.addEventListener("abort", release, { once: true });
         } catch (error) {
           mediamtxBreaker.recordFailure();
           console.warn("player_media_plane_fallback", {
@@ -113,7 +154,6 @@ const playerService = {
       }
       const range = request.headers.get("range");
       const expectsHls = mediaPlane === "mediamtx" || url.searchParams.get("hls") === "1" || target.includes(".m3u8");
-      const requestSignal = request.signal;
 
       const attemptFetch = async (): Promise<Response | null> => {
         const controller = new AbortController();
