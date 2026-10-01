@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { normalizeDns, type XtreamCreds } from "./xtream.server.ts";
 import { MAX_PLAYLIST_TEXT_BYTES, readResponseTextWithLimit } from "./response-limit.server.ts";
 import { getCatalogStreamLimit, normalizeSeriesTitle, type CatalogKind } from "./catalog-limits.ts";
+import { classifyM3UItem, normalizeM3UCategoryName } from "./m3u-classifier.server.ts";
 
 type Kind = "live" | "movie" | "series";
 
@@ -59,14 +60,19 @@ const EMPTY_CATALOG: PlaylistCatalog = {
 const DEFAULT_PLAYLIST_TIMEOUT_MS = 60_000;
 const DEFAULT_PLAYLIST_MAX_ATTEMPTS = 3;
 const DEFAULT_PLAYLIST_BACKOFF_MS = 750;
-const STREAMING_PLAYLIST_MAX_BYTES = 128 * 1024 * 1024;
+const STREAMING_PLAYLIST_MAX_BYTES = (() => {
+  const configured = Number(process.env.MAGO_STREAMING_PLAYLIST_MAX_BYTES);
+  return Number.isFinite(configured) && configured > 0
+    ? Math.floor(configured)
+    : 1024 * 1024 * 1024;
+})();
 
 function normalizeText(value: string | null | undefined) {
   return (value ?? "").trim();
 }
 
 function sanitizeCategoryName(value: string | null | undefined) {
-  return normalizeText(value) || "Sem categoria";
+  return normalizeM3UCategoryName(value);
 }
 
 function parseAttributes(line: string) {
@@ -78,21 +84,6 @@ function parseAttributes(line: string) {
     if (key && value !== undefined) attrs[key] = value;
   }
   return attrs;
-}
-
-function detectKindFromUrl(urlLine: string): Kind {
-  try {
-    const url = new URL(urlLine);
-    const path = url.pathname.toLowerCase();
-    if (path.includes("/movie/")) return "movie";
-    if (path.includes("/series/")) return "series";
-    return "live";
-  } catch {
-    const lower = urlLine.toLowerCase();
-    if (lower.includes("/movie/")) return "movie";
-    if (lower.includes("/series/")) return "series";
-    return "live";
-  }
 }
 
 function detectExt(urlLine: string): string | null {
@@ -127,9 +118,9 @@ function detectId(kind: Kind, urlLine: string): string {
 }
 
 function makePlaylistUrl(creds: XtreamCreds, output: "ts" | "m3u8" = "ts") {
-  const url = new URL(`${normalizeDns(creds.dns)}/get.php`);
-  url.searchParams.set("username", creds.username);
-  url.searchParams.set("password", creds.password);
+  const url = new URL(creds.m3u_url || `${normalizeDns(creds.dns)}/get.php`);
+  if (!url.searchParams.has("username")) url.searchParams.set("username", creds.username);
+  if (!url.searchParams.has("password")) url.searchParams.set("password", creds.password);
   url.searchParams.set("type", "m3u_plus");
   url.searchParams.set("output", output);
   return url.toString();
@@ -170,7 +161,18 @@ function consumePlaylistLine(state: PlaylistParserState, rawLine: string) {
 
   if (!state.pendingEntry || line.startsWith("#")) return;
 
-  const kind = detectKindFromUrl(line);
+  const kind = classifyM3UItem({
+    url: line,
+    groupTitle:
+      state.pendingEntry.meta["group-title"] ??
+      state.pendingEntry.meta["group_title"] ??
+      state.pendingEntry.meta["group"] ??
+      "",
+    displayName:
+      state.pendingEntry.meta["tvg-name"] ??
+      state.pendingEntry.meta["tvg_name"] ??
+      state.pendingEntry.displayName,
+  });
   const groupName = sanitizeCategoryName(
     state.pendingEntry.meta["group-title"] ??
       state.pendingEntry.meta["group_title"] ??
