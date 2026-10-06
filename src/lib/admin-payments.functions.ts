@@ -89,7 +89,7 @@ export const deleteSelectedAdminPaymentOrders = createServerFn({ method: "POST" 
     const eligibleIds = candidateRows
       .filter((payment) => deletablePaymentStatus.includes(payment.status as (typeof deletablePaymentStatus)[number]))
       .filter((payment) => !payment.approved_at)
-      .filter((payment) => !usersWithAccess.has(payment.user_id))
+      .filter((payment) => payment.status === "pending" || !usersWithAccess.has(payment.user_id))
       .map((payment) => payment.id);
 
     if (!eligibleIds.length) {
@@ -115,7 +115,7 @@ export const deleteSelectedAdminPaymentOrders = createServerFn({ method: "POST" 
         deleted_count: deletedCount,
         skipped_count: data.selectedPaymentIds.length - deletedCount,
         allowed_statuses: deletablePaymentStatus,
-        access_protected: true,
+        pending_access_override: true,
       },
       source: "admin-payments.functions",
     });
